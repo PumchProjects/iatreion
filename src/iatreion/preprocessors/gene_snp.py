@@ -1,0 +1,17 @@
+from typing import override
+
+import pandas as pd
+
+from .base import Preprocessor
+from .config import PreprocessorConfig
+
+
+class SnpPreprocessor(Preprocessor):
+    def __init__(self, config: PreprocessorConfig) -> None:
+        super().__init__(config, '基因_snp.csv')
+
+    @override
+    def get_data(self) -> pd.DataFrame:
+        data = pd.read_csv(self.data_path, index_col='Row.names')
+        data = data.drop(columns=['X']).T
+        return data

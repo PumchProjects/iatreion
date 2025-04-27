@@ -1,0 +1,81 @@
+[project]
+name = "iatreion"
+version = "0.1.0"
+description = 'An interpretable dementia diagnoser. From Ancient Greek ἰατρεῖον ("clinic").'
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "autoregistry>=1.1.2",
+    "cyclopts>=3.13.1",
+    "pandas[excel]>=2.2.3",
+    "pandas-stubs>=2.2.3.250308",
+    "scikit-learn>=1.6.1",
+]
+
+[project.optional-dependencies]
+cpu = ["torch>=2.5.1"]
+cu121 = ["torch>=2.5.1"]
+cu124 = ["torch>=2.5.1"]
+cu126 = ["torch>=2.5.1"]
+
+[project.scripts]
+iatreion = "iatreion.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+conflicts = [
+    [
+        { extra = "cpu" },
+        { extra = "cu121" },
+        { extra = "cu124" },
+        { extra = "cu126" },
+    ],
+]
+
+[tool.uv.sources]
+torch = [
+    { index = "torch-cpu", extra = "cpu" },
+    { index = "torch-cu121", extra = "cu121" },
+    { index = "torch-cu124", extra = "cu124" },
+    { index = "torch-cu126", extra = "cu126" },
+]
+
+[[tool.uv.index]]
+name = "torch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "torch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[[tool.uv.index]]
+name = "torch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[[tool.uv.index]]
+name = "torch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.ruff.lint]
+select = ["E", "F", "UP", "B", "SIM", "I"]
+exclude = ["src/iatreion/rrl/*"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.format]
+quote-style = "single"
+exclude = ["src/iatreion/rrl/*"]
+
+[[tool.mypy.overrides]]
+module = [
+    "sklearn.*",
+]
+ignore_missing_imports = true
