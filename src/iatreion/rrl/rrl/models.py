@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 from sklearn import metrics
 from collections import defaultdict
-from rich.progress import track
 
 from .components import BinarizeLayer
 from .components import UnionLayer, LRLayer
@@ -152,7 +151,7 @@ class RRL:
         return optimizer
 
     def train_model(self, data_loader=None, valid_loader=None, epoch=50, lr=0.01, lr_decay_epoch=100, 
-                    lr_decay_rate=0.75, weight_decay=0.0, log_iter=50):
+                    lr_decay_rate=0.75, weight_decay=0.0, log_iter=50, advance=None):
 
         if data_loader is None:
             raise Exception("Data loader is unavailable!")
@@ -166,7 +165,7 @@ class RRL:
         cnt = -1
         avg_batch_loss_rrl = 0.0
         epoch_histc = defaultdict(list)
-        for epo in track(range(epoch), description='Epoch:'):
+        for epo in range(epoch):
             optimizer = self.exp_lr_scheduler(optimizer, epo, init_lr=lr, lr_decay_rate=lr_decay_rate,
                                               lr_decay_epoch=lr_decay_epoch)
 
@@ -230,6 +229,8 @@ class RRL:
                 self.writer.add_scalar('Training_Loss_RRL', epoch_loss_rrl, epo)
                 self.writer.add_scalar('Abs_Gradient_Max', abs_gradient_max, epo)
                 self.writer.add_scalar('Abs_Gradient_Avg', abs_gradient_avg / ba_cnt, epo)
+            if advance:
+                advance()
         if not self.save_best:
             self.save_model()
         return epoch_histc

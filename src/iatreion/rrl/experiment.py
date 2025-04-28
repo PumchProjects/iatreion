@@ -46,7 +46,7 @@ def get_data_loader(data_dir, dataset, batch_size, k=0, pin_memory=False, save_b
     return db_enc, train_loader, valid_loader, test_loader
 
 
-def train_model(args):
+def train_model(args, advance=None):
     torch.manual_seed(42)
 
     writer = SummaryWriter(args.folder_path)
@@ -83,7 +83,8 @@ def train_model(args):
         lr_decay_rate=args.lr_decay_rate,
         lr_decay_epoch=args.lr_decay_epoch,
         weight_decay=args.weight_decay,
-        log_iter=args.log_iter)
+        log_iter=args.log_iter,
+        advance=advance)
 
 
 def load_model(path, log_file=None):

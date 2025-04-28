@@ -1,10 +1,15 @@
 from abc import ABC, abstractmethod
 
+from rich.progress import Progress
+
 
 class Trainer(ABC):
     @abstractmethod
-    def train_step(self, fold: int) -> None: ...
+    def train_step(self, fold: int, progress: Progress) -> None: ...
 
     def train(self) -> None:
-        for fold in range(5):
-            self.train_step(fold)
+        with Progress() as progress:
+            fold_task = progress.add_task('Fold:', total=5)
+            for fold in range(5):
+                self.train_step(fold, progress)
+                progress.update(fold_task, advance=1)
