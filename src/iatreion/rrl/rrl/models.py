@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 from sklearn import metrics
 from collections import defaultdict
+from rich.progress import track
 
 from .components import BinarizeLayer
 from .components import UnionLayer, LRLayer
@@ -179,7 +180,7 @@ class RRL:
         cnt = -1
         avg_batch_loss_rrl = 0.0
         epoch_histc = defaultdict(list)
-        for epo in range(epoch):
+        for epo in track(range(epoch), description='Epoch:'):
             optimizer = self.exp_lr_scheduler(optimizer, epo, init_lr=lr, lr_decay_rate=lr_decay_rate,
                                               lr_decay_epoch=lr_decay_epoch)
 
@@ -225,9 +226,9 @@ class RRL:
 
                 if self.is_rank0 and (cnt % (TEST_CNT_MOD * (1 if self.save_best else 10)) == 0):
                     if valid_loader is not None:
-                        acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation')
+                        _, acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation')
                     else: # use the data_loader as the valid loader
-                        acc_b, f1_b = self.test(test_loader=data_loader, set_name='Training')
+                        _, acc_b, f1_b = self.test(test_loader=data_loader, set_name='Training')
                     
                     if self.save_best and (f1_b > self.best_f1 or (np.abs(f1_b - self.best_f1) < 1e-10 and self.best_loss > epoch_loss_rrl)):
                         self.best_f1 = f1_b
@@ -268,25 +269,25 @@ class RRL:
         y_pred_b_list = []
         for X, y in test_loader:
             X = X.cuda(self.device_id, non_blocking=True)
-            output = self.net.forward(X)
+            output = self.net.forward(X) / torch.exp(self.net.t)
             y_pred_b_list.append(output)
 
-        y_pred_b = torch.cat(y_pred_b_list).cpu().numpy()
+        y_pred_b = torch.cat(y_pred_b_list).softmax(dim=1).cpu().numpy()
         y_pred_b_arg = np.argmax(y_pred_b, axis=1)
         logging.debug('y_rrl_: {} {}'.format(y_pred_b_arg.shape, y_pred_b_arg[:: slice_step]))
         logging.debug('y_rrl: {} {}'.format(y_pred_b.shape, y_pred_b[:: (slice_step)]))
 
         accuracy_b = metrics.accuracy_score(y_true, y_pred_b_arg)
-        f1_score_b = metrics.f1_score(y_true, y_pred_b_arg, average='macro')
+        f1_score_b = metrics.f1_score(y_true, y_pred_b_arg, average='macro', zero_division=0)
 
         logging.info('-' * 60)
         logging.info('On {} Set:\n\tAccuracy of RRL  Model: {}'
                         '\n\tF1 Score of RRL  Model: {}'.format(set_name, accuracy_b, f1_score_b))
         logging.info('On {} Set:\nPerformance of  RRL Model: \n{}\n{}'.format(
-            set_name, metrics.confusion_matrix(y_true, y_pred_b_arg), metrics.classification_report(y_true, y_pred_b_arg)))
+            set_name, metrics.confusion_matrix(y_true, y_pred_b_arg), metrics.classification_report(y_true, y_pred_b_arg, zero_division=0)))
         logging.info('-' * 60)
 
-        return accuracy_b, f1_score_b
+        return y_pred_b, accuracy_b, f1_score_b
 
     def save_model(self):
         rrl_args = {'dim_list': self.dim_list, 'use_not': self.use_not, 'use_skip': self.use_skip, 'estimated_grad': self.estimated_grad, 

@@ -35,7 +35,9 @@ class Preprocessor(Registry, suffix='Preprocessor'):
             try:
                 col = data[name].to_numpy()
                 unique_values = np.unique(col[~np.isnan(col)])
-                if len(unique_values) < discrete_th:
+                if len(unique_values) <= 2:
+                    augmented_vector_name.append((name, 'binary'))
+                elif len(unique_values) < discrete_th:
                     augmented_vector_name.append((name, 'discrete'))
                 else:
                     augmented_vector_name.append((name, 'continuous'))

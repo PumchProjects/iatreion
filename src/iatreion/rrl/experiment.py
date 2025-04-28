@@ -102,7 +102,7 @@ def train_model(gpu, args):
 
 
 def load_model(path, device_id, log_file=None, distributed=True):
-    checkpoint = torch.load(path, map_location='cpu')
+    checkpoint = torch.load(path, map_location='cpu', weights_only=False)
     saved_args = checkpoint['rrl_args']
     rrl = RRL(
         dim_list=saved_args['dim_list'],
