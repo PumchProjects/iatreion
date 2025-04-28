@@ -15,12 +15,6 @@ class RrlConfig:
     data_set: Annotated[str, Parameter(name=['--data_set', '-d'])] = 'tic-tac-toe'
     'Set the data set for training. All the data sets in the dataset folder are available.'
 
-    device_ids_str: Annotated[str, Parameter(name=['--device_ids', '-i'])] = ''
-    'Set the device (GPU ids). Split by @. E.g., 0@2@3.'
-
-    nr: Annotated[int, Parameter(name=['--nr', '-nr'])] = 0
-    'ranking within the nodes'
-
     epoch: Annotated[int, Parameter(name=['--epoch', '-e'])] = 41
     'Set the total epoch.'
 
@@ -41,14 +35,6 @@ class RrlConfig:
 
     ith_kfold: Annotated[int, Parameter(name=['--ith_kfold', '-ki'])] = 0
     'Do the i-th 5-fold validation, 0 <= ki < 5.'
-
-    master_address: Annotated[str, Parameter(name=['--master_address', '-ma'])] = (
-        '127.0.0.1'
-    )
-    'Set the master address.'
-
-    master_port: Annotated[str, Parameter(name=['--master_port', '-mp'])] = '0'
-    'Set the master port.'
 
     log_iter: Annotated[int, Parameter(name=['--log_iter', '-li'])] = 500
     'The number of iterations (batches) to log once.'
@@ -91,12 +77,6 @@ class RrlConfig:
 
     # TODO: why cannot use field(init=False) here?
     _folder_path: Annotated[Path, Parameter(parse=False)] = field(default_factory=Path)
-    device_ids: Annotated[list[int], Parameter(parse=False)] = field(
-        default_factory=list
-    )
-    gpus: Annotated[int, Parameter(parse=False)] = 0
-    nodes: Annotated[int, Parameter(parse=False)] = 0
-    world_size: Annotated[int, Parameter(parse=False)] = 0
 
     def __post_init__(self) -> None:
         folder_name = (
@@ -106,11 +86,6 @@ class RrlConfig:
         )
         self._folder_path = Path('log_folder') / self.data_set / folder_name
         self._folder_path.mkdir(parents=True, exist_ok=True)
-        self.device_ids = list(map(int, self.device_ids_str.strip().split('@')))
-        self.gpus = len(self.device_ids)
-        self.nodes = 1
-        self.world_size = self.gpus * self.nodes
-        self.batch_size = int(self.batch_size / self.gpus)
 
     @property
     def folder_path(self) -> str:
