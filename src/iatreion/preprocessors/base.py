@@ -26,8 +26,7 @@ class Preprocessor(Registry, suffix='Preprocessor'):
         return group_names
 
     @abstractmethod
-    def get_data(self) -> pd.DataFrame:
-        raise NotImplementedError('get_data() must be implemented in subclasses.')
+    def get_data(self) -> pd.DataFrame: ...
 
     def get_augmented_vector_name(self, data: pd.DataFrame) -> list[tuple[str, str]]:
         discrete_th = 10

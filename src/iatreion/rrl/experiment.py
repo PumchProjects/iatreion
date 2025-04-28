@@ -14,12 +14,10 @@ from collections import defaultdict
 from .rrl.utils import read_csv, DBEncoder
 from .rrl.models import RRL
 
-DATA_DIR = './dataset'
 
-
-def get_data_loader(dataset, world_size, rank, batch_size, k=0, pin_memory=False, save_best=True):
-    data_path = os.path.join(DATA_DIR, dataset + '.data')
-    info_path = os.path.join(DATA_DIR, dataset + '.info')
+def get_data_loader(data_dir, dataset, world_size, rank, batch_size, k=0, pin_memory=False, save_best=True):
+    data_path = os.path.join(data_dir, dataset + '.data')
+    info_path = os.path.join(data_dir, dataset + '.info')
     X_df, y_df, f_df, label_pos = read_csv(data_path, info_path, shuffle=True)
 
     db_enc = DBEncoder(f_df, discrete=False)
@@ -67,7 +65,8 @@ def train_model(gpu, args):
         is_rank0 = False
 
     dataset = args.data_set
-    db_enc, train_loader, valid_loader, _ = get_data_loader(dataset, args.world_size, rank, args.batch_size,
+    data_dir = args.data_prefix
+    db_enc, train_loader, valid_loader, _ = get_data_loader(data_dir, dataset, args.world_size, rank, args.batch_size,
                                                             k=args.ith_kfold, pin_memory=True, save_best=args.save_best)
 
     X_fname = db_enc.X_fname
@@ -129,7 +128,8 @@ def load_model(path, device_id, log_file=None, distributed=True):
 def test_model(args):
     rrl = load_model(args.model, args.device_ids[0], log_file=args.test_res, distributed=False)
     dataset = args.data_set
-    db_enc, train_loader, _, test_loader = get_data_loader(dataset, 4, 0, args.batch_size, args.ith_kfold, save_best=False)
+    data_dir = args.data_prefix
+    db_enc, train_loader, _, test_loader = get_data_loader(data_dir, dataset, 4, 0, args.batch_size, args.ith_kfold, save_best=False)
     rrl.test(test_loader=test_loader, set_name='Test')
     if args.print_rule:
         with open(args.rrl_file, 'w') as rrl_file:
@@ -165,11 +165,3 @@ def train_main(args):
     os.environ['MASTER_ADDR'] = args.master_address
     os.environ['MASTER_PORT'] = args.master_port
     mp.spawn(train_model, nprocs=args.gpus, args=(args,))
-
-
-if __name__ == '__main__':
-    from .args import rrl_args
-    # for arg in vars(rrl_args):
-    #     print(arg, getattr(rrl_args, arg))
-    train_main(rrl_args)
-    test_model(rrl_args)

@@ -258,7 +258,7 @@ class RRL:
         for X, y in test_loader:
             y_list.append(y)
         y_true = torch.cat(y_list, dim=0)
-        y_true = y_true.cpu().numpy().astype(np.int)
+        y_true = y_true.cpu().numpy().astype(int)
         y_true = np.argmax(y_true, axis=1)
         data_num = y_true.shape[0]
 

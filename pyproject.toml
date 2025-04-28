@@ -13,10 +13,22 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-cpu = ["torch>=2.5.1"]
-cu121 = ["torch>=2.5.1"]
-cu124 = ["torch>=2.5.1"]
-cu126 = ["torch>=2.5.1"]
+cpu = [
+    "tensorboard>=2.19.0",
+    "torch>=2.5.1",
+]
+cu121 = [
+    "tensorboard>=2.19.0",
+    "torch>=2.5.1",
+]
+cu124 = [
+    "tensorboard>=2.19.0",
+    "torch>=2.5.1",
+]
+cu126 = [
+    "tensorboard>=2.19.0",
+    "torch>=2.5.1",
+]
 
 [project.scripts]
 iatreion = "iatreion.cli:main"
@@ -65,14 +77,15 @@ explicit = true
 
 [tool.ruff.lint]
 select = ["E", "F", "UP", "B", "SIM", "I"]
-exclude = ["src/iatreion/rrl/*"]
+exclude = ["src/iatreion/rrl/experiment.py", "src/iatreion/rrl/rrl/*"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
+"src/iatreion/rrl/config.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "single"
-exclude = ["src/iatreion/rrl/*"]
+exclude = ["src/iatreion/rrl/experiment.py", "src/iatreion/rrl/rrl/*"]
 
 [[tool.mypy.overrides]]
 module = [
