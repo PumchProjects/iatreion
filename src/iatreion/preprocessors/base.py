@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from autoregistry import Registry
 
-from .config import PreprocessorConfig
+from iatreion.configs import PreprocessorConfig
 
 
 class Preprocessor(Registry, suffix='Preprocessor'):

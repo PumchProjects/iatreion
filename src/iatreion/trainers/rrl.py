@@ -2,7 +2,8 @@ from typing import override
 
 from rich.progress import Progress
 
-from iatreion.rrl import RrlConfig, test_model, train_model
+from iatreion.configs import RrlConfig
+from iatreion.rrl import test_model, train_model
 
 from .base import Trainer
 

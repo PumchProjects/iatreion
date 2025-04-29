@@ -1,4 +1,5 @@
-from iatreion.preprocessors import Preprocessor, PreprocessorConfig
+from iatreion.configs import PreprocessorConfig
+from iatreion.preprocessors import Preprocessor
 
 from .common import app
 

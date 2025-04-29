@@ -2,8 +2,9 @@ from typing import override
 
 import pandas as pd
 
+from iatreion.configs import PreprocessorConfig
+
 from .base import Preprocessor
-from .config import PreprocessorConfig
 
 
 class SnpPreprocessor(Preprocessor):

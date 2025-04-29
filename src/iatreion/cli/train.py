@@ -1,6 +1,6 @@
 from cyclopts import App
 
-from iatreion.rrl import RrlConfig
+from iatreion.configs import RrlConfig
 from iatreion.trainers import RrlTrainer
 
 from .common import app
