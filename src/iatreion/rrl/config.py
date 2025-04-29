@@ -84,7 +84,7 @@ class RrlConfig:
             f'_lrde{self.lr_decay_epoch}_wd{self.weight_decay}_useNOT{self.use_not}_saveBest{self.save_best}'
             f'_useSkip{self.skip}_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
         )
-        self._folder_path = Path('log_folder') / self.data_set / folder_name
+        self._folder_path = Path('logs') / self.data_set / folder_name
         self._folder_path.mkdir(parents=True, exist_ok=True)
 
     @property

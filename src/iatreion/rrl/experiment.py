@@ -1,5 +1,4 @@
 import os
-import logging
 import numpy as np
 import torch
 torch.set_num_threads(2)
@@ -8,6 +7,8 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.model_selection import KFold
 from collections import defaultdict
+
+from iatreion.utils import logger
 
 from .rrl.utils import read_csv, DBEncoder
 from .rrl.models import RRL
@@ -136,4 +137,4 @@ def test_model(args):
             edge_cnt += len(rule)
             for rid in rule:
                 connected_rid[ln - abs(rid[0])].add(rid[1])
-    logging.info('\n\t{} of RRL  Model: {}'.format(metric, np.log(edge_cnt)))
+    logger.info('\n\t{} of RRL  Model: {}'.format(metric, np.log(edge_cnt)))

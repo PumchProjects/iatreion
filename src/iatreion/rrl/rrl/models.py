@@ -1,10 +1,11 @@
 import sys
-import logging
 import numpy as np
 import torch
 import torch.nn as nn
 from sklearn import metrics
 from collections import defaultdict
+
+from iatreion.utils import add_file_handler, logger
 
 from .components import BinarizeLayer
 from .components import UnionLayer, LRLayer
@@ -99,14 +100,8 @@ class RRL:
         self.save_best = save_best
         self.estimated_grad = estimated_grad
         self.save_path = save_path
-        for handler in logging.root.handlers[:]:
-            logging.root.removeHandler(handler)
-
-        log_format = '%(asctime)s - [%(levelname)s] - %(message)s'
-        if log_file is None:
-            logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format=log_format)
-        else:
-            logging.basicConfig(level=logging.DEBUG, filename=log_file, filemode='w', format=log_format)
+        
+        add_file_handler(log_file)
         self.writer = writer
 
         self.net = Net(dim_list, use_not=use_not, left=left, right=right, use_nlaf=use_nlaf, estimated_grad=estimated_grad, use_skip=use_skip, alpha=alpha, beta=beta, gamma=gamma, temperature=temperature)
@@ -224,7 +219,7 @@ class RRL:
                     if self.writer is not None:
                         self.writer.add_scalar('Accuracy_RRL', acc_b, cnt // TEST_CNT_MOD)
                         self.writer.add_scalar('F1_Score_RRL', f1_b, cnt // TEST_CNT_MOD)
-            logging.info('epoch: {}, loss_rrl: {}'.format(epo, epoch_loss_rrl))
+            logger.info('epoch: {}, loss_rrl: {}'.format(epo, epoch_loss_rrl))
             if self.writer is not None:
                 self.writer.add_scalar('Training_Loss_RRL', epoch_loss_rrl, epo)
                 self.writer.add_scalar('Abs_Gradient_Max', abs_gradient_max, epo)
@@ -249,7 +244,7 @@ class RRL:
         data_num = y_true.shape[0]
 
         slice_step = data_num // 40 if data_num >= 40 else 1
-        logging.debug('y_true: {} {}'.format(y_true.shape, y_true[:: slice_step]))
+        logger.debug('y_true: {} {}'.format(y_true.shape, y_true[:: slice_step]))
 
         y_pred_b_list = []
         for X, y in test_loader:
@@ -259,18 +254,18 @@ class RRL:
 
         y_pred_b = torch.cat(y_pred_b_list).softmax(dim=1).cpu().numpy()
         y_pred_b_arg = np.argmax(y_pred_b, axis=1)
-        logging.debug('y_rrl_: {} {}'.format(y_pred_b_arg.shape, y_pred_b_arg[:: slice_step]))
-        logging.debug('y_rrl: {} {}'.format(y_pred_b.shape, y_pred_b[:: (slice_step)]))
+        logger.debug('y_rrl_: {} {}'.format(y_pred_b_arg.shape, y_pred_b_arg[:: slice_step]))
+        logger.debug('y_rrl: {} {}'.format(y_pred_b.shape, y_pred_b[:: (slice_step)]))
 
         accuracy_b = metrics.accuracy_score(y_true, y_pred_b_arg)
         f1_score_b = metrics.f1_score(y_true, y_pred_b_arg, average='macro', zero_division=0)
 
-        logging.info('-' * 60)
-        logging.info('On {} Set:\n\tAccuracy of RRL  Model: {}'
+        logger.info('-' * 60)
+        logger.info('On {} Set:\n\tAccuracy of RRL  Model: {}'
                         '\n\tF1 Score of RRL  Model: {}'.format(set_name, accuracy_b, f1_score_b))
-        logging.info('On {} Set:\nPerformance of  RRL Model: \n{}\n{}'.format(
+        logger.info('On {} Set:\nPerformance of  RRL Model: \n{}\n{}'.format(
             set_name, metrics.confusion_matrix(y_true, y_pred_b_arg), metrics.classification_report(y_true, y_pred_b_arg, zero_division=0)))
-        logging.info('-' * 60)
+        logger.info('-' * 60)
 
         return y_pred_b, accuracy_b, f1_score_b
 
