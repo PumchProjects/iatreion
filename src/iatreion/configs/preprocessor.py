@@ -1,23 +1,42 @@
 from dataclasses import dataclass
-from typing import Annotated, Literal
+from pathlib import Path
 
 from cyclopts import Parameter
-from cyclopts.types import Directory, ExistingDirectory
 
-type DataName = Literal['snp']
+from .common import CommonConfig, DataName
+
+data_name_mapping: dict[DataName, str] = {
+    'snp': '基因_snp.csv',
+}
 
 
 @Parameter(name='*')
 @dataclass
 class PreprocessorConfig:
-    data_prefix: Annotated[ExistingDirectory, Parameter(name=['--prefix', '-p'])]
-    'Prefix of the data files'
+    # HACK: Cyclopts does not support dataclass inheritance yet
+    # HACK: The help texts of the parameters are not shown in the help message
+    # HACK: Below is the current workaround
+    # HACK: Alternative workaround: use Parameter(help=...)
+    # TODO: Read Cyclopts documentation to find a better way
+    common: CommonConfig
 
-    data_name: Annotated[DataName, Parameter(name=['--name', '-n'])]
-    'Name of the data file'
+    # TODO: Add more parameters for the preprocessor, e.g. filling missing values
 
-    group: Annotated[str, Parameter(name=['--group', '-g'])]
-    'Group names of the experiment'
+    def __post_init__(self) -> None:
+        self.common.output_prefix.mkdir(parents=True, exist_ok=True)
 
-    output_prefix: Annotated[Directory, Parameter(name=['--output', '-o'])]
-    'Prefix of the output files'
+    @property
+    def group_data_path(self) -> Path:
+        return self.common.data_prefix / '患者及分组加密对应表.xlsx'
+
+    @property
+    def data_path(self) -> Path:
+        return self.common.data_prefix / data_name_mapping[self.common.data_name]
+
+    @property
+    def output_data_path(self) -> Path:
+        return self.common.output_prefix / f'{self.common.data_name}.data'
+
+    @property
+    def output_info_path(self) -> Path:
+        return self.common.output_prefix / f'{self.common.data_name}.info'
