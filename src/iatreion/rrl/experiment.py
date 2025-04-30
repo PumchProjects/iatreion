@@ -8,6 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 from sklearn.model_selection import KFold
 from collections import defaultdict
 
+from iatreion.configs import RrlConfig
 from iatreion.utils import logger
 
 from .rrl.utils import read_csv, DBEncoder
@@ -47,13 +48,13 @@ def get_data_loader(data_dir, dataset, batch_size, k=0, pin_memory=False, save_b
     return db_enc, train_loader, valid_loader, test_loader
 
 
-def train_model(args, advance=None):
+def train_model(args: RrlConfig, advance=None):
     torch.manual_seed(42)
 
     writer = SummaryWriter(args.folder_path)
 
-    dataset = args.data_set
-    data_dir = args.data_prefix
+    dataset = args.dataset.name
+    data_dir = args.dataset.prefix
     db_enc, train_loader, valid_loader, _ = get_data_loader(data_dir, dataset, args.batch_size,
                                                             k=args.ith_kfold, pin_memory=True, save_best=args.save_best)
 
@@ -103,10 +104,10 @@ def load_model(path):
     return rrl
 
 
-def test_model(args):
+def test_model(args: RrlConfig):
     rrl = load_model(args.model)
-    dataset = args.data_set
-    data_dir = args.data_prefix
+    dataset = args.dataset.name
+    data_dir = args.dataset.prefix
     db_enc, train_loader, _, test_loader = get_data_loader(data_dir, dataset, args.batch_size, args.ith_kfold, save_best=False)
     rrl.test(test_loader=test_loader, set_name='Test')
     if args.print_rule:

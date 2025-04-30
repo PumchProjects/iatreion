@@ -3,19 +3,17 @@ from pathlib import Path
 from typing import Annotated
 
 from cyclopts import Parameter
-from cyclopts.types import ExistingDirectory
 
 from iatreion.utils import add_file_handler
 
+from .dataset import DatasetConfig
+from .model_base import ModelConfig
+
 
 @Parameter(name='*')
-@dataclass
-class RrlConfig:
-    data_prefix: Annotated[ExistingDirectory, Parameter(name=['--prefix', '-p'])]
-    'Prefix of the data files'
-
-    data_set: Annotated[str, Parameter(name=['--data_set', '-d'])] = 'tic-tac-toe'
-    'Set the data set for training. All the data sets in the dataset folder are available.'
+@dataclass(kw_only=True)
+class RrlConfig(ModelConfig):
+    dataset: DatasetConfig
 
     epoch: Annotated[int, Parameter(name=['--epoch', '-e'])] = 41
     'Set the total epoch.'
@@ -34,9 +32,6 @@ class RrlConfig:
 
     weight_decay: Annotated[float, Parameter(name=['--weight_decay', '-wd'])] = 0.0
     'Set the weight decay (L2 penalty).'
-
-    ith_kfold: Annotated[int, Parameter(name=['--ith_kfold', '-ki'])] = 0
-    'Do the i-th 5-fold validation, 0 <= ki < 5.'
 
     log_iter: Annotated[int, Parameter(name=['--log_iter', '-li'])] = 500
     'The number of iterations (batches) to log once.'
@@ -86,7 +81,7 @@ class RrlConfig:
             f'_lrde{self.lr_decay_epoch}_wd{self.weight_decay}_useNOT{self.use_not}_saveBest{self.save_best}'
             f'_useSkip{self.skip}_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
         )
-        self._folder_path = Path('logs') / self.data_set / folder_name
+        self._folder_path = Path('logs') / self.dataset.name / folder_name
         self._folder_path.mkdir(parents=True, exist_ok=True)
         add_file_handler(self._folder_path / 'log.txt')
 
