@@ -22,7 +22,7 @@ def get_custom_logger(name: str | None = None) -> Logger:
 
 logger = get_custom_logger('iatreion')
 logger.setLevel(logging.DEBUG)
-logger.addHandler(RichHandler())
+logger.addHandler(RichHandler(logging.INFO))
 
 
 def add_file_handler(filename: str | os.PathLike, mode: str = 'w') -> None:

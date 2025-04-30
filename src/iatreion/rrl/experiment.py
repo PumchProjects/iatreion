@@ -64,7 +64,6 @@ def train_model(args, advance=None):
 
     rrl = RRL(dim_list=[(discrete_flen, continuous_flen)] + list(map(int, args.structure.split('@'))) + [len(y_fname)],
               use_not=args.use_not,
-              log_file=args.log,
               writer=writer,
               save_best=args.save_best,
               estimated_grad=args.estimated_grad,
@@ -88,13 +87,12 @@ def train_model(args, advance=None):
         advance=advance)
 
 
-def load_model(path, log_file=None):
+def load_model(path):
     checkpoint = torch.load(path, map_location='cpu', weights_only=False)
     saved_args = checkpoint['rrl_args']
     rrl = RRL(
         dim_list=saved_args['dim_list'],
         use_not=saved_args['use_not'],
-        log_file=log_file,
         estimated_grad=saved_args['estimated_grad'],
         use_skip=saved_args['use_skip'],
         use_nlaf=saved_args['use_nlaf'],
@@ -106,7 +104,7 @@ def load_model(path, log_file=None):
 
 
 def test_model(args):
-    rrl = load_model(args.model, log_file=args.test_res)
+    rrl = load_model(args.model)
     dataset = args.data_set
     data_dir = args.data_prefix
     db_enc, train_loader, _, test_loader = get_data_loader(data_dir, dataset, args.batch_size, args.ith_kfold, save_best=False)
@@ -137,4 +135,4 @@ def test_model(args):
             edge_cnt += len(rule)
             for rid in rule:
                 connected_rid[ln - abs(rid[0])].add(rid[1])
-    logger.info('\n\t{} of RRL  Model: {}'.format(metric, np.log(edge_cnt)))
+    logger.debug('\n\t{} of RRL  Model: {}'.format(metric, np.log(edge_cnt)))

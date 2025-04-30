@@ -5,6 +5,8 @@ from typing import Annotated
 from cyclopts import Parameter
 from cyclopts.types import ExistingDirectory
 
+from iatreion.utils import add_file_handler
+
 
 @Parameter(name='*')
 @dataclass
@@ -86,6 +88,7 @@ class RrlConfig:
         )
         self._folder_path = Path('logs') / self.data_set / folder_name
         self._folder_path.mkdir(parents=True, exist_ok=True)
+        add_file_handler(self._folder_path / 'log.txt')
 
     @property
     def folder_path(self) -> str:
@@ -98,15 +101,3 @@ class RrlConfig:
     @property
     def rrl_file(self) -> str:
         return str(self._folder_path / f'rrl_{self.ith_kfold}.txt')
-
-    @property
-    def plot_file(self) -> str:
-        return str(self._folder_path / f'plot_file_{self.ith_kfold}.pdf')
-
-    @property
-    def log(self) -> str:
-        return str(self._folder_path / f'log_{self.ith_kfold}.txt')
-
-    @property
-    def test_res(self) -> str:
-        return str(self._folder_path / f'test_res_{self.ith_kfold}.txt')

@@ -1,3 +1,4 @@
+import os
 from typing import override
 
 from rich.progress import Progress
@@ -23,3 +24,4 @@ class RrlTrainer(Trainer):
         self.config.ith_kfold = fold
         train_model(self.config, advance=advance)
         test_model(self.config)
+        os.remove(self.config.model)

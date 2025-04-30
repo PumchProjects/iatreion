@@ -5,7 +5,7 @@ import torch.nn as nn
 from sklearn import metrics
 from collections import defaultdict
 
-from iatreion.utils import add_file_handler, logger
+from iatreion.utils import logger
 
 from .components import BinarizeLayer
 from .components import UnionLayer, LRLayer
@@ -82,7 +82,7 @@ class Net(nn.Module):
 
 
 class RRL:
-    def __init__(self, dim_list, use_not=False, log_file=None, writer=None, left=None,
+    def __init__(self, dim_list, use_not=False, writer=None, left=None,
                  right=None, save_best=False, estimated_grad=False, save_path=None, use_skip=False, 
                  use_nlaf=False, alpha=0.999, beta=8, gamma=1, temperature=0.01):
         super(RRL, self).__init__()
@@ -101,7 +101,6 @@ class RRL:
         self.estimated_grad = estimated_grad
         self.save_path = save_path
         
-        add_file_handler(log_file)
         self.writer = writer
 
         self.net = Net(dim_list, use_not=use_not, left=left, right=right, use_nlaf=use_nlaf, estimated_grad=estimated_grad, use_skip=use_skip, alpha=alpha, beta=beta, gamma=gamma, temperature=temperature)
@@ -260,12 +259,12 @@ class RRL:
         accuracy_b = metrics.accuracy_score(y_true, y_pred_b_arg)
         f1_score_b = metrics.f1_score(y_true, y_pred_b_arg, average='macro', zero_division=0)
 
-        logger.info('-' * 60)
-        logger.info('On {} Set:\n\tAccuracy of RRL  Model: {}'
+        logger.debug('-' * 60)
+        logger.debug('On {} Set:\n\tAccuracy of RRL  Model: {}'
                         '\n\tF1 Score of RRL  Model: {}'.format(set_name, accuracy_b, f1_score_b))
-        logger.info('On {} Set:\nPerformance of  RRL Model: \n{}\n{}'.format(
+        logger.debug('On {} Set:\nPerformance of  RRL Model: \n{}\n{}'.format(
             set_name, metrics.confusion_matrix(y_true, y_pred_b_arg), metrics.classification_report(y_true, y_pred_b_arg, zero_division=0)))
-        logger.info('-' * 60)
+        logger.debug('-' * 60)
 
         return y_pred_b, accuracy_b, f1_score_b
 
