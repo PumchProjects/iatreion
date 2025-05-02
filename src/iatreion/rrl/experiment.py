@@ -1,6 +1,6 @@
-import os
 import numpy as np
 import torch
+# TODO: remove this line
 torch.set_num_threads(2)
 from torch.utils.data.dataset import random_split
 from torch.utils.data import DataLoader, TensorDataset
@@ -15,10 +15,10 @@ from .rrl.utils import read_csv, DBEncoder
 from .rrl.models import RRL
 
 
-def get_data_loader(data_dir, dataset, batch_size, k=0, pin_memory=False, save_best=True):
-    data_path = os.path.join(data_dir, dataset + '.data')
-    info_path = os.path.join(data_dir, dataset + '.info')
-    X_df, y_df, f_df, label_pos = read_csv(data_path, info_path, shuffle=True)
+def get_samples(args: RrlConfig):
+    data_path = args.dataset.prefix / f'{args.dataset.name}.data'
+    info_path = args.dataset.prefix / f'{args.dataset.name}.info'
+    X_df, y_df, f_df = read_csv(data_path, info_path, args.train.groups, args.train.label_pos, shuffle=True)
 
     db_enc = DBEncoder(f_df, discrete=False)
     db_enc.fit(X_df, y_df)
@@ -26,11 +26,17 @@ def get_data_loader(data_dir, dataset, batch_size, k=0, pin_memory=False, save_b
     X, y = db_enc.transform(X_df, y_df, normalized=True, keep_stat=True)
 
     kf = KFold(n_splits=5, shuffle=True, random_state=0)
-    train_index, test_index = list(kf.split(X_df))[k]
+    train_index, test_index = list(kf.split(X_df))[args.ith_kfold]
     X_train = X[train_index]
     y_train = y[train_index]
     X_test = X[test_index]
     y_test = y[test_index]
+
+    return db_enc, X_train, y_train, X_test, y_test
+
+
+def get_data_loader(args: RrlConfig, pin_memory=False):
+    db_enc, X_train, y_train, X_test, y_test = get_samples(args)
 
     train_set = TensorDataset(torch.tensor(X_train.astype(np.float32)), torch.tensor(y_train.astype(np.float32)))
     test_set = TensorDataset(torch.tensor(X_test.astype(np.float32)), torch.tensor(y_test.astype(np.float32)))
@@ -38,12 +44,12 @@ def get_data_loader(data_dir, dataset, batch_size, k=0, pin_memory=False, save_b
     train_len = int(len(train_set) * 0.95)
     train_sub, valid_set = random_split(train_set, [train_len, len(train_set) - train_len])
 
-    if save_best:  # use validation set for model selections.
+    if args.save_best:  # use validation set for model selections.
         train_set = train_sub
 
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=False, pin_memory=pin_memory)
-    valid_loader = DataLoader(valid_set, batch_size=batch_size, shuffle=False, pin_memory=pin_memory)
-    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, pin_memory=pin_memory)
+    train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=False, pin_memory=pin_memory)
+    valid_loader = DataLoader(valid_set, batch_size=args.batch_size, shuffle=False, pin_memory=pin_memory)
+    test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, pin_memory=pin_memory)
 
     return db_enc, train_loader, valid_loader, test_loader
 
@@ -55,8 +61,7 @@ def train_model(args: RrlConfig, advance=None):
 
     dataset = args.dataset.name
     data_dir = args.dataset.prefix
-    db_enc, train_loader, valid_loader, _ = get_data_loader(data_dir, dataset, args.batch_size,
-                                                            k=args.ith_kfold, pin_memory=True, save_best=args.save_best)
+    db_enc, train_loader, valid_loader, _ = get_data_loader(args, pin_memory=True)
 
     X_fname = db_enc.X_fname
     y_fname = db_enc.y_fname
@@ -108,7 +113,7 @@ def test_model(args: RrlConfig):
     rrl = load_model(args.model)
     dataset = args.dataset.name
     data_dir = args.dataset.prefix
-    db_enc, train_loader, _, test_loader = get_data_loader(data_dir, dataset, args.batch_size, args.ith_kfold, save_best=False)
+    db_enc, train_loader, _, test_loader = get_data_loader(args)
     rrl.test(test_loader=test_loader, set_name='Test')
     if args.print_rule:
         with open(args.rrl_file, 'w') as rrl_file:

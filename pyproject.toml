@@ -89,7 +89,7 @@ exclude = ["src/iatreion/rrl/*"]
 
 [[tool.mypy.overrides]]
 module = [
-    "iatreion.rrl",
+    "iatreion.rrl.*",
     "iatreion.utils.logging",
 ]
 ignore_errors = true

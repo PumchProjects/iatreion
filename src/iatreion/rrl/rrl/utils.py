@@ -10,20 +10,20 @@ def read_info(info_path):
         for line in f:
             tokens = line.strip().split()
             f_list.append([' '.join(tokens[:-1]), tokens[-1]])
-    return f_list[:-1], int(f_list[-1][-1])
+    return f_list
 
 
-def read_csv(data_path, info_path, shuffle=False):
-    D = pd.read_csv(data_path, header=None)
+def read_csv(data_path, info_path, groups, label_pos, shuffle=False):
+    D = pd.read_csv(data_path, dtype={'encrypted': str, 'Ab': str})
+    D = D[D[label_pos].isin(list(groups))]
     if shuffle:
         D = D.sample(frac=1, random_state=0).reset_index(drop=True)
-    f_list, label_pos = read_info(info_path)
+    f_list = read_info(info_path)
     f_df = pd.DataFrame(f_list)
-    D.columns = f_df.iloc[:, 0]
-    y_df = D.iloc[:, [label_pos]]
-    X_df = D.drop(D.columns[label_pos], axis=1)
-    f_df = f_df.drop(f_df.index[label_pos])
-    return X_df, y_df, f_df, label_pos
+    y_df = D[[label_pos]]
+    X_df = D.drop(['encrypted', 'Ab'], axis=1)
+    f_df = f_df.drop(f_df.index[[-2, -1]])
+    return X_df, y_df, f_df
 
 
 class DBEncoder:

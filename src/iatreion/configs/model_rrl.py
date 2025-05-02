@@ -8,12 +8,15 @@ from iatreion.utils import add_file_handler
 
 from .dataset import DatasetConfig
 from .model_base import ModelConfig
+from .train import TrainConfig
 
 
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class RrlConfig(ModelConfig):
     dataset: DatasetConfig
+
+    train: TrainConfig
 
     epoch: Annotated[int, Parameter(name=['--epoch', '-e'])] = 41
     'Set the total epoch.'

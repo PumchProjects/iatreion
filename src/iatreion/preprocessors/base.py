@@ -50,9 +50,7 @@ class Preprocessor(Registry, suffix='Preprocessor'):
         with self.config.output_info_path.open('w', encoding='utf-8') as f:
             f.writelines(feature_names)
         with self.config.output_data_path.open('w', encoding='utf-8') as f:
-            raw = data.to_string(header=False, index=False, index_names=False).split(
-                '\n'
-            )
+            raw = data.to_string(index=False, index_names=False).split('\n')
             f.write('\n'.join([','.join(element.split()) for element in raw]))
 
     def process(self) -> None:
