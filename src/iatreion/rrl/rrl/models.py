@@ -321,5 +321,4 @@ class RRL:
             print('{:.4f}'.format((now_layer.node_activation_cnt[layer.rid2dim[rid]] / now_layer.forward_tot).item()),
                   end='\t', file=file)
             print(now_layer.rule_name[rid[1]], end='\n', file=file)
-        print('#' * 60, file=file)
         return layer.rule2weights

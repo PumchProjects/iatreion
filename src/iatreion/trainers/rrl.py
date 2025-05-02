@@ -25,3 +25,4 @@ class RrlTrainer(Trainer):
         train_model(self.config, advance=advance)
         test_model(self.config)
         os.remove(self.config.model)
+        progress.remove_task(epoch_task)

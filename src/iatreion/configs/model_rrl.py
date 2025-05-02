@@ -98,4 +98,4 @@ class RrlConfig(ModelConfig):
 
     @property
     def rrl_file(self) -> str:
-        return str(self._folder_path / f'rrl_{self.ith_kfold}.txt')
+        return str(self._folder_path / f'rrl_{self.ith_kfold}.tsv')
