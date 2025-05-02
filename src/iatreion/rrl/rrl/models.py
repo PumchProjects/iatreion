@@ -176,9 +176,8 @@ class RRL:
                 
                 # trainable softmax temperature
                 y_bar = self.net.forward(X) / torch.exp(self.net.t)
-                y_arg = torch.argmax(y, dim=1)
                 
-                loss_rrl = criterion(y_bar, y_arg) + weight_decay * self.l2_penalty()
+                loss_rrl = criterion(y_bar, y) + weight_decay * self.l2_penalty()
                 
                 ba_loss_rrl = loss_rrl.item()
                 epoch_loss_rrl += ba_loss_rrl
@@ -239,7 +238,6 @@ class RRL:
             y_list.append(y)
         y_true = torch.cat(y_list, dim=0)
         y_true = y_true.cpu().numpy().astype(int)
-        y_true = np.argmax(y_true, axis=1)
         data_num = y_true.shape[0]
 
         slice_step = data_num // 40 if data_num >= 40 else 1

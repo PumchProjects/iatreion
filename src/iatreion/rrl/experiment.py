@@ -1,32 +1,30 @@
 import numpy as np
 import torch
-# TODO: remove this line
-torch.set_num_threads(2)
 from torch.utils.data.dataset import random_split
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.model_selection import KFold
 from collections import defaultdict
 
-from iatreion.configs import RrlConfig
+from iatreion.configs import DatasetConfig, ModelConfig, RrlConfig, TrainConfig
 from iatreion.utils import logger
 
 from .rrl.utils import read_csv, DBEncoder
 from .rrl.models import RRL
 
 
-def get_samples(args: RrlConfig):
-    data_path = args.dataset.prefix / f'{args.dataset.name}.data'
-    info_path = args.dataset.prefix / f'{args.dataset.name}.info'
-    X_df, y_df, f_df = read_csv(data_path, info_path, args.train.groups, args.train.label_pos, shuffle=True)
+def get_samples(dataset: DatasetConfig, model: ModelConfig, train: TrainConfig):
+    data_path = dataset.prefix / f'{dataset.name}.data'
+    info_path = dataset.prefix / f'{dataset.name}.info'
+    X_df, y_df, f_df = read_csv(data_path, info_path, train.groups, train.label_pos, shuffle=True)
 
-    db_enc = DBEncoder(f_df, discrete=False)
+    db_enc = DBEncoder(f_df)
     db_enc.fit(X_df, y_df)
 
     X, y = db_enc.transform(X_df, y_df, normalized=True, keep_stat=True)
 
     kf = KFold(n_splits=5, shuffle=True, random_state=0)
-    train_index, test_index = list(kf.split(X_df))[args.ith_kfold]
+    train_index, test_index = list(kf.split(X_df))[model.ith_kfold]
     X_train = X[train_index]
     y_train = y[train_index]
     X_test = X[test_index]
@@ -36,10 +34,10 @@ def get_samples(args: RrlConfig):
 
 
 def get_data_loader(args: RrlConfig, pin_memory=False):
-    db_enc, X_train, y_train, X_test, y_test = get_samples(args)
+    db_enc, X_train, y_train, X_test, y_test = get_samples(args.dataset, args, args.train)
 
-    train_set = TensorDataset(torch.tensor(X_train.astype(np.float32)), torch.tensor(y_train.astype(np.float32)))
-    test_set = TensorDataset(torch.tensor(X_test.astype(np.float32)), torch.tensor(y_test.astype(np.float32)))
+    train_set = TensorDataset(torch.tensor(X_train.astype(np.float32)), torch.tensor(y_train))
+    test_set = TensorDataset(torch.tensor(X_test.astype(np.float32)), torch.tensor(y_test))
 
     train_len = int(len(train_set) * 0.95)
     train_sub, valid_set = random_split(train_set, [train_len, len(train_set) - train_len])
@@ -59,8 +57,7 @@ def train_model(args: RrlConfig, advance=None):
 
     writer = SummaryWriter(args.folder_path)
 
-    dataset = args.dataset.name
-    data_dir = args.dataset.prefix
+
     db_enc, train_loader, valid_loader, _ = get_data_loader(args, pin_memory=True)
 
     X_fname = db_enc.X_fname
@@ -111,8 +108,6 @@ def load_model(path):
 
 def test_model(args: RrlConfig):
     rrl = load_model(args.model)
-    dataset = args.dataset.name
-    data_dir = args.dataset.prefix
     db_enc, train_loader, _, test_loader = get_data_loader(args)
     rrl.test(test_loader=test_loader, set_name='Test')
     if args.print_rule:

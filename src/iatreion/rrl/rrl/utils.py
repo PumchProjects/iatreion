@@ -20,7 +20,7 @@ def read_csv(data_path, info_path, groups, label_pos, shuffle=False):
         D = D.sample(frac=1, random_state=0).reset_index(drop=True)
     f_list = read_info(info_path)
     f_df = pd.DataFrame(f_list)
-    y_df = D[[label_pos]]
+    y_df = D[label_pos]
     X_df = D.drop(['encrypted', 'Ab'], axis=1)
     f_df = f_df.drop(f_df.index[[-2, -1]])
     return X_df, y_df, f_df
@@ -29,11 +29,10 @@ def read_csv(data_path, info_path, groups, label_pos, shuffle=False):
 class DBEncoder:
     """Encoder used for data discretization and binarization."""
 
-    def __init__(self, f_df, discrete=False, y_one_hot=True, drop='first'):
+    def __init__(self, f_df, drop='first'):
         self.f_df = f_df
-        self.discrete = discrete
-        self.y_one_hot = y_one_hot
-        self.label_enc = preprocessing.OneHotEncoder(categories='auto') if y_one_hot else preprocessing.LabelEncoder()
+        self.label_enc = preprocessing.LabelEncoder()
+        # TODO: drop = 'first' may be problematic for some datasets.
         self.feature_enc = preprocessing.OneHotEncoder(categories='auto', drop=drop)
         self.imp = SimpleImputer(missing_values=np.nan, strategy='mean')
         self.X_fname = []
@@ -57,7 +56,7 @@ class DBEncoder:
         y_df = y_df.reset_index(drop=True)
         binary_data, discrete_data, continuous_data = self.split_data(X_df)
         self.label_enc.fit(y_df.values)
-        self.y_fname = list(self.label_enc.get_feature_names_out(y_df.columns)) if self.y_one_hot else y_df.columns
+        self.y_fname = list(map(str, self.label_enc.classes_))
 
         if not binary_data.empty:
             self.X_fname += binary_data.columns.to_list()
@@ -81,9 +80,7 @@ class DBEncoder:
         y_df = y_df.reset_index(drop=True)
         binary_data, discrete_data, continuous_data = self.split_data(X_df)
         # Encode string value to int index.
-        y = self.label_enc.transform(y_df.values.reshape(-1, 1))
-        if self.y_one_hot:
-            y = y.toarray()
+        y = self.label_enc.transform(y_df.values)
 
         if not continuous_data.empty:
             # Use mean as missing value for continuous columns if we do not discretize them.

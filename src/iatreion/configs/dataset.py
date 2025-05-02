@@ -4,7 +4,10 @@ from typing import Annotated, Literal
 from cyclopts import Parameter
 from cyclopts.types import ExistingDirectory
 
-type DataName = Literal['snp']
+type DataName = Literal[
+    'snp',
+    'tic-tac-toe',  # sanity test
+]
 
 
 @Parameter(name='*')
