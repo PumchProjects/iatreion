@@ -1,2 +1,2 @@
 from .base import Model
-from .xgb import XGBoostModel
+from .xgb import XgboostModel

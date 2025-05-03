@@ -21,7 +21,7 @@ class RrlTrainer(Trainer):
         def advance() -> None:
             progress.update(epoch_task, advance=1)
 
-        self.config.ith_kfold = fold
+        self.train_config.ith_kfold = fold
         train_model(self.config, advance=advance)
         test_model(self.config)
         os.remove(self.config.model)

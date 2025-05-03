@@ -13,6 +13,8 @@ class TrainConfig:
     n_splits: Annotated[int, Parameter(name=['--n-splits', '-ns'])] = 5
     'Number of splits for cross-validation.'
 
+    ith_kfold: Annotated[int, Parameter(parse=False)] = 0
+
     @property
     def num_class(self) -> int:
         return len(self.groups)

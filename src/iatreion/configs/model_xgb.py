@@ -4,13 +4,12 @@ from typing import Annotated, Any
 from cyclopts import Parameter
 
 from .dataset import DatasetConfig
-from .model_base import ModelConfig
 from .train import TrainConfig
 
 
 @Parameter(name='*')
 @dataclass(kw_only=True)
-class XgboostConfig(ModelConfig):
+class XgboostConfig:
     dataset: DatasetConfig
 
     train: TrainConfig

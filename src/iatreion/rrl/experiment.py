@@ -6,14 +6,14 @@ from torch.utils.tensorboard import SummaryWriter
 from sklearn.model_selection import KFold
 from collections import defaultdict
 
-from iatreion.configs import DatasetConfig, ModelConfig, RrlConfig, TrainConfig
+from iatreion.configs import DatasetConfig, RrlConfig, TrainConfig
 from iatreion.utils import logger
 
 from .rrl.utils import read_csv, DBEncoder
 from .rrl.models import RRL
 
 
-def get_samples(dataset: DatasetConfig, model: ModelConfig, train: TrainConfig):
+def get_samples(dataset: DatasetConfig, train: TrainConfig):
     data_path = dataset.prefix / f'{dataset.name}.data'
     info_path = dataset.prefix / f'{dataset.name}.info'
     X_df, y_df, f_df = read_csv(data_path, info_path, train.groups, train.label_pos, shuffle=True)
@@ -24,7 +24,7 @@ def get_samples(dataset: DatasetConfig, model: ModelConfig, train: TrainConfig):
     X, y = db_enc.transform(X_df, y_df, normalized=True, keep_stat=True)
 
     kf = KFold(n_splits=train.n_splits, shuffle=True, random_state=0)
-    train_index, test_index = list(kf.split(X_df))[model.ith_kfold]
+    train_index, test_index = list(kf.split(X_df))[train.ith_kfold]
     X_train = X[train_index]
     y_train = y[train_index]
     X_test = X[test_index]
@@ -34,7 +34,7 @@ def get_samples(dataset: DatasetConfig, model: ModelConfig, train: TrainConfig):
 
 
 def get_data_loader(args: RrlConfig, pin_memory=False):
-    db_enc, X_train, y_train, X_test, y_test = get_samples(args.dataset, args, args.train)
+    db_enc, X_train, y_train, X_test, y_test = get_samples(args.dataset, args.train)
 
     train_set = TensorDataset(torch.tensor(X_train.astype(np.float32)), torch.tensor(y_train))
     test_set = TensorDataset(torch.tensor(X_test.astype(np.float32)), torch.tensor(y_test))

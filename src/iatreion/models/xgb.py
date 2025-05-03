@@ -8,7 +8,7 @@ from iatreion.utils import logger
 from .base import Model, ModelReturn
 
 
-class XGBLogging(xgb.callback.TrainingCallback):
+class XgbLogging(xgb.callback.TrainingCallback):
     def __init__(self):
         pass
 
@@ -21,7 +21,7 @@ class XGBLogging(xgb.callback.TrainingCallback):
         return False
 
 
-class XGBoostModel(Model):
+class XgboostModel(Model):
     def __init__(self, config: XgboostConfig) -> None:
         super().__init__()
         self.config = config
@@ -48,7 +48,7 @@ class XGBoostModel(Model):
     def fit(self, X: NDArray, y: NDArray) -> None:
         dtrain = xgb.DMatrix(X, y)
         evals = [(dtrain, 'train')]
-        callbacks = [XGBLogging()]
+        callbacks = [XgbLogging()]
         self.bst = xgb.train(
             self.param,
             dtrain,

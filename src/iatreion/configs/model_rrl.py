@@ -7,13 +7,12 @@ from cyclopts import Parameter
 from iatreion.utils import add_file_handler
 
 from .dataset import DatasetConfig
-from .model_base import ModelConfig
 from .train import TrainConfig
 
 
 @Parameter(name='*')
 @dataclass(kw_only=True)
-class RrlConfig(ModelConfig):
+class RrlConfig:
     dataset: DatasetConfig
 
     train: TrainConfig
@@ -94,8 +93,8 @@ class RrlConfig(ModelConfig):
 
     @property
     def model(self) -> str:
-        return str(self._folder_path / f'model_{self.ith_kfold}.pth')
+        return str(self._folder_path / f'model_{self.train.ith_kfold}.pth')
 
     @property
     def rrl_file(self) -> str:
-        return str(self._folder_path / f'rrl_{self.ith_kfold}.tsv')
+        return str(self._folder_path / f'rrl_{self.train.ith_kfold}.tsv')
