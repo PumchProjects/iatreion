@@ -17,7 +17,7 @@ class ModelTrainer(Trainer):
         train: TrainConfig,
         model: Model,
     ) -> None:
-        super().__init__()
+        super().__init__(train)
         self.dataset_config = dataset
         self.model_config = config
         self.train_config = train

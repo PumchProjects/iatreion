@@ -11,7 +11,7 @@ from .base import Trainer
 
 class RrlTrainer(Trainer):
     def __init__(self, config: RrlConfig) -> None:
-        super().__init__()
+        super().__init__(config.train)
         self.config = config
 
     @override

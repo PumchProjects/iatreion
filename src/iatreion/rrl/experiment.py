@@ -23,7 +23,7 @@ def get_samples(dataset: DatasetConfig, model: ModelConfig, train: TrainConfig):
 
     X, y = db_enc.transform(X_df, y_df, normalized=True, keep_stat=True)
 
-    kf = KFold(n_splits=5, shuffle=True, random_state=0)
+    kf = KFold(n_splits=train.n_splits, shuffle=True, random_state=0)
     train_index, test_index = list(kf.split(X_df))[model.ith_kfold]
     X_train = X[train_index]
     y_train = y[train_index]

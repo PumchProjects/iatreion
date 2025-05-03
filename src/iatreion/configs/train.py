@@ -10,6 +10,9 @@ class TrainConfig:
     groups: Annotated[str, Parameter(name=['--groups', '-g'])]
     'Group names of the data.'
 
+    n_splits: Annotated[int, Parameter(name=['--n-splits', '-ns'])] = 5
+    'Number of splits for cross-validation.'
+
     @property
     def num_class(self) -> int:
         return len(self.groups)
