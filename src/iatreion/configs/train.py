@@ -1,7 +1,9 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated
 
 from cyclopts import Parameter
+from cyclopts.types import Directory
 
 
 @Parameter(name='*')
@@ -13,6 +15,15 @@ class TrainConfig:
     n_splits: Annotated[int, Parameter(name=['--n-splits', '-ns'])] = 5
     'Number of splits for cross-validation.'
 
+    plot_roc: bool = True
+    'Plot ROC curve.'
+
+    log_root: Directory = Path('logs')
+    'Root directory for logs.'
+
+    # TODO: why cannot use field(init=False) here?
+    log_dir: Annotated[Directory, Parameter(parse=False)] = Path('logs')
+
     ith_kfold: Annotated[int, Parameter(parse=False)] = 0
 
     @property
@@ -23,3 +34,12 @@ class TrainConfig:
     def label_pos(self) -> str:
         group_Ab = '1' in self.groups or '2' in self.groups
         return 'Ab' if group_Ab else 'encrypted'
+
+    @property
+    def roc_file(self) -> Path:
+        return self.log_dir / 'roc.png'
+
+    def __post_init__(self) -> None:
+        if self.num_class > 2:
+            # HACK: Disable ROC plot for multiclass classification
+            self.plot_roc = False

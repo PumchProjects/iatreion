@@ -3,38 +3,17 @@ import torch
 from torch.utils.data.dataset import random_split
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
-from sklearn.model_selection import KFold
 from collections import defaultdict
 
-from iatreion.configs import DatasetConfig, RrlConfig, TrainConfig
+from iatreion.configs import RrlConfig
 from iatreion.utils import logger
 
-from .rrl.utils import read_csv, DBEncoder
 from .rrl.models import RRL
+from .rrl.utils import Samples
 
 
-def get_samples(dataset: DatasetConfig, train: TrainConfig):
-    data_path = dataset.prefix / f'{dataset.name}.data'
-    info_path = dataset.prefix / f'{dataset.name}.info'
-    X_df, y_df, f_df = read_csv(data_path, info_path, train.groups, train.label_pos, shuffle=True)
-
-    db_enc = DBEncoder(f_df)
-    db_enc.fit(X_df, y_df)
-
-    X, y = db_enc.transform(X_df, y_df, normalized=True, keep_stat=True)
-
-    kf = KFold(n_splits=train.n_splits, shuffle=True, random_state=0)
-    train_index, test_index = list(kf.split(X_df))[train.ith_kfold]
-    X_train = X[train_index]
-    y_train = y[train_index]
-    X_test = X[test_index]
-    y_test = y[test_index]
-
-    return db_enc, X_train, y_train, X_test, y_test
-
-
-def get_data_loader(args: RrlConfig, pin_memory=False):
-    db_enc, X_train, y_train, X_test, y_test = get_samples(args.dataset, args.train)
+def get_data_loader(args: RrlConfig, samples: Samples, pin_memory=False):
+    db_enc, X_train, y_train, X_test, y_test = samples
 
     train_set = TensorDataset(torch.tensor(X_train.astype(np.float32)), torch.tensor(y_train))
     test_set = TensorDataset(torch.tensor(X_test.astype(np.float32)), torch.tensor(y_test))
@@ -52,15 +31,13 @@ def get_data_loader(args: RrlConfig, pin_memory=False):
     return db_enc, train_loader, valid_loader, test_loader
 
 
-def train_model(args: RrlConfig, advance=None):
+def train_model(args: RrlConfig, samples: Samples, advance=None):
     torch.manual_seed(42)
 
     writer = SummaryWriter(args.folder_path)
 
+    db_enc, train_loader, valid_loader, _ = get_data_loader(args, samples, pin_memory=True)
 
-    db_enc, train_loader, valid_loader, _ = get_data_loader(args, pin_memory=True)
-
-    X_fname = db_enc.X_fname
     y_fname = db_enc.y_fname
     discrete_flen = db_enc.discrete_flen
     continuous_flen = db_enc.continuous_flen
@@ -106,10 +83,10 @@ def load_model(path):
     return rrl
 
 
-def test_model(args: RrlConfig):
+def test_model(args: RrlConfig, samples: Samples):
     rrl = load_model(args.model)
-    db_enc, train_loader, _, test_loader = get_data_loader(args)
-    rrl.test(test_loader=test_loader, set_name='Test')
+    db_enc, train_loader, _, test_loader = get_data_loader(args, samples)
+    y_score, _, _ = rrl.test(test_loader=test_loader, set_name='Test')
     if args.print_rule:
         with open(args.rrl_file, 'w') as rrl_file:
             rule2weights = rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std)
@@ -136,4 +113,6 @@ def test_model(args: RrlConfig):
             edge_cnt += len(rule)
             for rid in rule:
                 connected_rid[ln - abs(rid[0])].add(rid[1])
-    logger.debug('\n\t{} of RRL  Model: {}'.format(metric, np.log(edge_cnt)))
+    complexity = np.log(edge_cnt).item()
+    logger.debug('\n\t{} of RRL  Model: {}'.format(metric, complexity))
+    return y_score, complexity

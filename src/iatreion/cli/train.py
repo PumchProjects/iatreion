@@ -2,7 +2,7 @@ from cyclopts import App
 
 from iatreion.configs import RrlConfig, XgboostConfig
 from iatreion.models import XgboostModel
-from iatreion.trainers import ModelTrainer, RrlTrainer
+from iatreion.trainers import ModelTrainer
 
 from .common import app
 
@@ -13,6 +13,8 @@ app.command(sub_app)
 @sub_app.command(sort_key=0)
 def rrl(*, config: RrlConfig) -> None:
     """Train an RRL model."""
+    from iatreion.trainers.rrl import RrlTrainer
+
     trainer = RrlTrainer(config)
     trainer.train()
 

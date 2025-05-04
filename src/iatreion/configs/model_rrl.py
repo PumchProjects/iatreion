@@ -1,5 +1,4 @@
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Annotated
 
 from cyclopts import Parameter
@@ -74,27 +73,29 @@ class RrlConfig:
     structure: Annotated[str, Parameter(name=['--structure', '-s'])] = '5@64'
     'Set the number of nodes in the binarization layer and logical layers. E.g., 10@64, 10@64@32@16.'
 
-    # TODO: why cannot use field(init=False) here?
-    _folder_path: Annotated[Path, Parameter(parse=False)] = field(default_factory=Path)
-
     def __post_init__(self) -> None:
         folder_name = (
             f'e{self.epoch}_bs{self.batch_size}_lr{self.learning_rate}_lrdr{self.lr_decay_rate}'
             f'_lrde{self.lr_decay_epoch}_wd{self.weight_decay}_useNOT{self.use_not}_saveBest{self.save_best}'
             f'_useSkip{self.skip}_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
         )
-        self._folder_path = Path('logs') / self.dataset.name / folder_name
-        self._folder_path.mkdir(parents=True, exist_ok=True)
-        add_file_handler(self._folder_path / 'log.txt')
+        self.train.log_dir = (
+            self.train.log_root
+            / self.dataset.name
+            / self.train.groups
+            / 'rrl'
+            / folder_name
+        )
+        add_file_handler(self.train.log_dir / 'log.txt')
 
     @property
     def folder_path(self) -> str:
-        return str(self._folder_path)
+        return str(self.train.log_dir)
 
     @property
     def model(self) -> str:
-        return str(self._folder_path / f'model_{self.train.ith_kfold}.pth')
+        return str(self.train.log_dir / f'model_{self.train.ith_kfold}.pth')
 
     @property
     def rrl_file(self) -> str:
-        return str(self._folder_path / f'rrl_{self.train.ith_kfold}.tsv')
+        return str(self.train.log_dir / f'rrl_{self.train.ith_kfold}.tsv')

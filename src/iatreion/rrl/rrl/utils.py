@@ -1,7 +1,11 @@
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 from sklearn import preprocessing
 from sklearn.impute import SimpleImputer
+from sklearn.model_selection import KFold
+
+from iatreion.configs import DatasetConfig, TrainConfig
 
 
 def read_info(info_path):
@@ -97,3 +101,26 @@ class DBEncoder:
         dfs = [binary_data, discrete_data, continuous_data]
         X_df = pd.concat([df for df in dfs if not df.empty], axis=1)
         return X_df.values, y
+
+
+type Samples = tuple[DBEncoder, NDArray, NDArray, NDArray, NDArray]
+
+
+def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Samples:
+    data_path = dataset.prefix / f'{dataset.name}.data'
+    info_path = dataset.prefix / f'{dataset.name}.info'
+    X_df, y_df, f_df = read_csv(data_path, info_path, train.groups, train.label_pos, shuffle=True)
+
+    db_enc = DBEncoder(f_df)
+    db_enc.fit(X_df, y_df)
+
+    X, y = db_enc.transform(X_df, y_df, normalized=True, keep_stat=True)
+
+    kf = KFold(n_splits=train.n_splits, shuffle=True, random_state=0)
+    train_index, test_index = list(kf.split(X_df))[train.ith_kfold]
+    X_train = X[train_index]
+    y_train = y[train_index]
+    X_test = X[test_index]
+    y_test = y[test_index]
+
+    return db_enc, X_train, y_train, X_test, y_test

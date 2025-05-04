@@ -2,17 +2,25 @@ from abc import ABC, abstractmethod
 
 from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
-from iatreion.configs import TrainConfig
+from iatreion.configs import DatasetConfig, TrainConfig
+from iatreion.models import ModelReturn
+from iatreion.rrl import Samples, get_samples
+
+from .recorder import Recorder
 
 
 class Trainer(ABC):
-    def __init__(self, config: TrainConfig) -> None:
-        self.train_config = config
+    def __init__(
+        self, dataset_config: DatasetConfig, train_config: TrainConfig
+    ) -> None:
+        self.dataset_config = dataset_config
+        self.train_config = train_config
 
     @abstractmethod
-    def train_step(self, fold: int, progress: Progress) -> None: ...
+    def train_step(self, samples: Samples, progress: Progress) -> ModelReturn: ...
 
     def train(self) -> None:
+        recorder = Recorder(self.train_config)
         with Progress(
             SpinnerColumn(),
             *Progress.get_default_columns(),
@@ -21,5 +29,9 @@ class Trainer(ABC):
         ) as progress:
             fold_task = progress.add_task('Fold:', total=self.train_config.n_splits)
             for fold in range(self.train_config.n_splits):
-                self.train_step(fold, progress)
+                self.train_config.ith_kfold = fold
+                samples = get_samples(self.dataset_config, self.train_config)
+                y_score, complexity = self.train_step(samples, progress)
+                recorder.record(samples[4], y_score, complexity)
                 progress.update(fold_task, advance=1)
+        recorder.finish()

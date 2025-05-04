@@ -1,6 +1,6 @@
 import logging
-import os
 from logging import FileHandler, Formatter, Logger, getLogger
+from pathlib import Path
 from types import MethodType
 
 from rich.logging import RichHandler
@@ -25,7 +25,8 @@ logger.setLevel(logging.DEBUG)
 logger.addHandler(RichHandler(logging.INFO))
 
 
-def add_file_handler(filename: str | os.PathLike, mode: str = 'w') -> None:
+def add_file_handler(filename: Path, mode: str = 'w') -> None:
+    filename.parent.mkdir(parents=True, exist_ok=True)
     file_handler = FileHandler(filename, mode=mode)
     file_handler.setFormatter(Formatter('[%(asctime)s][%(levelname)8s] - %(message)s'))
     logger.addHandler(file_handler)
