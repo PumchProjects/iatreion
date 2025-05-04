@@ -27,8 +27,6 @@ class Record[T]:
     precision: T
     recall: T
     f1: T
-    r2: T
-    rmse: T
     complexity: T
     cm: NDArray | None = None
 
@@ -99,7 +97,7 @@ class RecordROC:
 class Recorder:
     def __init__(self, config: TrainConfig) -> None:
         self.config = config
-        self.result = Record[list[float]]([], [], [], [], [], [], [], [], None)
+        self.result = Record[list[float]]([], [], [], [], [], [], None)
         self.roc = RecordROC(config)
 
     def record(self, y_true: NDArray, y_score: NDArray, complexity: float) -> None:
@@ -139,21 +137,17 @@ class Recorder:
 
     def finish(self) -> Record[float]:
         final = Record(
-            (
-                self.roc.finish()
-                if self.config.plot_roc
-                else np.mean(self.result.auc).item()
-            ),
+            np.mean(self.result.auc).item(),
             np.mean(self.result.acc).item(),
             np.mean(self.result.precision).item(),
             np.mean(self.result.recall).item(),
             np.mean(self.result.f1).item(),
-            np.mean(self.result.r2).item(),
-            np.mean(self.result.rmse).item(),
             np.mean(self.result.complexity).item(),
             self.result.cm,
         )
         logger.info(f'Confusion matrix:\n{final.cm}')
+        if self.config.plot_roc:
+            logger.info(f'INT AUC: {self.roc.finish():.2%}')
         logger.info(f'AVG AUC: {final.auc:.2%}')
         logger.info(f'AVG ACC: {final.acc:.2%}')
         logger.info(f'AVG P:   {final.precision:.2%}')

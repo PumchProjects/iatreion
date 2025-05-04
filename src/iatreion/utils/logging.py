@@ -4,6 +4,7 @@ from pathlib import Path
 from types import MethodType
 
 from rich.logging import RichHandler
+from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 
 def get_custom_logger(name: str | None = None) -> Logger:
@@ -30,3 +31,11 @@ def add_file_handler(filename: Path, mode: str = 'w') -> None:
     file_handler = FileHandler(filename, mode=mode)
     file_handler.setFormatter(Formatter('[%(asctime)s][%(levelname)8s] - %(message)s'))
     logger.addHandler(file_handler)
+
+
+progress = Progress(
+    SpinnerColumn(),
+    *Progress.get_default_columns(),
+    TimeElapsedColumn(),
+    MofNCompleteColumn(),
+)

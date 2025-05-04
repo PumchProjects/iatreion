@@ -31,7 +31,7 @@ def get_data_loader(args: RrlConfig, samples: Samples, pin_memory=False):
     return db_enc, train_loader, valid_loader, test_loader
 
 
-def train_model(args: RrlConfig, samples: Samples, advance=None):
+def train_model(args: RrlConfig, samples: Samples):
     writer = SummaryWriter(args.folder_path)
 
     db_enc, train_loader, valid_loader, _ = get_data_loader(args, samples, pin_memory=True)
@@ -61,8 +61,7 @@ def train_model(args: RrlConfig, samples: Samples, advance=None):
         lr_decay_rate=args.lr_decay_rate,
         lr_decay_epoch=args.lr_decay_epoch,
         weight_decay=args.weight_decay,
-        log_iter=args.log_iter,
-        advance=advance)
+        log_iter=args.log_iter)
 
 
 def load_model(path):

@@ -1,8 +1,6 @@
 import os
 from typing import override
 
-from rich.progress import Progress
-
 from iatreion.configs import RrlConfig
 from iatreion.models import ModelReturn
 from iatreion.rrl import Samples
@@ -19,14 +17,8 @@ class RrlTrainer(Trainer):
         set_seed_torch(self.train_config.seed)
 
     @override
-    def train_step(self, samples: Samples, progress: Progress) -> ModelReturn:
-        epoch_task = progress.add_task('Epoch:', total=self.config.epoch)
-
-        def advance() -> None:
-            progress.update(epoch_task, advance=1)
-
-        train_model(self.config, samples, advance=advance)
+    def train_step(self, samples: Samples) -> ModelReturn:
+        train_model(self.config, samples)
         y_score, complexity = test_model(self.config, samples)
         os.remove(self.config.model)
-        progress.remove_task(epoch_task)
         return y_score, complexity

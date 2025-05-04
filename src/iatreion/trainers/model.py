@@ -1,7 +1,5 @@
 from typing import override
 
-from rich.progress import Progress
-
 from iatreion.configs import DatasetConfig, TrainConfig
 from iatreion.models import Model, ModelReturn
 from iatreion.rrl import Samples
@@ -20,7 +18,7 @@ class ModelTrainer(Trainer):
         self.model = model
 
     @override
-    def train_step(self, samples: Samples, progress: Progress) -> ModelReturn:
+    def train_step(self, samples: Samples) -> ModelReturn:
         _, X_train, y_train, X_test, y_test = samples
         self.model.fit(X_train, y_train)
         y_score, complexity = self.model.predict(X_test, y_test)
