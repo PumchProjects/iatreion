@@ -32,8 +32,6 @@ def get_data_loader(args: RrlConfig, samples: Samples, pin_memory=False):
 
 
 def train_model(args: RrlConfig, samples: Samples, advance=None):
-    torch.manual_seed(42)
-
     writer = SummaryWriter(args.folder_path)
 
     db_enc, train_loader, valid_loader, _ = get_data_loader(args, samples, pin_memory=True)

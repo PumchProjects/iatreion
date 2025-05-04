@@ -5,6 +5,8 @@ from typing import Annotated
 from cyclopts import Parameter
 from cyclopts.types import Directory
 
+from iatreion.utils import set_device, set_seed
+
 
 @Parameter(name='*')
 @dataclass(kw_only=True)
@@ -14,6 +16,12 @@ class TrainConfig:
 
     n_splits: Annotated[int, Parameter(name=['--n-splits', '-ns'])] = 5
     'Number of splits for cross-validation.'
+
+    device_id: Annotated[int, Parameter(name=['--device-id', '-i'])] = 0
+    'Device ID for training. Default is 0.'
+
+    seed: int = 42
+    'Random seed for reproducibility.'
 
     plot_roc: bool = True
     'Plot ROC curve.'
@@ -40,6 +48,8 @@ class TrainConfig:
         return self.log_dir / 'roc.png'
 
     def __post_init__(self) -> None:
+        set_device(self.device_id)
+        set_seed(self.seed)
         if self.num_class > 2:
             # HACK: Disable ROC plot for multiclass classification
             self.plot_roc = False
