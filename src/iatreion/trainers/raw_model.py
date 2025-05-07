@@ -1,25 +1,25 @@
 from typing import override
 
 from iatreion.configs import DatasetConfig, TrainConfig
-from iatreion.models import Model
-from iatreion.rrl import get_samples
+from iatreion.models import RawModel
+from iatreion.rrl import get_raw_samples
 
 from .base import Trainer, TrainerReturn
 
 
-class ModelTrainer(Trainer):
+class RawModelTrainer(Trainer):
     def __init__(
         self,
         dataset_config: DatasetConfig,
         train_config: TrainConfig,
-        model: Model,
+        model: RawModel,
     ) -> None:
         super().__init__(dataset_config, train_config)
         self.model = model
 
     @override
     def train_step(self) -> TrainerReturn:
-        _, X_train, y_train, X_test, y_test = get_samples(
+        X_train, y_train, X_test, y_test = get_raw_samples(
             self.dataset_config, self.train_config
         )
         self.model.fit(X_train, y_train)

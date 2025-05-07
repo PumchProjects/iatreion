@@ -52,7 +52,7 @@ class DBEncoder:
         continuous_data = X_df[self.f_df.loc[self.f_df[1] == 'continuous', 0]]
         if not continuous_data.empty:
             continuous_data = continuous_data.replace(to_replace=r'.*\?.*', value=np.nan, regex=True)
-            continuous_data = continuous_data.astype(np.float)
+            continuous_data = continuous_data.astype(float)
         return binary_data, discrete_data, continuous_data
 
     def fit(self, X_df, y_df):
@@ -104,6 +104,7 @@ class DBEncoder:
 
 
 type Samples = tuple[DBEncoder, NDArray, NDArray, NDArray, NDArray]
+type RawSamples = tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
 
 
 def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Samples:
@@ -124,3 +125,18 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Samples:
     y_test = y[test_index]
 
     return db_enc, X_train, y_train, X_test, y_test
+
+
+def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> RawSamples:
+    data_path = dataset.prefix / f'{dataset.name}.data'
+    info_path = dataset.prefix / f'{dataset.name}.info'
+    X_df, y_df, _ = read_csv(data_path, info_path, train.groups, train.label_pos, shuffle=True)
+
+    kf = KFold(n_splits=train.n_splits, shuffle=True, random_state=0)
+    train_index, test_index = list(kf.split(X_df))[train.ith_kfold]
+    X_train = X_df.iloc[train_index]
+    y_train = y_df.iloc[train_index]
+    X_test = X_df.iloc[test_index]
+    y_test = y_df.iloc[test_index]
+
+    return X_train, y_train, X_test, y_test

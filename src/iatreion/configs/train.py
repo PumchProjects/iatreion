@@ -34,6 +34,8 @@ class TrainConfig:
 
     ith_kfold: Annotated[int, Parameter(parse=False)] = 0
 
+    record_auc: Annotated[bool, Parameter(parse=False)] = True
+
     @property
     def num_class(self) -> int:
         return len(self.groups)

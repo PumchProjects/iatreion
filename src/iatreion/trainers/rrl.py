@@ -2,12 +2,11 @@ import os
 from typing import override
 
 from iatreion.configs import RrlConfig
-from iatreion.models import ModelReturn
-from iatreion.rrl import Samples
+from iatreion.rrl import get_samples
 from iatreion.rrl.experiment import test_model, train_model
 from iatreion.utils import set_seed_torch
 
-from .base import Trainer
+from .base import Trainer, TrainerReturn
 
 
 class RrlTrainer(Trainer):
@@ -17,8 +16,9 @@ class RrlTrainer(Trainer):
         set_seed_torch(self.train_config.seed)
 
     @override
-    def train_step(self, samples: Samples) -> ModelReturn:
+    def train_step(self) -> TrainerReturn:
+        samples = get_samples(self.dataset_config, self.train_config)
         train_model(self.config, samples)
         y_score, complexity = test_model(self.config, samples)
         os.remove(self.config.model)
-        return y_score, complexity
+        return samples[4], y_score, complexity

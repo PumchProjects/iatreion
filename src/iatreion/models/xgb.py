@@ -1,3 +1,5 @@
+from typing import override
+
 import numpy as np
 import xgboost as xgb
 from numpy.typing import NDArray
@@ -45,6 +47,7 @@ class XgboostModel(Model):
                 }
             )
 
+    @override
     def fit(self, X: NDArray, y: NDArray) -> None:
         dtrain = xgb.DMatrix(X, y)
         evals = [(dtrain, 'train')]
@@ -58,6 +61,7 @@ class XgboostModel(Model):
             callbacks=callbacks,
         )
 
+    @override
     def predict(self, X: NDArray, y: NDArray) -> ModelReturn:
         dtest = xgb.DMatrix(X, y)
         y_score = self.bst.predict(dtest)

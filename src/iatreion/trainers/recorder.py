@@ -4,7 +4,7 @@ from typing import cast
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
-from numpy.typing import NDArray
+from numpy.typing import ArrayLike, NDArray
 from sklearn.metrics import (
     RocCurveDisplay,
     accuracy_score,
@@ -100,19 +100,22 @@ class Recorder:
         self.result = Record[list[float]]([], [], [], [], [], [], None)
         self.roc = RecordROC(config)
 
-    def record(self, y_true: NDArray, y_score: NDArray, complexity: float) -> None:
-        y_pred = y_score.argmax(axis=1)
-        y_pos_score = y_score[:, 1]
-        self.result.auc.append(
-            self.roc.record(y_true, y_pos_score, len(self.result.auc) + 1)
-            if self.config.plot_roc
-            else roc_auc_score(
-                y_true,
-                y_pos_score if self.config.num_class <= 2 else y_score,
-                average='macro',
-                multi_class='ovr',
+    def record(self, y_true: ArrayLike, y_score: ArrayLike, complexity: float) -> None:
+        y_pred = y_score
+        if self.config.record_auc:
+            y_score = np.asarray(y_score)
+            y_pred = y_score.argmax(axis=1)
+            y_pos_score = y_score[:, 1]
+            self.result.auc.append(
+                self.roc.record(y_true, y_pos_score, len(self.result.auc) + 1)
+                if self.config.plot_roc
+                else roc_auc_score(
+                    y_true,
+                    y_pos_score if self.config.num_class <= 2 else y_score,
+                    average='macro',
+                    multi_class='ovr',
+                )
             )
-        )
         self.result.acc.append(accuracy_score(y_true, y_pred))
         self.result.precision.append(
             precision_score(y_true, y_pred, average='macro', zero_division=0)
@@ -128,7 +131,8 @@ class Recorder:
             self.result.cm = confusion_matrix(y_true, y_pred)
         else:
             self.result.cm += confusion_matrix(y_true, y_pred)
-        logger.info(f'AUC: {self.result.auc[-1]:.2%}')
+        if self.config.record_auc:
+            logger.info(f'AUC: {self.result.auc[-1]:.2%}')
         logger.info(f'ACC: {self.result.acc[-1]:.2%}')
         logger.info(f'P:   {self.result.precision[-1]:.2%}')
         logger.info(f'R:   {self.result.recall[-1]:.2%}')
@@ -137,7 +141,7 @@ class Recorder:
 
     def finish(self) -> Record[float]:
         final = Record(
-            np.mean(self.result.auc).item(),
+            np.mean(self.result.auc).item() if self.config.record_auc else 0.0,
             np.mean(self.result.acc).item(),
             np.mean(self.result.precision).item(),
             np.mean(self.result.recall).item(),
@@ -146,9 +150,10 @@ class Recorder:
             self.result.cm,
         )
         logger.info(f'Confusion matrix:\n{final.cm}')
-        if self.config.plot_roc:
-            logger.info(f'INT AUC: {self.roc.finish():.2%}')
-        logger.info(f'AVG AUC: {final.auc:.2%}')
+        if self.config.record_auc:
+            if self.config.plot_roc:
+                logger.info(f'INT AUC: {self.roc.finish():.2%}')
+            logger.info(f'AVG AUC: {final.auc:.2%}')
         logger.info(f'AVG ACC: {final.acc:.2%}')
         logger.info(f'AVG P:   {final.precision:.2%}')
         logger.info(f'AVG R:   {final.recall:.2%}')

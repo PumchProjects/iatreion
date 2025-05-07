@@ -79,7 +79,10 @@ explicit = true
 
 [tool.ruff.lint]
 select = ["E", "F", "UP", "B", "SIM", "I"]
-exclude = ["src/iatreion/rrl/*"]
+exclude = [
+    "src/iatreion/gatree/*",
+    "src/iatreion/rrl/*",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
@@ -87,10 +90,14 @@ exclude = ["src/iatreion/rrl/*"]
 
 [tool.ruff.format]
 quote-style = "single"
-exclude = ["src/iatreion/rrl/*"]
+exclude = [
+    "src/iatreion/gatree/*",
+    "src/iatreion/rrl/*",
+]
 
 [[tool.mypy.overrides]]
 module = [
+    "iatreion.gatree.*",
     "iatreion.rrl.*",
     "iatreion.utils.logging",
 ]
