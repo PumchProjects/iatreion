@@ -7,6 +7,7 @@ from sklearn.model_selection import KFold
 
 from iatreion.configs import DatasetConfig, TrainConfig
 
+pd.set_option('future.no_silent_downcasting', True)
 
 def read_info(info_path):
     with open(info_path) as f:
@@ -138,5 +139,10 @@ def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> RawSamples:
     y_train = y_df.iloc[train_index]
     X_test = X_df.iloc[test_index]
     y_test = y_df.iloc[test_index]
+
+    nunique = X_train.nunique(dropna=False)
+    columns = nunique[nunique <= 1].index
+    X_train = X_train.drop(columns=columns)
+    X_test = X_test.drop(columns=columns)
 
     return X_train, y_train, X_test, y_test

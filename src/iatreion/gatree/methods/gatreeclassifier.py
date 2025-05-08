@@ -89,6 +89,7 @@ class GATreeClassifier(ClassifierMixin, GATree):
         self.att_values = {i: [(min_val + max_val) / 2 for min_val, max_val in zip(sorted(
             X.iloc[:, i].unique())[:-1], sorted(X.iloc[:, i].unique())[1:])] for i in range(X.shape[1])}
         self.att_values[-1] = sorted(y.unique())
+        self.y_indices = y.replace(self.att_values[-1], list(range(len(self.att_values[-1])))).astype(int)
         self.class_count = len(self.att_values[-1])
 
         # Generation of initial population
@@ -106,7 +107,7 @@ class GATreeClassifier(ClassifierMixin, GATree):
 
             # Evaluation of population
             population = Parallel(n_jobs=self.n_jobs)(delayed(GATreeClassifier._predict_and_evaluate)(
-                tree, X, y, self.fitness_function, True, **fitness_function_kwargs) for tree in population)
+                tree, X, self.y_indices, self.fitness_function, True, **fitness_function_kwargs) for tree in population)
 
             # Sort population by fitness
             population.sort(key=lambda x: x.fitness, reverse=False)
