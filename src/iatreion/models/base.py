@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import pandas as pd
 from numpy.typing import ArrayLike, NDArray
 
-type ModelReturn = tuple[ArrayLike, float]
+type ModelReturn = tuple[ArrayLike, dict[str, float]]
 
 
 class Model(ABC):

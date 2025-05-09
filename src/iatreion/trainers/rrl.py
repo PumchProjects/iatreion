@@ -1,4 +1,5 @@
 import os
+from time import perf_counter_ns
 from typing import override
 
 from iatreion.configs import RrlConfig
@@ -18,7 +19,10 @@ class RrlTrainer(Trainer):
     @override
     def train_step(self) -> TrainerReturn:
         samples = get_samples(self.dataset_config, self.train_config)
+        start = perf_counter_ns()
         train_model(self.config, samples)
+        end = perf_counter_ns()
+        training_time = (end - start) / 1e9
         y_score, complexity = test_model(self.config, samples)
         os.remove(self.config.model)
-        return samples[4], y_score, complexity
+        return training_time, samples[4], y_score, {'Log#E': complexity}

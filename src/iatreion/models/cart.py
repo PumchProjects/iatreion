@@ -26,5 +26,6 @@ class CartModel(RawModel):
     @override
     def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
         y_pred = self.clf.predict(X)
-        complexity = self.clf.get_depth()
-        return y_pred, complexity
+        depth = self.clf.get_depth()
+        n_leaves = self.clf.get_n_leaves()
+        return y_pred, {'Depth': depth, '#Leaf': n_leaves}

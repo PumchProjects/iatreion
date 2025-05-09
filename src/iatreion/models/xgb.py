@@ -69,4 +69,4 @@ class XgboostModel(Model):
             y_score = np.stack([1 - y_score, y_score], axis=-1)
         else:
             y_score = y_score.reshape(X.shape[0], -1)
-        return y_score, 0.0
+        return y_score, {}

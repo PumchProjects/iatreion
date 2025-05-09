@@ -7,7 +7,7 @@ from iatreion.utils import logger, progress
 
 from .recorder import Recorder
 
-type TrainerReturn = tuple[float, ArrayLike, ArrayLike, float]
+type TrainerReturn = tuple[float, ArrayLike, ArrayLike, dict[str, float]]
 
 
 class Trainer(ABC):

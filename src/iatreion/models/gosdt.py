@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Protocol, override
 
 import pandas as pd
@@ -18,13 +19,20 @@ def collect_depth(left: int = -1, right: int = -1) -> int:
     return max(left, right) + 1
 
 
-def traverse[T](node: Node | Leaf, collect: Collector[T]) -> T:
+def collect_n_leaves(left: int = 0, right: int = 0) -> int:
+    return max(left + right, 1)
+
+
+def traverse[T](node: Node | Leaf, collectors: Sequence[Collector[T]]) -> list[T]:
     if isinstance(node, Node):
-        left = traverse(node.left_child, collect)
-        right = traverse(node.right_child, collect)
-        return collect(left, right)
+        lefts = traverse(node.left_child, collectors)
+        rights = traverse(node.right_child, collectors)
+        return [
+            collector(left, right)
+            for collector, left, right in zip(collectors, lefts, rights, strict=False)
+        ]
     elif isinstance(node, Leaf):
-        return collect()
+        return [collector() for collector in collectors]
 
 
 class GosdtModel(RawModel):
@@ -67,7 +75,8 @@ class GosdtModel(RawModel):
     @override
     def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
         X_bin = self.tgb.transform(X) if self.config.guess_th else self.nb.transform(X)
-
         y_pred = self.clf.predict(X_bin)
-        complexity = traverse(self.clf.trees_[0].tree, collect_depth)
-        return y_pred, complexity
+        depth, n_leaves = traverse(
+            self.clf.trees_[0].tree, (collect_depth, collect_n_leaves)
+        )
+        return y_pred, {'Depth': depth, '#Leaf': n_leaves}

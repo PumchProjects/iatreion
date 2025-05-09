@@ -30,4 +30,6 @@ class GatreeModel(RawModel):
     @override
     def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
         y_pred = self.gatree.predict(X)
-        return y_pred, self.gatree._tree.max_depth() - 1
+        depth = self.gatree._tree.max_depth() - 1
+        n_leaves = len(self.gatree._tree.get_leaves())
+        return y_pred, {'Depth': depth, '#Leaf': n_leaves}

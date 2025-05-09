@@ -28,7 +28,7 @@ class Record[T]:
     precision: T
     recall: T
     f1: T
-    complexity: T
+    complexity: dict[str, T]
     cm: NDArray | None = None
 
 
@@ -98,7 +98,7 @@ class RecordROC:
 class Recorder:
     def __init__(self, config: TrainConfig) -> None:
         self.config = config
-        self.result = Record[list[float]]([], [], [], [], [], [], [], None)
+        self.result = Record[list[float]]([], [], [], [], [], [], {}, None)
         self.roc = RecordROC(config)
 
     def record(
@@ -106,7 +106,7 @@ class Recorder:
         training_time: float,
         y_true: ArrayLike,
         y_score: ArrayLike,
-        complexity: float,
+        complexity: dict[str, float],
     ) -> None:
         self.result.time.append(training_time)
         y_pred = y_score
@@ -134,21 +134,30 @@ class Recorder:
         self.result.f1.append(
             f1_score(y_true, y_pred, average='macro', zero_division=0)
         )
-        self.result.complexity.append(complexity)
+        width = 4
+        for key, value in complexity.items():
+            self.result.complexity.setdefault(key, []).append(value)
+            width = max(width, len(key))
         if self.result.cm is None:
             self.result.cm = confusion_matrix(y_true, y_pred)
         else:
             self.result.cm += confusion_matrix(y_true, y_pred)
         if self.config.record_auc:
-            logger.info(f'AUC: {self.result.auc[-1]:.2%}')
-        logger.info(f'ACC: {self.result.acc[-1]:.2%}')
-        logger.info(f'P:   {self.result.precision[-1]:.2%}')
-        logger.info(f'R:   {self.result.recall[-1]:.2%}')
-        logger.info(f'F1:  {self.result.f1[-1]:.2%}')
-        logger.info(f'COM: {self.result.complexity[-1]:.4f}')
-        logger.info(f'Time {training_time:.3f}s')
+            logger.info(f'{"AUC":{width}} {self.result.auc[-1]:.2%}')
+        logger.info(f'{"ACC":{width}} {self.result.acc[-1]:.2%}')
+        logger.info(f'{"P":{width}} {self.result.precision[-1]:.2%}')
+        logger.info(f'{"R":{width}} {self.result.recall[-1]:.2%}')
+        logger.info(f'{"F1":{width}} {self.result.f1[-1]:.2%}')
+        for key, value in self.result.complexity.items():
+            logger.info(f'{key:{width}} {value[-1]:.4f}')
+        logger.info(f'{"Time":{width}} {training_time:.3f}s')
 
     def finish(self) -> Record[float]:
+        complexity = {}
+        width = 4
+        for key, value in self.result.complexity.items():
+            complexity[key] = np.mean(value).item()
+            width = max(width, len(key))
         final = Record(
             np.mean(self.result.time).item(),
             np.mean(self.result.auc).item() if self.config.record_auc else 0.0,
@@ -156,18 +165,19 @@ class Recorder:
             np.mean(self.result.precision).item(),
             np.mean(self.result.recall).item(),
             np.mean(self.result.f1).item(),
-            np.mean(self.result.complexity).item(),
+            complexity,
             self.result.cm,
         )
         logger.info(f'Confusion matrix:\n{final.cm}')
         if self.config.record_auc:
             if self.config.plot_roc:
-                logger.info(f'INT AUC: {self.roc.finish():.2%}')
-            logger.info(f'AVG AUC: {final.auc:.2%}')
-        logger.info(f'AVG ACC: {final.acc:.2%}')
-        logger.info(f'AVG P:   {final.precision:.2%}')
-        logger.info(f'AVG R:   {final.recall:.2%}')
-        logger.info(f'AVG F1:  {final.f1:.2%}')
-        logger.info(f'AVG COM: {final.complexity:.4f}')
-        logger.info(f'AVG Time {final.time:.3f}s')
+                logger.info(f'INT {"AUC":{width}} {self.roc.finish():.2%}')
+            logger.info(f'AVG {"AUC":{width}} {final.auc:.2%}')
+        logger.info(f'AVG {"ACC":{width}} {final.acc:.2%}')
+        logger.info(f'AVG {"P":{width}} {final.precision:.2%}')
+        logger.info(f'AVG {"R":{width}} {final.recall:.2%}')
+        logger.info(f'AVG {"F1":{width}} {final.f1:.2%}')
+        for key, value in complexity.items():
+            logger.info(f'AVG {key:{width}} {value:.4f}')
+        logger.info(f'AVG {"Time":{width}} {final.time:.3f}s')
         return final
