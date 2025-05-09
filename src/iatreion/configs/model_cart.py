@@ -15,6 +15,12 @@ class CartConfig:
 
     train: TrainConfig
 
+    max_depth: int | None = None
+    'The maximum depth of the tree.'
+
+    plot: bool = False
+    'Whether to plot the tree.'
+
     def __post_init__(self) -> None:
         self.train.log_dir = (
             self.train.log_root / self.dataset.name / self.train.groups / 'cart'

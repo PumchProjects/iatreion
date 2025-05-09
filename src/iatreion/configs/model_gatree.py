@@ -15,6 +15,9 @@ class GatreeConfig:
 
     train: TrainConfig
 
+    max_depth: int | None = None
+    'The maximum depth of the tree.'
+
     n_jobs: int = 20
     'Set the number of parallel processes to use for training and prediction.'
 
@@ -23,6 +26,9 @@ class GatreeConfig:
 
     max_iter: int = 100
     'Set the maximum number of iterations for GATree.'
+
+    plot: bool = False
+    'Whether to plot the tree.'
 
     def __post_init__(self) -> None:
         self.train.log_dir = (

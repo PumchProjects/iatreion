@@ -1,6 +1,8 @@
 import numpy as np
 from sklearn.base import BaseEstimator
 
+from iatreion.utils import logger
+
 
 class GATree(BaseEstimator):
     """
@@ -132,12 +134,12 @@ class GATree(BaseEstimator):
 
         if node is not None:
             if node.att_index != -1:
-                print(prefix + 'If {} > {}'.format(self.X.columns.tolist()
+                logger.info(prefix + 'If {} > {}'.format(self.X.columns.tolist()
                       [node.att_index], node.att_value))
                 self.plot(node.left, prefix + '| ')
-                print(prefix + 'Else {} <= {}'.format(self.X.columns.tolist()
+                logger.info(prefix + 'Else {} <= {}'.format(self.X.columns.tolist()
                       [node.att_index], node.att_value))
                 self.plot(node.right, prefix + '| ')
             else:
-                print(
+                logger.info(
                     prefix + 'Class: {}'.format(self.att_values[-1][node.att_value]))

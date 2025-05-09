@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from numpy.typing import ArrayLike
 
 from iatreion.configs import DatasetConfig, TrainConfig
-from iatreion.utils import progress
+from iatreion.utils import logger, progress
 
 from .recorder import Recorder
 
@@ -25,8 +25,13 @@ class Trainer(ABC):
         with progress:
             fold_task = progress.add_task('Fold:', total=self.train_config.n_splits)
             for fold in range(self.train_config.n_splits):
+                logger.info(
+                    f'[bold green]Fold[/] {fold + 1}/{self.train_config.n_splits}',
+                    extra={'markup': True},
+                )
                 self.train_config.ith_kfold = fold
                 y_true, y_score, complexity = self.train_step()
                 recorder.record(y_true, y_score, complexity)
                 progress.update(fold_task, advance=1)
+                logger.info('')
         recorder.finish()
