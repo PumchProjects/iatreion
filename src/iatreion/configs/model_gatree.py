@@ -15,7 +15,7 @@ class GatreeConfig:
 
     train: TrainConfig
 
-    n_jobs: int = 16
+    n_jobs: int = 20
     'Set the number of parallel processes to use for training and prediction.'
 
     population_size: int = 100

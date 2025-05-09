@@ -1,7 +1,7 @@
 from cyclopts import App
 
-from iatreion.configs import GatreeConfig, RrlConfig, XgboostConfig
-from iatreion.models import GatreeModel, XgboostModel
+from iatreion.configs import GatreeConfig, GosdtConfig, RrlConfig, XgboostConfig
+from iatreion.models import GatreeModel, GosdtModel, XgboostModel
 from iatreion.trainers import ModelTrainer, RawModelTrainer
 
 from .common import app
@@ -39,5 +39,13 @@ def xgboost(*, config: XgboostConfig, **param) -> None:
 def gatree(*, config: GatreeConfig) -> None:
     """Train a GATree model."""
     model = GatreeModel(config)
+    trainer = RawModelTrainer(config.dataset, config.train, model)
+    trainer.train()
+
+
+@sub_app.command(sort_key=3)
+def gosdt(*, config: GosdtConfig) -> None:
+    """Train a GOSDT model."""
+    model = GosdtModel(config)
     trainer = RawModelTrainer(config.dataset, config.train, model)
     trainer.train()

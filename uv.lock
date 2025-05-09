@@ -188,6 +188,23 @@ wheels = [
 ]
 
 [[package]]
+name = "gosdt"
+version = "1.0.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "scikit-learn" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/5b/907434c6d07537f0de7a9399c13bbafd7363eb2b740008f6ecbbd4d39bdb/gosdt-1.0.4.tar.gz", hash = "sha256:9bb5dffb4d78b783930cabbc61b8faf1c368f1ab3cede8688df6db21a52282a6", size = 173213, upload-time = "2025-05-06T18:02:36.716Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a6/6c/eca2c525d8a4b7751ab372bdf532b6bc18d22d4c4bd8c35562096d6260ec/gosdt-1.0.4-cp312-cp312-macosx_13_0_x86_64.whl", hash = "sha256:44f107baff6b5d49f848ea483f326ec6486100376bb3d88a015d69d28c320e2b", size = 700167, upload-time = "2025-05-06T18:02:20.996Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/84/522b588ff603db9af97b82a1e07412ad7460e27b60eb670d4d441951c4fe/gosdt-1.0.4-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:75c68c7dae0c360a832b25125d9a5cfaa6e18fa2374534822322d5c90409437f", size = 610878, upload-time = "2025-05-06T18:02:22.489Z" },
+    { url = "https://files.pythonhosted.org/packages/32/59/590855bf1ea81c09951a8950920f2de2a8fcad68d24a43b970aef96199d2/gosdt-1.0.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9f61fffe7c55cd820d801e95ba7f2df851571af59717c68d58ce58d76fe910fd", size = 3268052, upload-time = "2025-05-06T18:02:25.13Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/ab/675b2dd8c9ce347265a9bacd1c02ff10c2c5141e21b8cb0f56540d813b2f/gosdt-1.0.4-cp312-cp312-win_amd64.whl", hash = "sha256:ec5183f74188e4a57771751c05b2764c3d990554ea994fd7cc30e7dce4257a44", size = 799803, upload-time = "2025-05-06T18:02:26.618Z" },
+]
+
+[[package]]
 name = "grpcio"
 version = "1.71.0"
 source = { registry = "https://pypi.org/simple" }
@@ -222,6 +239,7 @@ source = { editable = "." }
 dependencies = [
     { name = "autoregistry" },
     { name = "cyclopts" },
+    { name = "gosdt" },
     { name = "matplotlib" },
     { name = "pandas", extra = ["excel"] },
     { name = "pandas-stubs" },
@@ -252,6 +270,7 @@ cu126 = [
 requires-dist = [
     { name = "autoregistry", specifier = ">=1.1.2" },
     { name = "cyclopts", specifier = ">=3.13.1" },
+    { name = "gosdt", specifier = ">=1.0.4" },
     { name = "matplotlib", specifier = ">=3.10.1" },
     { name = "pandas", extras = ["excel"], specifier = ">=2.2.3" },
     { name = "pandas-stubs", specifier = ">=2.2.3.250308" },
