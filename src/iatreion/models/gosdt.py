@@ -1,4 +1,4 @@
-from typing import override, Protocol
+from typing import Protocol, override
 
 import pandas as pd
 from gosdt import GOSDTClassifier, NumericBinarizer, ThresholdGuessBinarizer
@@ -35,8 +35,8 @@ class GosdtModel(RawModel):
             n_estimators=config.gbdt_n_est,
             max_depth=config.gbdt_max_depth,
             random_state=2021,
-        ).set_output(transform="pandas")
-        self.nb = NumericBinarizer().set_output(transform="pandas")
+        ).set_output(transform='pandas')
+        self.nb = NumericBinarizer().set_output(transform='pandas')
         self.clf = GOSDTClassifier(
             regularization=config.regularization,
             similar_support=config.similar_support,
@@ -51,7 +51,7 @@ class GosdtModel(RawModel):
             X_bin = self.tgb.fit_transform(X, y)
         else:
             X_bin = self.nb.fit_transform(X, y)
-        
+
         if self.config.guess_lb:
             enc = GradientBoostingClassifier(
                 n_estimators=self.config.gbdt_n_est,
@@ -66,11 +66,8 @@ class GosdtModel(RawModel):
 
     @override
     def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
-        if self.config.guess_th:
-            X_bin = self.tgb.transform(X)
-        else:
-            X_bin = self.nb.transform(X)
-        
+        X_bin = self.tgb.transform(X) if self.config.guess_th else self.nb.transform(X)
+
         y_pred = self.clf.predict(X_bin)
         complexity = traverse(self.clf.trees_[0].tree, collect_depth)
         return y_pred, complexity
