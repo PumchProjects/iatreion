@@ -22,6 +22,7 @@ from iatreion.utils import logger
 
 @dataclass
 class Record[T]:
+    time: T
     auc: T
     acc: T
     precision: T
@@ -97,10 +98,17 @@ class RecordROC:
 class Recorder:
     def __init__(self, config: TrainConfig) -> None:
         self.config = config
-        self.result = Record[list[float]]([], [], [], [], [], [], None)
+        self.result = Record[list[float]]([], [], [], [], [], [], [], None)
         self.roc = RecordROC(config)
 
-    def record(self, y_true: ArrayLike, y_score: ArrayLike, complexity: float) -> None:
+    def record(
+        self,
+        training_time: float,
+        y_true: ArrayLike,
+        y_score: ArrayLike,
+        complexity: float,
+    ) -> None:
+        self.result.time.append(training_time)
         y_pred = y_score
         if self.config.record_auc:
             y_score = np.asarray(y_score)
@@ -138,9 +146,11 @@ class Recorder:
         logger.info(f'R:   {self.result.recall[-1]:.2%}')
         logger.info(f'F1:  {self.result.f1[-1]:.2%}')
         logger.info(f'COM: {self.result.complexity[-1]:.4f}')
+        logger.info(f'Time {training_time:.3f}s')
 
     def finish(self) -> Record[float]:
         final = Record(
+            np.mean(self.result.time).item(),
             np.mean(self.result.auc).item() if self.config.record_auc else 0.0,
             np.mean(self.result.acc).item(),
             np.mean(self.result.precision).item(),
@@ -159,4 +169,5 @@ class Recorder:
         logger.info(f'AVG R:   {final.recall:.2%}')
         logger.info(f'AVG F1:  {final.f1:.2%}')
         logger.info(f'AVG COM: {final.complexity:.4f}')
+        logger.info(f'AVG Time {final.time:.3f}s')
         return final

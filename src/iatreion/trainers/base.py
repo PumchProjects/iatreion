@@ -7,7 +7,7 @@ from iatreion.utils import logger, progress
 
 from .recorder import Recorder
 
-type TrainerReturn = tuple[ArrayLike, ArrayLike, float]
+type TrainerReturn = tuple[float, ArrayLike, ArrayLike, float]
 
 
 class Trainer(ABC):
@@ -30,8 +30,8 @@ class Trainer(ABC):
                     extra={'markup': True},
                 )
                 self.train_config.ith_kfold = fold
-                y_true, y_score, complexity = self.train_step()
-                recorder.record(y_true, y_score, complexity)
+                training_time, y_true, y_score, complexity = self.train_step()
+                recorder.record(training_time, y_true, y_score, complexity)
                 progress.update(fold_task, advance=1)
                 logger.info('')
         recorder.finish()

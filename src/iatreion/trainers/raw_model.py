@@ -1,3 +1,4 @@
+from time import perf_counter_ns
 from typing import override
 
 from iatreion.configs import DatasetConfig, TrainConfig
@@ -22,6 +23,9 @@ class RawModelTrainer(Trainer):
         X_train, y_train, X_test, y_test = get_raw_samples(
             self.dataset_config, self.train_config
         )
+        start = perf_counter_ns()
         self.model.fit(X_train, y_train)
+        end = perf_counter_ns()
+        training_time = (end - start) / 1e9
         y_score, complexity = self.model.predict(X_test, y_test)
-        return y_test, y_score, complexity
+        return training_time, y_test, y_score, complexity
