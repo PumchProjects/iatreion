@@ -27,6 +27,15 @@ class GatreeConfig:
     max_iter: int = 100
     'Set the maximum number of iterations for GATree.'
 
+    mutation_probability: float = 0.1
+    'Set the mutation probability for GATree.'
+
+    elite_size: int = 1
+    'Set the elite size for GATree.'
+
+    selection_tournament_size: int = 2
+    'Set the selection tournament size for GATree.'
+
     plot: bool = False
     'Whether to plot the tree.'
 

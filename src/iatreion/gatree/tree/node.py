@@ -124,6 +124,32 @@ class Node:
             return 1
         return self.parent.depth() + 1
 
+    def n_leaves(self):
+        """
+        Returns the number of the leaves of the tree.
+
+        Returns:
+            int: Number of leaves of the tree.
+        """
+        return self.n_leaves_helper(self.get_root())
+    
+    @staticmethod
+    def n_leaves_helper(n):
+        """
+        Helper function for n_leaves.
+
+        Args:
+            n (Node): Node to be used as the root.
+
+        Returns:
+            int: Number of leaves of the tree.
+        """
+        if n is None:
+            return 0
+        if n.left is None:
+            return 1
+        return Node.n_leaves_helper(n.left) + Node.n_leaves_helper(n.right)
+
     def max_depth(self):
         """
         Returns the maximum depth of the tree. The depth of the tree is the number of edges on the longest path from the root to a leaf.

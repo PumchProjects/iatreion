@@ -6,7 +6,9 @@ from cyclopts.types import ExistingDirectory
 
 type DataName = Literal[
     'snp',
+    'monk1',  # sanity test
     'iris',  # sanity test
+    'ttt',  # sanity test
     'tic-tac-toe',  # sanity test
 ]
 

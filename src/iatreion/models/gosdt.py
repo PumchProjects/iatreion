@@ -5,6 +5,7 @@ import pandas as pd
 from gosdt import GOSDTClassifier, NumericBinarizer, ThresholdGuessBinarizer
 from gosdt._tree import Leaf, Node
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.metrics import accuracy_score
 
 from iatreion.configs import GosdtConfig
 
@@ -52,6 +53,7 @@ class GosdtModel(RawModel):
             depth_budget=config.depth_budget,
             verbose=config.verbose,
         )
+        self.objective: float | None = None
 
     @override
     def fit(self, X: pd.DataFrame, y: pd.Series) -> None:
@@ -71,12 +73,20 @@ class GosdtModel(RawModel):
             self.clf.fit(X_bin, y, y_ref=warm_labels)
         else:
             self.clf.fit(X_bin, y)
+        
+        y_pred, complexity = self._predict(X)
+        self.objective = accuracy_score(y, y_pred) - 0.002 * complexity['#Leaf']
 
-    @override
-    def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
+    def _predict(self, X: pd.DataFrame) -> ModelReturn:
         X_bin = self.tgb.transform(X) if self.config.guess_th else self.nb.transform(X)
         y_pred = self.clf.predict(X_bin)
         depth, n_leaves = traverse(
             self.clf.trees_[0].tree, (collect_depth, collect_n_leaves)
         )
         return y_pred, {'Depth': depth, '#Leaf': n_leaves}
+    
+    @override
+    def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
+        y_pred, complexity = self._predict(X)
+        assert self.objective is not None
+        return y_pred, complexity | {'Fit': self.objective}
