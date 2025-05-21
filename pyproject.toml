@@ -5,7 +5,6 @@ description = 'An interpretable dementia diagnoser. From Ancient Greek ἰατρ
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "autoregistry>=1.1.2",
     "cyclopts>=3.13.1",
     "pandas[excel]>=2.2.3",
     "pandas-stubs>=2.2.3.250308",

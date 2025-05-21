@@ -1,13 +1,13 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 import numpy as np
 import pandas as pd
-from autoregistry import Registry
 
 from iatreion.configs import PreprocessorConfig
+from iatreion.utils import logger
 
 
-class Preprocessor(Registry, suffix='Preprocessor'):
+class Preprocessor(ABC):
     def __init__(self, config: PreprocessorConfig) -> None:
         super().__init__()
         self.config = config
@@ -58,4 +58,5 @@ class Preprocessor(Registry, suffix='Preprocessor'):
         data = self.get_data()
         data = data.merge(group_names, left_index=True, right_index=True, copy=False)
         augmented_vector_name = self.get_augmented_vector_name(data)
+        logger.info('[bold green]Saving data...', extra={'markup': True})
         self.save_data(data, augmented_vector_name)
