@@ -188,23 +188,6 @@ wheels = [
 ]
 
 [[package]]
-name = "gosdt"
-version = "1.0.4"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "scikit-learn" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4e/5b/907434c6d07537f0de7a9399c13bbafd7363eb2b740008f6ecbbd4d39bdb/gosdt-1.0.4.tar.gz", hash = "sha256:9bb5dffb4d78b783930cabbc61b8faf1c368f1ab3cede8688df6db21a52282a6", size = 173213, upload-time = "2025-05-06T18:02:36.716Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a6/6c/eca2c525d8a4b7751ab372bdf532b6bc18d22d4c4bd8c35562096d6260ec/gosdt-1.0.4-cp312-cp312-macosx_13_0_x86_64.whl", hash = "sha256:44f107baff6b5d49f848ea483f326ec6486100376bb3d88a015d69d28c320e2b", size = 700167, upload-time = "2025-05-06T18:02:20.996Z" },
-    { url = "https://files.pythonhosted.org/packages/d4/84/522b588ff603db9af97b82a1e07412ad7460e27b60eb670d4d441951c4fe/gosdt-1.0.4-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:75c68c7dae0c360a832b25125d9a5cfaa6e18fa2374534822322d5c90409437f", size = 610878, upload-time = "2025-05-06T18:02:22.489Z" },
-    { url = "https://files.pythonhosted.org/packages/32/59/590855bf1ea81c09951a8950920f2de2a8fcad68d24a43b970aef96199d2/gosdt-1.0.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9f61fffe7c55cd820d801e95ba7f2df851571af59717c68d58ce58d76fe910fd", size = 3268052, upload-time = "2025-05-06T18:02:25.13Z" },
-    { url = "https://files.pythonhosted.org/packages/b5/ab/675b2dd8c9ce347265a9bacd1c02ff10c2c5141e21b8cb0f56540d813b2f/gosdt-1.0.4-cp312-cp312-win_amd64.whl", hash = "sha256:ec5183f74188e4a57771751c05b2764c3d990554ea994fd7cc30e7dce4257a44", size = 799803, upload-time = "2025-05-06T18:02:26.618Z" },
-]
-
-[[package]]
 name = "grpcio"
 version = "1.71.0"
 source = { registry = "https://pypi.org/simple" }
@@ -239,7 +222,6 @@ source = { editable = "." }
 dependencies = [
     { name = "autoregistry" },
     { name = "cyclopts" },
-    { name = "gosdt" },
     { name = "matplotlib" },
     { name = "pandas", extra = ["excel"] },
     { name = "pandas-stubs" },
@@ -270,7 +252,6 @@ cu126 = [
 requires-dist = [
     { name = "autoregistry", specifier = ">=1.1.2" },
     { name = "cyclopts", specifier = ">=3.13.1" },
-    { name = "gosdt", specifier = ">=1.0.4" },
     { name = "matplotlib", specifier = ">=3.10.1" },
     { name = "pandas", extras = ["excel"], specifier = ">=2.2.3" },
     { name = "pandas-stubs", specifier = ">=2.2.3.250308" },
@@ -1432,14 +1413,14 @@ dependencies = [
     { name = "typing-extensions", marker = "sys_platform != 'darwin'" },
 ]
 wheels = [
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.7.0%2Bcpu-cp312-cp312-manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.7.0%2Bcpu-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:a845b6f3bda3c40f736847dede95d8bfec81fb7e11458cd25973ba13542cf1f6" },
     { url = "https://download.pytorch.org/whl/cpu/torch-2.7.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:64123c05615e27368c7a7816f6e39c6d219998693beabde0b0b9cedf91b5ed8b" },
     { url = "https://download.pytorch.org/whl/cpu/torch-2.7.0%2Bcpu-cp312-cp312-win_amd64.whl", hash = "sha256:69e25c973bdd7ea24b0fa9f9792114950afaeb8f819e5723819b923f50989175" },
     { url = "https://download.pytorch.org/whl/cpu/torch-2.7.0%2Bcpu-cp312-cp312-win_arm64.whl", hash = "sha256:1d7a6f33868276770a657beec7f77c7726b4da9d0739eff1b3ae64cc9a09d8e3" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.7.0%2Bcpu-cp313-cp313-manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.7.0%2Bcpu-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:addf9107939522ffb3b60d2900fee838a77dbe098e2643e01164f46f8612f9c0" },
     { url = "https://download.pytorch.org/whl/cpu/torch-2.7.0%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:3b09aa2c8d30fa567a8d13270fbf9af7ee472fdfafbc7dfdc87c607bf46001f7" },
     { url = "https://download.pytorch.org/whl/cpu/torch-2.7.0%2Bcpu-cp313-cp313-win_amd64.whl", hash = "sha256:99ca8f4cb53484c45bb668657069c17139c07367ea20ddef2c0ce8412f42da2f" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.7.0%2Bcpu-cp313-cp313t-manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.7.0%2Bcpu-cp313-cp313t-manylinux_2_28_aarch64.whl", hash = "sha256:1bc9e6a4e2463582ae020d76ea0753ed9c84526e235089414d25c2c6d16ae866" },
     { url = "https://download.pytorch.org/whl/cpu/torch-2.7.0%2Bcpu-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:7b31fa6b1d026542b4ed8ce7ec7ee5489413cd9bd6479c14c5ad559c15d92e3b" },
     { url = "https://download.pytorch.org/whl/cpu/torch-2.7.0%2Bcpu-cp313-cp313t-win_amd64.whl", hash = "sha256:b42cfe122faed26c6ffee1c97d64e6a1f72a081b64d457a2c97244c1497f4adc" },
 ]

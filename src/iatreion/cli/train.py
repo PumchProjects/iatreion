@@ -1,14 +1,10 @@
 from cyclopts import App
 
 from iatreion.configs import (
-    CartConfig,
-    GatreeConfig,
-    GosdtConfig,
     RrlConfig,
     XgboostConfig,
 )
-from iatreion.models import CartModel, GatreeModel, GosdtModel, XgboostModel
-from iatreion.trainers import ModelTrainer, RawModelTrainer
+from iatreion.trainers import ModelTrainer
 
 from .common import app
 
@@ -35,31 +31,9 @@ def xgboost(*, config: XgboostConfig, **param) -> None:
         Parameters for XGBoost. See https://xgboost.readthedocs.io/en/stable/parameter.html
         for more details.
     """
+    from iatreion.models import XgboostModel
+
     config.param = param
     model = XgboostModel(config)
     trainer = ModelTrainer(config.dataset, config.train, model)
-    trainer.train()
-
-
-@sub_app.command(sort_key=2)
-def cart(*, config: CartConfig) -> None:
-    """Train a CART model."""
-    model = CartModel(config)
-    trainer = RawModelTrainer(config.dataset, config.train, model)
-    trainer.train()
-
-
-@sub_app.command(sort_key=3)
-def gatree(*, config: GatreeConfig) -> None:
-    """Train a GATree model."""
-    model = GatreeModel(config)
-    trainer = RawModelTrainer(config.dataset, config.train, model)
-    trainer.train()
-
-
-@sub_app.command(sort_key=4)
-def gosdt(*, config: GosdtConfig) -> None:
-    """Train a GOSDT model."""
-    model = GosdtModel(config)
-    trainer = RawModelTrainer(config.dataset, config.train, model)
     trainer.train()

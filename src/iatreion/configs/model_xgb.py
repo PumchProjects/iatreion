@@ -27,4 +27,4 @@ class XgboostConfig:
         self.train.log_dir = (
             self.train.log_root / self.dataset.name / self.train.groups / 'xgboost'
         )
-        add_file_handler(self.train.log_dir / 'log.txt')
+        add_file_handler(self.train.log_dir / 'train.log')

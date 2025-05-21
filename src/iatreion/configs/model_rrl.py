@@ -86,7 +86,7 @@ class RrlConfig:
             / 'rrl'
             / folder_name
         )
-        add_file_handler(self.train.log_dir / 'log.txt')
+        add_file_handler(self.train.log_dir / 'train.log')
 
     @property
     def folder_path(self) -> str:
