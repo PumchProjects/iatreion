@@ -9,6 +9,7 @@ from .dataset import DataName, DatasetConfig
 
 data_name_mapping: dict[DataName, str] = {
     'cbf': '核磁_cbf.xlsx',
+    'csvd': '核磁_csvd.xlsx',
     'volume': '核磁_volume.xlsx',
     'snp': '基因_snp.csv',
 }
