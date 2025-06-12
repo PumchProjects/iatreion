@@ -113,7 +113,7 @@ class Recorder:
         if self.config.record_auc:
             y_score = np.asarray(y_score)
             y_pred = y_score.argmax(axis=1)
-            y_pos_score = y_score[:, 1]
+            y_pos_score = y_score[:, 1] if y_score.shape[1] >= 2 else y_score.squeeze()
             self.result.auc.append(
                 self.roc.record(y_true, y_pos_score, len(self.result.auc) + 1)
                 if self.config.plot_roc
