@@ -5,6 +5,7 @@ from cyclopts import Parameter
 from cyclopts.types import ExistingDirectory
 
 type DataName = Literal[
+    'cdr',
     'biomarker',
     'cbf',
     'csvd',
