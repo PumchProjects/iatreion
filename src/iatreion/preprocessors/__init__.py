@@ -1,6 +1,7 @@
 from iatreion.configs import PreprocessorConfig
 
 from .base import Preprocessor
+from .blood_biomarker import BiomarkerPreprocessor
 from .gene_snp import SnpPreprocessor
 from .mri_cbf import CbfPreprocessor
 from .mri_csvd import CsvdPreprocessor
@@ -9,6 +10,8 @@ from .mri_volume import VolumePreprocessor
 
 def get_preprocessor(config: PreprocessorConfig) -> Preprocessor:
     match config.dataset.name:
+        case 'biomarker':
+            return BiomarkerPreprocessor(config)
         case 'cbf':
             return CbfPreprocessor(config)
         case 'csvd':

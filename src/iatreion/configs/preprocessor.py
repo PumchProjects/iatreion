@@ -8,6 +8,7 @@ from cyclopts.types import Directory
 from .dataset import DataName, DatasetConfig
 
 data_name_mapping: dict[DataName, str] = {
+    'biomarker': '血液生物标记物_blood_biomarker.xlsx',
     'cbf': '核磁_cbf.xlsx',
     'csvd': '核磁_csvd.xlsx',
     'volume': '核磁_volume.xlsx',
