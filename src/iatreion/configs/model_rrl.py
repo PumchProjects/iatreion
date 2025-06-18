@@ -82,7 +82,7 @@ class RrlConfig:
         self.train.log_dir = (
             self.train.log_root
             / self.dataset.name
-            / self.train.groups
+            / self.train.group_names
             / 'rrl'
             / folder_name
         )

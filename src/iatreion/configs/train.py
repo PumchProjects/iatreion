@@ -11,7 +11,7 @@ from iatreion.utils import set_device, set_seed
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class TrainConfig:
-    groups: Annotated[str, Parameter(name=['--groups', '-g'])]
+    group_names: Annotated[str, Parameter(name=['--groups', '-g'])]
     'Group names of the data.'
 
     n_splits: Annotated[int, Parameter(name=['--n-splits', '-ns'])] = 5
@@ -37,12 +37,16 @@ class TrainConfig:
     record_auc: Annotated[bool, Parameter(parse=False)] = True
 
     @property
+    def groups(self) -> list[str]:
+        return self.group_names.split(',')
+
+    @property
     def num_class(self) -> int:
         return len(self.groups)
 
     @property
     def label_pos(self) -> str:
-        group_Ab = '1' in self.groups or '2' in self.groups
+        group_Ab = '1' in self.group_names or '2' in self.group_names
         return 'Ab' if group_Ab else 'encrypted'
 
     @property

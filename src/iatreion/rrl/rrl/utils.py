@@ -20,7 +20,8 @@ def read_info(info_path):
 
 def read_csv(data_path, info_path, groups, label_pos, shuffle=False):
     D = pd.read_csv(data_path, dtype={'encrypted': str, 'Ab': str})
-    D = D[D[label_pos].isin(list(groups))]
+    D[label_pos] = D[label_pos].map({name: group for group in groups for name in group})
+    D = D[D[label_pos].isin(groups)]
     if shuffle:
         D = D.sample(frac=1, random_state=0).reset_index(drop=True)
     f_list = read_info(info_path)

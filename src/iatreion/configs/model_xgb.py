@@ -25,6 +25,6 @@ class XgboostConfig:
 
     def __post_init__(self) -> None:
         self.train.log_dir = (
-            self.train.log_root / self.dataset.name / self.train.groups / 'xgboost'
+            self.train.log_root / self.dataset.name / self.train.group_names / 'xgboost'
         )
         add_file_handler(self.train.log_dir / 'train.log')
