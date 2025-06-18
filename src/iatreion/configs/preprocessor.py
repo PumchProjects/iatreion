@@ -13,6 +13,8 @@ data_name_mapping: dict[DataName, str] = {
     'cbf': '核磁_cbf.xlsx',
     'csvd': '核磁_csvd.xlsx',
     'volume': '核磁_volume.xlsx',
+    'volume-v': '核磁_volume.xlsx',
+    'volume-pct': '核磁_volume.xlsx',
     'snp': '基因_snp.csv',
 }
 

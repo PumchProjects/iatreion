@@ -46,7 +46,7 @@ class RecordROC:
             y_true,
             y_pos_score,
             name=f'_ROC fold {fold}',
-            alpha=0.3,
+            alpha=0.1,
             lw=1,
             ax=self.ax,
             plot_chance_level=(fold == self.config.n_folds),

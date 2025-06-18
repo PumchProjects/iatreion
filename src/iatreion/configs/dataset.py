@@ -10,6 +10,8 @@ type DataName = Literal[
     'cbf',
     'csvd',
     'volume',
+    'volume-v',
+    'volume-pct',
     'snp',
     'tic-tac-toe',  # sanity test
 ]
