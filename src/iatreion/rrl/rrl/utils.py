@@ -3,7 +3,7 @@ import pandas as pd
 from numpy.typing import NDArray
 from sklearn import preprocessing
 from sklearn.impute import SimpleImputer
-from sklearn.model_selection import KFold
+from sklearn.model_selection import RepeatedStratifiedKFold
 
 from iatreion.configs import DatasetConfig, TrainConfig
 
@@ -119,8 +119,8 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Samples:
 
     X, y = db_enc.transform(X_df, y_df, normalized=True, keep_stat=True)
 
-    kf = KFold(n_splits=train.n_splits, shuffle=True, random_state=0)
-    train_index, test_index = list(kf.split(X_df))[train.ith_kfold]
+    kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
+    train_index, test_index = list(kf.split(X_df, y_df))[train.ith_kfold]
     X_train = X[train_index]
     y_train = y[train_index]
     X_test = X[test_index]
@@ -134,8 +134,8 @@ def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> RawSamples:
     info_path = dataset.prefix / f'{dataset.name}.info'
     X_df, y_df, _ = read_csv(data_path, info_path, train.groups, train.label_pos, shuffle=True)
 
-    kf = KFold(n_splits=train.n_splits, shuffle=True, random_state=0)
-    train_index, test_index = list(kf.split(X_df))[train.ith_kfold]
+    kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
+    train_index, test_index = list(kf.split(X_df, y_df))[train.ith_kfold]
     X_train = X_df.iloc[train_index]
     y_train = y_df.iloc[train_index]
     X_test = X_df.iloc[test_index]

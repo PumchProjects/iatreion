@@ -14,8 +14,11 @@ class TrainConfig:
     group_names: Annotated[str, Parameter(name=['--groups', '-g'])]
     'Group names of the data.'
 
-    n_splits: Annotated[int, Parameter(name=['--n-splits', '-ns'])] = 5
+    n_splits: Annotated[int, Parameter(name=['--n-splits', '-ns'])] = 10
     'Number of splits for cross-validation.'
+
+    n_repeats: Annotated[int, Parameter(name=['--n-repeats', '-nr'])] = 10
+    'Number of repeats for cross-validation.'
 
     device_id: Annotated[int, Parameter(name=['--device-id', '-i'])] = 0
     'Device ID for training. Default is 0.'
@@ -39,6 +42,10 @@ class TrainConfig:
     @property
     def groups(self) -> list[str]:
         return self.group_names.split(',')
+
+    @property
+    def n_folds(self) -> int:
+        return self.n_splits * self.n_repeats
 
     @property
     def num_class(self) -> int:

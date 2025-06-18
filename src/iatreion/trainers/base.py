@@ -23,10 +23,10 @@ class Trainer(ABC):
     def train(self) -> None:
         recorder = Recorder(self.train_config)
         with progress:
-            fold_task = progress.add_task('Fold:', total=self.train_config.n_splits)
-            for fold in range(self.train_config.n_splits):
+            fold_task = progress.add_task('Fold:', total=self.train_config.n_folds)
+            for fold in range(self.train_config.n_folds):
                 logger.info(
-                    f'[bold green]Fold[/] {fold + 1}/{self.train_config.n_splits}',
+                    f'[bold green]Fold[/] {fold + 1}/{self.train_config.n_folds}',
                     extra={'markup': True},
                 )
                 self.train_config.ith_kfold = fold

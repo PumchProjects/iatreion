@@ -45,11 +45,11 @@ class RecordROC:
         viz = RocCurveDisplay.from_predictions(
             y_true,
             y_pos_score,
-            name=f'ROC fold {fold}',
+            name=f'_ROC fold {fold}',
             alpha=0.3,
             lw=1,
             ax=self.ax,
-            plot_chance_level=(fold == self.config.n_splits),
+            plot_chance_level=(fold == self.config.n_folds),
         )
         interp_tpr = np.interp(self.mean_fpr, viz.fpr, viz.tpr)
         interp_tpr[0] = 0.0

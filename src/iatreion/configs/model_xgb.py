@@ -20,7 +20,7 @@ class XgboostConfig:
         default_factory=dict
     )
 
-    num_round: Annotated[int, Parameter(name=['--num_round', '-nr'])] = 100
+    num_round: int = 100
     'Set the number of boosting rounds.'
 
     def __post_init__(self) -> None:
