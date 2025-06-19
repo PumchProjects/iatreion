@@ -1,6 +1,7 @@
 from cyclopts import App
 
 from iatreion.configs import (
+    RandomForestConfig,
     RrlConfig,
     XgboostConfig,
 )
@@ -35,5 +36,15 @@ def xgboost(*, config: XgboostConfig, **param) -> None:
 
     config.param = param
     model = XgboostModel(config)
+    trainer = ModelTrainer(config.dataset, config.train, model)
+    trainer.train()
+
+
+@sub_app.command(sort_key=2)
+def random_forest(*, config: RandomForestConfig) -> None:
+    """Train a Random Forest model."""
+    from iatreion.models import RandomForestModel
+
+    model = RandomForestModel(config)
     trainer = ModelTrainer(config.dataset, config.train, model)
     trainer.train()
