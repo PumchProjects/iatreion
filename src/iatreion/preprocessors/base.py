@@ -49,6 +49,9 @@ class Preprocessor(ABC):
         feature_names = [f'{pair[0]} {pair[1]}\n' for pair in augmented_vector_name]
         with self.config.output_info_path.open('w', encoding='utf-8') as f:
             f.writelines(feature_names)
+        fmap = [f'{i}\t{n}\tq\n' for i, (n, _) in enumerate(augmented_vector_name)]
+        with self.config.output_fmap_path.open('w', encoding='utf-8') as f:
+            f.writelines(fmap[:-2])
         with self.config.output_data_path.open('w', encoding='utf-8') as f:
             raw = data.to_string(index=False, index_names=False).split('\n')
             f.write('\n'.join([','.join(element.split()) for element in raw]))

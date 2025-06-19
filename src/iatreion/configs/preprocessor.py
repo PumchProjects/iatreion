@@ -52,3 +52,7 @@ class PreprocessorConfig:
     @property
     def output_info_path(self) -> Path:
         return self.output_prefix / f'{self.dataset.name}.info'
+
+    @property
+    def output_fmap_path(self) -> Path:
+        return self.output_prefix / f'{self.dataset.name}.fmap'

@@ -1,3 +1,4 @@
+import json
 from typing import override
 
 import numpy as np
@@ -60,6 +61,9 @@ class XgboostModel(Model):
             verbose_eval=False,
             callbacks=callbacks,
         )
+        score = self.bst.get_fscore(self.config.fmap)
+        with self.config.score_file.open('w', encoding='utf-8') as f:
+            json.dump(score, f, ensure_ascii=False, indent=4)
 
     @override
     def predict(self, X: NDArray, y: NDArray) -> ModelReturn:

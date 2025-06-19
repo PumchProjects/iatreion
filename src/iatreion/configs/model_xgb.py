@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Annotated, Any
 
 from cyclopts import Parameter
@@ -22,6 +23,14 @@ class XgboostConfig:
 
     num_round: int = 100
     'Set the number of boosting rounds.'
+
+    @property
+    def fmap(self) -> Path:
+        return self.dataset.prefix / f'{self.dataset.name}.fmap'
+
+    @property
+    def score_file(self) -> Path:
+        return self.train.log_dir / f'score_{self.train.ith_kfold}.json'
 
     def __post_init__(self) -> None:
         self.train.log_dir = (
