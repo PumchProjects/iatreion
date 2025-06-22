@@ -5,6 +5,7 @@ from .blood_biomarker import BiomarkerPreprocessor
 from .cog_cdr import CdrPreprocessor
 from .cog_mmse import MmsePreprocessor
 from .cog_mmse_sum import MmseSumPreprocessor
+from .cog_moca_sum import MocaSumPreprocessor
 from .gene_snp import SnpPreprocessor
 from .mri_cbf import CbfPreprocessor
 from .mri_csvd import CsvdPreprocessor
@@ -19,6 +20,8 @@ def get_preprocessor(config: PreprocessorConfig) -> Preprocessor:
             return MmsePreprocessor(config)
         case 'mmse-sum':
             return MmseSumPreprocessor(config)
+        case 'moca-sum':
+            return MocaSumPreprocessor(config)
         case 'biomarker':
             return BiomarkerPreprocessor(config)
         case 'cbf':

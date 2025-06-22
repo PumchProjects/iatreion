@@ -8,6 +8,7 @@ type DataName = Literal[
     'cdr',
     'mmse',
     'mmse-sum',
+    'moca-sum',
     'biomarker',
     'cbf',
     'csvd',
