@@ -2,6 +2,7 @@ from iatreion.configs import PreprocessorConfig
 
 from .base import Preprocessor
 from .blood_biomarker import BiomarkerPreprocessor
+from .cog_adl import AdlPreprocessor
 from .cog_cdr import CdrPreprocessor
 from .cog_mmse import MmsePreprocessor
 from .cog_mmse_sum import MmseSumPreprocessor
@@ -25,6 +26,8 @@ def get_preprocessor(config: PreprocessorConfig) -> Preprocessor:
             return MocaPreprocessor(config)
         case 'moca-sum':
             return MocaSumPreprocessor(config)
+        case 'adl':
+            return AdlPreprocessor(config)
         case 'biomarker':
             return BiomarkerPreprocessor(config)
         case 'cbf':

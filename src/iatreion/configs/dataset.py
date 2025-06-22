@@ -10,6 +10,7 @@ type DataName = Literal[
     'mmse-sum',
     'moca',
     'moca-sum',
+    'adl',
     'biomarker',
     'cbf',
     'csvd',
