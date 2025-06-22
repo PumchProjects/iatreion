@@ -23,6 +23,21 @@ class Preprocessor(ABC):
         )
         return data[['encrypted', 'Ab']]
 
+    @staticmethod
+    def sum_columns(
+        data: pd.DataFrame, columns: list[str], name: str, dtype: str = 'Int64'
+    ) -> pd.DataFrame:
+        # skipna=False ensures that NaN will propagate through the sum
+        col: pd.Series = data[columns].sum(axis=1, skipna=False).astype(dtype)
+        data = data.drop(columns=columns)
+        min_value, max_value = col.min(), col.max()
+        data[f'{name} = {min_value}'] = (col == min_value).astype(dtype)
+        for th in range(min_value + 1, max_value):
+            data[f'{name} <= {th}'] = (col <= th).astype(dtype)
+            data[f'{name} >= {th}'] = (col >= th).astype(dtype)
+        data[f'{name} = {max_value}'] = (col == max_value).astype(dtype)
+        return data
+
     @abstractmethod
     def get_data(self) -> pd.DataFrame: ...
 
@@ -53,7 +68,9 @@ class Preprocessor(ABC):
         with self.config.output_fmap_path.open('w', encoding='utf-8') as f:
             f.writelines(fmap[:-2])
         with self.config.output_data_path.open('w', encoding='utf-8') as f:
-            raw = data.to_string(index=False, index_names=False).split('\n')
+            raw = data.to_string(header=False, index=False, index_names=False).split(
+                '\n'
+            )
             f.write('\n'.join([','.join(element.split()) for element in raw]))
 
     def process(self) -> None:

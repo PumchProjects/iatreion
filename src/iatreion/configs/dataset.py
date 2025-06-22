@@ -6,6 +6,8 @@ from cyclopts.types import ExistingDirectory
 
 type DataName = Literal[
     'cdr',
+    'mmse',
+    'mmse-sum',
     'biomarker',
     'cbf',
     'csvd',

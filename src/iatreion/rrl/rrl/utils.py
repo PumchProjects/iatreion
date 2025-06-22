@@ -13,18 +13,19 @@ def read_info(info_path):
     with open(info_path) as f:
         f_list = []
         for line in f:
-            tokens = line.strip().split()
-            f_list.append([' '.join(tokens[:-1]), tokens[-1]])
+            tokens = line.strip().rsplit(maxsplit=1)
+            f_list.append(tokens)
     return f_list
 
 
 def read_csv(data_path, info_path, groups, label_pos, shuffle=False):
-    D = pd.read_csv(data_path, dtype={'encrypted': str, 'Ab': str})
+    f_list = read_info(info_path)
+    names = [f[0] for f in f_list]
+    D = pd.read_csv(data_path, names=names, dtype={'encrypted': str, 'Ab': str})
     D[label_pos] = D[label_pos].map({name: group for group in groups for name in group})
     D = D[D[label_pos].isin(groups)]
     if shuffle:
         D = D.sample(frac=1, random_state=0).reset_index(drop=True)
-    f_list = read_info(info_path)
     f_df = pd.DataFrame(f_list)
     y_df = D[label_pos]
     X_df = D.drop(['encrypted', 'Ab'], axis=1)

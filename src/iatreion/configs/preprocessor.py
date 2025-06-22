@@ -9,6 +9,8 @@ from .dataset import DataName, DatasetConfig
 
 data_name_mapping: dict[DataName, str] = {
     'cdr': '认知_cdr.xlsx',
+    'mmse': '认知筛查.xlsx',
+    'mmse-sum': '认知筛查.xlsx',
     'biomarker': '血液生物标记物_blood_biomarker.xlsx',
     'cbf': '核磁_cbf.xlsx',
     'csvd': '核磁_csvd.xlsx',
