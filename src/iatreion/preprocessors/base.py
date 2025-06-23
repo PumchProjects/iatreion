@@ -23,19 +23,21 @@ class Preprocessor(ABC):
         )
         return data[['encrypted', 'Ab']]
 
-    @staticmethod
     def sum_columns(
-        data: pd.DataFrame, columns: list[str], name: str, dtype: str = 'Int64'
+        self, data: pd.DataFrame, columns: list[str], name: str, dtype: str = 'Int64'
     ) -> pd.DataFrame:
         # skipna=False ensures that NaN will propagate through the sum
         col: pd.Series = data[columns].sum(axis=1, skipna=False).astype(dtype)
         data = data.drop(columns=columns)
         min_value, max_value = col.min(), col.max()
-        data[f'{name} = {min_value}'] = (col == min_value).astype(dtype)
-        for th in range(min_value + 1, max_value):
-            data[f'{name} <= {th}'] = (col <= th).astype(dtype)
-            data[f'{name} >= {th}'] = (col >= th).astype(dtype)
-        data[f'{name} = {max_value}'] = (col == max_value).astype(dtype)
+        if self.config.dataset.simple:
+            data[name] = col
+        else:
+            data[f'{name} = {min_value}'] = (col == min_value).astype(dtype)
+            for th in range(min_value + 1, max_value):
+                data[f'{name} <= {th}'] = (col <= th).astype(dtype)
+                data[f'{name} >= {th}'] = (col >= th).astype(dtype)
+            data[f'{name} = {max_value}'] = (col == max_value).astype(dtype)
         return data
 
     @abstractmethod
@@ -50,7 +52,9 @@ class Preprocessor(ABC):
                 unique_values = np.unique(col[~np.isnan(col)])
                 if len(unique_values) <= 2:
                     augmented_vector_name.append((name, 'binary'))
-                elif len(unique_values) < discrete_th:
+                elif (
+                    len(unique_values) < discrete_th and not self.config.dataset.simple
+                ):
                     augmented_vector_name.append((name, 'discrete'))
                 else:
                     augmented_vector_name.append((name, 'continuous'))

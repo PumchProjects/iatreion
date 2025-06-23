@@ -32,16 +32,23 @@ class DatasetConfig:
     name: Annotated[DataName, Parameter(name=['--name', '-n'])]
     'Name of the data file.'
 
+    simple: bool = False
+    'Whether to use the simple (non-binarized) version of the dataset.'
+
     place_holder: Annotated[str, Parameter(parse=False)] = 'Excalibur'
 
     @property
+    def true_name(self) -> str:
+        return f'{self.name}-simple' if self.simple else self.name
+
+    @property
     def data(self) -> Path:
-        return self.prefix / f'{self.name}.data'
+        return self.prefix / f'{self.true_name}.data'
 
     @property
     def info(self) -> Path:
-        return self.prefix / f'{self.name}.info'
+        return self.prefix / f'{self.true_name}.info'
 
     @property
     def fmap(self) -> Path:
-        return self.prefix / f'{self.name}.fmap'
+        return self.prefix / f'{self.true_name}.fmap'
