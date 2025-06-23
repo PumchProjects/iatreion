@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated, Literal
 
 from cyclopts import Parameter
@@ -30,3 +31,17 @@ class DatasetConfig:
 
     name: Annotated[DataName, Parameter(name=['--name', '-n'])]
     'Name of the data file.'
+
+    place_holder: Annotated[str, Parameter(parse=False)] = 'Excalibur'
+
+    @property
+    def data(self) -> Path:
+        return self.prefix / f'{self.name}.data'
+
+    @property
+    def info(self) -> Path:
+        return self.prefix / f'{self.name}.info'
+
+    @property
+    def fmap(self) -> Path:
+        return self.prefix / f'{self.name}.fmap'

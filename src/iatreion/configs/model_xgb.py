@@ -25,10 +25,6 @@ class XgboostConfig:
     'Set the number of boosting rounds.'
 
     @property
-    def fmap(self) -> Path:
-        return self.dataset.prefix / f'{self.dataset.name}.fmap'
-
-    @property
     def score_file(self) -> Path:
         return self.train.log_dir / f'score_{self.train.ith_kfold}.json'
 

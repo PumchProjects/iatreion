@@ -23,10 +23,6 @@ class RandomForestConfig:
     'Number of jobs to run in parallel. Default is 4.'
 
     @property
-    def fmap(self) -> Path:
-        return self.dataset.prefix / f'{self.dataset.name}.fmap'
-
-    @property
     def score_file(self) -> Path:
         return self.train.log_dir / f'score_{self.train.ith_kfold}.json'
 

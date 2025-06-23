@@ -64,9 +64,18 @@ class Preprocessor(ABC):
         feature_names = [f'{pair[0]} {pair[1]}\n' for pair in augmented_vector_name]
         with self.config.output_info_path.open('w', encoding='utf-8') as f:
             f.writelines(feature_names)
-        fmap = [f'{i}\t{n}\tq\n' for i, (n, _) in enumerate(augmented_vector_name)]
+        fmap: list[str] = []
+        for i, (name, type_) in enumerate(augmented_vector_name[:-2]):
+            name = name.replace(' ', self.config.dataset.place_holder)
+            match type_:
+                case 'binary':
+                    fmap.append(f'{i}\t{name}\ti\n')
+                case 'continuous':
+                    fmap.append(f'{i}\t{name}\tq\n')
+                case _:
+                    raise ValueError(f'Unsupported type: {type_}')
         with self.config.output_fmap_path.open('w', encoding='utf-8') as f:
-            f.writelines(fmap[:-2])
+            f.writelines(fmap)
         with self.config.output_data_path.open('w', encoding='utf-8') as f:
             raw = data.to_string(header=False, index=False, index_names=False).split(
                 '\n'

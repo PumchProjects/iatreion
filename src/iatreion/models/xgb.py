@@ -61,7 +61,11 @@ class XgboostModel(Model):
             verbose_eval=False,
             callbacks=callbacks,
         )
-        score = self.bst.get_fscore(self.config.fmap)
+        score = self.bst.get_fscore(self.config.dataset.fmap)
+        score = {
+            f.replace(self.config.dataset.place_holder, ' '): v
+            for f, v in score.items()
+        }
         with self.config.score_file.open('w', encoding='utf-8') as f:
             json.dump(score, f, ensure_ascii=False, indent=4)
 

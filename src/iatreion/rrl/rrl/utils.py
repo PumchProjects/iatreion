@@ -111,8 +111,8 @@ type RawSamples = tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
 
 
 def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Samples:
-    data_path = dataset.prefix / f'{dataset.name}.data'
-    info_path = dataset.prefix / f'{dataset.name}.info'
+    data_path = dataset.data
+    info_path = dataset.info
     X_df, y_df, f_df = read_csv(data_path, info_path, train.groups, train.label_pos, shuffle=True)
 
     db_enc = DBEncoder(f_df)
@@ -131,8 +131,8 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Samples:
 
 
 def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> RawSamples:
-    data_path = dataset.prefix / f'{dataset.name}.data'
-    info_path = dataset.prefix / f'{dataset.name}.info'
+    data_path = dataset.data
+    info_path = dataset.info
     X_df, y_df, _ = read_csv(data_path, info_path, train.groups, train.label_pos, shuffle=True)
 
     kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
