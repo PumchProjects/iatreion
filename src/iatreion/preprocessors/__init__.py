@@ -1,4 +1,6 @@
-from iatreion.configs import PreprocessorConfig
+from typing import cast
+
+from iatreion.configs import DataName, PreprocessorConfig, data_name_mapping
 
 from .base import Preprocessor
 from .blood_biomarker import BiomarkerPreprocessor
@@ -12,6 +14,7 @@ from .gene_snp import SnpPreprocessor
 from .mri_cbf import CbfPreprocessor
 from .mri_csvd import CsvdPreprocessor
 from .mri_volume import VolumeAveragePreprocessor, VolumePreprocessor
+from .sequential import SequentialPreprocessor
 
 
 def get_preprocessor(config: PreprocessorConfig) -> Preprocessor:
@@ -28,6 +31,17 @@ def get_preprocessor(config: PreprocessorConfig) -> Preprocessor:
             return MocaSumPreprocessor(config)
         case 'adl':
             return AdlPreprocessor(config)
+        case 'adl-sum':
+            return AdlPreprocessor(config, is_sum=True)
+        case 'screen-sum':
+            original_name = config.dataset.name
+            children: list[tuple[DataName, Preprocessor]] = []
+            for name_ in data_name_mapping[original_name].split(','):
+                name = cast(DataName, name_)
+                config.dataset.name = name
+                children.append((name, get_preprocessor(config)))
+            config.dataset.name = original_name
+            return SequentialPreprocessor(config, children)
         case 'biomarker':
             return BiomarkerPreprocessor(config)
         case 'cbf':
