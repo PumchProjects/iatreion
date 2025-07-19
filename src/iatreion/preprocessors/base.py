@@ -40,6 +40,33 @@ class Preprocessor(ABC):
             data[f'{name} = {max_value}'] = (col == max_value).astype(dtype)
         return data
 
+    def binarize_column(
+        self,
+        data: pd.DataFrame,
+        column: str,
+        threshold: int,
+        ge_name: str | None = None,
+        lt_name: str | None = None,
+        dtype: str = 'Int64',
+    ) -> pd.DataFrame:
+        col: pd.Series = (data[column] >= threshold).astype(dtype)
+        col[data[column].isnull()] = np.nan
+        data = data.drop(columns=[column])
+        if ge_name is not None:
+            name = ge_name
+        else:
+            assert lt_name is not None, (
+                'At least one of ge_name or lt_name must be provided'
+            )
+            name = lt_name
+            col = 1 - col
+        if self.config.dataset.simple:
+            data[name] = col
+        else:
+            data[f'{name} = 0'] = (col == 0).astype(dtype)
+            data[f'{name} = 1'] = (col == 1).astype(dtype)
+        return data
+
     @abstractmethod
     def get_data(self) -> pd.DataFrame: ...
 

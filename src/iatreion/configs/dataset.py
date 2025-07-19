@@ -14,6 +14,7 @@ type DataName = Literal[
     'adl',
     'adl-sum',
     'screen-sum',
+    'composite-bin',
     'biomarker',
     'cbf',
     'csvd',

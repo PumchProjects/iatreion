@@ -6,6 +6,7 @@ from .base import Preprocessor
 from .blood_biomarker import BiomarkerPreprocessor
 from .cog_adl import AdlPreprocessor
 from .cog_cdr import CdrPreprocessor
+from .cog_composite import CompositePreprocessor
 from .cog_mmse import MmsePreprocessor
 from .cog_mmse_sum import MmseSumPreprocessor
 from .cog_moca import MocaPreprocessor
@@ -42,6 +43,8 @@ def get_preprocessor(config: PreprocessorConfig) -> Preprocessor:
                 children.append((name, get_preprocessor(config)))
             config.dataset.name = original_name
             return SequentialPreprocessor(config, children)
+        case 'composite-bin':
+            return CompositePreprocessor(config)
         case 'biomarker':
             return BiomarkerPreprocessor(config)
         case 'cbf':
