@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 from cyclopts import Parameter
 from cyclopts.types import Directory
@@ -17,6 +17,10 @@ data_name_mapping: dict[DataName, str] = {
     'adl-sum': '认知筛查.xlsx',
     # HACK: store a tuple of names here
     'screen-sum': 'mmse-sum,moca-sum,adl-sum',
+    'associative-learning': '认知综合.xlsx',
+    'episodic-memory': '认知综合.xlsx',
+    'avlt': '认知综合.xlsx',
+    's-composite-aea': 'associative-learning,episodic-memory,avlt',
     'composite-bin': '认知综合.xlsx',
     'biomarker': '血液生物标记物_blood_biomarker.xlsx',
     'cbf': '核磁_cbf.xlsx',
@@ -65,3 +69,12 @@ class PreprocessorConfig:
     @property
     def output_fmap_path(self) -> Path:
         return self.output_prefix / f'{self.dataset.true_name}.fmap'
+
+    @property
+    def children_names(self) -> list[DataName]:
+        if self.dataset.name.startswith('s-'):
+            return [
+                cast(DataName, name)
+                for name in data_name_mapping[self.dataset.name].split(',')
+            ]
+        return []

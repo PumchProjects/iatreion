@@ -1,12 +1,13 @@
-from typing import cast
-
-from iatreion.configs import DataName, PreprocessorConfig, data_name_mapping
+from iatreion.configs import DataName, PreprocessorConfig
 
 from .base import Preprocessor
 from .blood_biomarker import BiomarkerPreprocessor
 from .cog_adl import AdlPreprocessor
+from .cog_associative import AssociativeLearningPreprocessor
+from .cog_avlt import AvltPreprocessor
 from .cog_cdr import CdrPreprocessor
 from .cog_composite import CompositePreprocessor
+from .cog_episodic import EpisodicMemoryPreprocessor
 from .cog_mmse import MmsePreprocessor
 from .cog_mmse_sum import MmseSumPreprocessor
 from .cog_moca import MocaPreprocessor
@@ -34,15 +35,12 @@ def get_preprocessor(config: PreprocessorConfig) -> Preprocessor:
             return AdlPreprocessor(config)
         case 'adl-sum':
             return AdlPreprocessor(config, is_sum=True)
-        case 'screen-sum':
-            original_name = config.dataset.name
-            children: list[tuple[DataName, Preprocessor]] = []
-            for name_ in data_name_mapping[original_name].split(','):
-                name = cast(DataName, name_)
-                config.dataset.name = name
-                children.append((name, get_preprocessor(config)))
-            config.dataset.name = original_name
-            return SequentialPreprocessor(config, children)
+        case 'associative-learning':
+            return AssociativeLearningPreprocessor(config)
+        case 'episodic-memory':
+            return EpisodicMemoryPreprocessor(config)
+        case 'avlt':
+            return AvltPreprocessor(config)
         case 'composite-bin':
             return CompositePreprocessor(config)
         case 'biomarker':
@@ -59,5 +57,12 @@ def get_preprocessor(config: PreprocessorConfig) -> Preprocessor:
             return VolumeAveragePreprocessor(config, feature='pct')
         case 'snp':
             return SnpPreprocessor(config)
-        case _:
-            raise ValueError(f'Unknown dataset name: {config.dataset.name}')
+        case name:
+            children: list[tuple[DataName, Preprocessor]] = []
+            for child_name in config.children_names:
+                config.dataset.name = child_name
+                children.append((child_name, get_preprocessor(config)))
+            if len(children) == 0:
+                raise ValueError(f'Unknown dataset name: {name}')
+            config.dataset.name = name
+            return SequentialPreprocessor(config, children)
