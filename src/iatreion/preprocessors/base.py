@@ -21,7 +21,7 @@ class Preprocessor(ABC):
             },
             inplace=True,
         )
-        return data[['encrypted', 'Ab']]
+        return data[['encrypted', 'Ab', 'A_type']]
 
     def sum_columns(
         self, data: pd.DataFrame, columns: list[str], name: str, dtype: str = 'Int64'
@@ -96,7 +96,7 @@ class Preprocessor(ABC):
         with self.config.output_info_path.open('w', encoding='utf-8') as f:
             f.writelines(feature_names)
         fmap: list[str] = []
-        for i, (name, type_) in enumerate(augmented_vector_name[:-2]):
+        for i, (name, type_) in enumerate(augmented_vector_name[:-3]):
             name = name.replace(' ', self.config.dataset.place_holder)
             match type_:
                 case 'binary':

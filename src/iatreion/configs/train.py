@@ -40,8 +40,20 @@ class TrainConfig:
     record_auc: Annotated[bool, Parameter(parse=False)] = True
 
     @property
-    def groups(self) -> list[str]:
-        return self.group_names.split(',')
+    def groups(self) -> list[list[str]]:
+        groups: list[list[str]] = []
+        for group in self.group_names.split(','):
+            names: list[str] = []
+            i = 0
+            while i < len(group):
+                if group[i] in 'EL':
+                    names.append(group[i : i + 2])
+                    i += 1
+                else:
+                    names.append(group[i])
+                i += 1
+            groups.append(names)
+        return groups
 
     @property
     def n_folds(self) -> int:
