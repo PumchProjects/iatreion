@@ -52,7 +52,7 @@ class PreprocessorConfig:
 
     @property
     def group_data_path(self) -> Path:
-        return self.dataset.prefix / '患者及分组加密对应表_AGE分组20250720.xlsx'
+        return self.dataset.prefix / '患者及分组加密对应表_AGE分组20250731.xlsx'
 
     @property
     def data_path(self) -> Path:

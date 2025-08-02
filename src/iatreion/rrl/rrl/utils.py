@@ -29,18 +29,20 @@ def get_group_mapping(groups):
 def read_csv(data_path, info_path, groups, label_pos, shuffle=False):
     f_list = read_info(info_path)
     names = [f[0] for f in f_list]
-    D = pd.read_csv(data_path, names=names, dtype={'encrypted': str, 'Ab': str, 'A_type': str})
+    D = pd.read_csv(data_path, names=names, dtype={'encrypted': str, 'Ab': str, 'A_type': str, 'A_type2': str})
     group_mapping = get_group_mapping(groups)
-    if 'a' not in group_mapping:
+    if any(key[0] in 'LE' for key in group_mapping):
         D[label_pos] = D['A_type'].fillna(D[label_pos])
+    elif any(key[0] == 'A' for key in group_mapping):
+        D[label_pos] = D['A_type2'].fillna(D[label_pos])
     D[label_pos] = D[label_pos].map(group_mapping)
     D = D[D[label_pos].isin(list(group_mapping.values()))]
     if shuffle:
         D = D.sample(frac=1, random_state=0).reset_index(drop=True)
     f_df = pd.DataFrame(f_list)
     y_df = D[label_pos]
-    X_df = D.drop(['encrypted', 'Ab', 'A_type'], axis=1)
-    f_df = f_df.drop(f_df.index[[-3, -2, -1]])
+    X_df = D.drop(['encrypted', 'Ab', 'A_type', 'A_type2'], axis=1)
+    f_df = f_df.drop(f_df.index[[-4, -3, -2, -1]])
     return X_df, y_df, f_df
 
 

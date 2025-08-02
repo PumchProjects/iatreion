@@ -46,7 +46,7 @@ class TrainConfig:
             names: list[str] = []
             i = 0
             while i < len(group):
-                if group[i] in 'EL':
+                if group[i] in 'LEA':
                     names.append(group[i : i + 2])
                     i += 1
                 else:
@@ -65,7 +65,7 @@ class TrainConfig:
 
     @property
     def label_pos(self) -> str:
-        group_Ab = '1' in self.group_names or '2' in self.group_names
+        group_Ab = any(name in '12' for names in self.groups for name in names)
         return 'Ab' if group_Ab else 'encrypted'
 
     @property
