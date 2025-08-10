@@ -15,7 +15,11 @@ from .cog_moca_sum import MocaSumPreprocessor
 from .gene_snp import SnpPreprocessor
 from .mri_cbf import CbfPreprocessor
 from .mri_csvd import CsvdPreprocessor
-from .mri_volume import VolumeAveragePreprocessor, VolumeAverageNewPreprocessor, VolumePreprocessor
+from .mri_volume import (
+    VolumeAverageNewPreprocessor,
+    VolumeAveragePreprocessor,
+    VolumePreprocessor,
+)
 from .sequential import SequentialPreprocessor
 
 

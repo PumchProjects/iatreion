@@ -60,7 +60,7 @@ class VolumeAverageNewPreprocessor(Preprocessor):
     ) -> None:
         super().__init__(config)
         self.feature = feature
-    
+
     @staticmethod
     def match_group(age: int | float) -> str | None:
         match age:
@@ -93,15 +93,19 @@ class VolumeAverageNewPreprocessor(Preprocessor):
         data['age_group'] = real_ages.apply(self.match_group)
         data = data.dropna(subset=['age_group'])
         return data
-    
+
     def get_mean_std(self, data: pd.DataFrame) -> pd.DataFrame:
         vmri = pd.read_excel(self.config.vmri_data_path, sheet_name=['mean', 'sd'])
         data = data.reset_index()
-        data = data.merge(vmri['mean'], on='age_group', suffixes=(None, '_mean'), copy=False)
-        data = data.merge(vmri['sd'], on='age_group', suffixes=(None, '_std'), copy=False)
+        data = data.merge(
+            vmri['mean'], on='age_group', suffixes=(None, '_mean'), copy=False
+        )
+        data = data.merge(
+            vmri['sd'], on='age_group', suffixes=(None, '_std'), copy=False
+        )
         data = data.loc[:, ~data.columns.str.startswith('Brainstem')]
         return data.set_index('serial_num')
-    
+
     def get_columns(self, data: pd.DataFrame) -> tuple[list[str], ...]:
         ai_columns = [col for col in data.columns if col.endswith('_Asymmetry_index')]
         columns = [col for col in data.columns if col.endswith(f'_{self.feature}')]
@@ -117,22 +121,26 @@ class VolumeAverageNewPreprocessor(Preprocessor):
             if col.endswith(f'_L_{self.feature}')
         ]
         return c_columns, lr_columns, ai_columns
-    
+
     @staticmethod
     def calc_z_score(data: pd.DataFrame, feature: str) -> pd.Series:
         mean = data[f'{feature}_mean']
         std = data[f'{feature}_std']
         return (data[feature] - mean) / std
-    
-    def calc_central_z_scores(self, data: pd.DataFrame, columns: list[str]) -> list[str]:
+
+    def calc_central_z_scores(
+        self, data: pd.DataFrame, columns: list[str]
+    ) -> list[str]:
         z_columns = []
         for col in columns:
             z_col = f'{col}_Z'
             data[z_col] = self.calc_z_score(data, col)
             z_columns.append(z_col)
         return z_columns
-    
-    def calc_average_z_scores(self, data: pd.DataFrame, columns: list[str]) -> list[str]:
+
+    def calc_average_z_scores(
+        self, data: pd.DataFrame, columns: list[str]
+    ) -> list[str]:
         z_columns = []
         for col in columns:
             z_col = f'{col}_A_{self.feature}_Z'

@@ -22,7 +22,7 @@ class Preprocessor(ABC):
             inplace=True,
         )
         return data[['encrypted', 'Ab', 'A_type', 'A_type2']]
-    
+
     def get_birth_dates(self) -> pd.Series:
         data = pd.read_excel(self.config.birth_data_path, index_col='serial_num')
         data.rename(
