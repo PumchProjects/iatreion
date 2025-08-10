@@ -28,6 +28,8 @@ data_name_mapping: dict[DataName, str] = {
     'volume': '核磁_volume.xlsx',
     'volume-v': '核磁_volume.xlsx',
     'volume-pct': '核磁_volume.xlsx',
+    'volume-v-nz': '核磁_volume.xlsx',
+    'volume-pct-nz': '核磁_volume.xlsx',
     'snp': '基因_snp.csv',
 }
 
@@ -53,6 +55,14 @@ class PreprocessorConfig:
     @property
     def group_data_path(self) -> Path:
         return self.dataset.prefix / '患者及分组加密对应表_AGE分组20250731.xlsx'
+    
+    @property
+    def birth_data_path(self) -> Path:
+        return self.dataset.prefix / '基本信息.xlsx'
+    
+    @property
+    def vmri_data_path(self) -> Path:
+        return self.dataset.prefix / 'Vmri_mean_sd.xlsx'
 
     @property
     def data_path(self) -> Path:

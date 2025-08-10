@@ -25,6 +25,8 @@ type DataName = Literal[
     'volume',
     'volume-v',
     'volume-pct',
+    'volume-v-nz',
+    'volume-pct-nz',
     'snp',
     'tic-tac-toe',  # sanity test
 ]

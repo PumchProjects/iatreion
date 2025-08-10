@@ -22,6 +22,16 @@ class Preprocessor(ABC):
             inplace=True,
         )
         return data[['encrypted', 'Ab', 'A_type', 'A_type2']]
+    
+    def get_birth_dates(self) -> pd.Series:
+        data = pd.read_excel(self.config.birth_data_path, index_col='serial_num')
+        data.rename(
+            columns={
+                '实际出生日期': 'birth_date',
+            },
+            inplace=True,
+        )
+        return pd.to_datetime(data['birth_date'])
 
     def sum_columns(
         self, data: pd.DataFrame, columns: list[str], name: str, dtype: str = 'Int64'

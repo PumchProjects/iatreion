@@ -15,7 +15,7 @@ from .cog_moca_sum import MocaSumPreprocessor
 from .gene_snp import SnpPreprocessor
 from .mri_cbf import CbfPreprocessor
 from .mri_csvd import CsvdPreprocessor
-from .mri_volume import VolumeAveragePreprocessor, VolumePreprocessor
+from .mri_volume import VolumeAveragePreprocessor, VolumeAverageNewPreprocessor, VolumePreprocessor
 from .sequential import SequentialPreprocessor
 
 
@@ -55,6 +55,10 @@ def get_preprocessor(config: PreprocessorConfig) -> Preprocessor:
             return VolumeAveragePreprocessor(config, feature='v')
         case 'volume-pct':
             return VolumeAveragePreprocessor(config, feature='pct')
+        case 'volume-v-nz':
+            return VolumeAverageNewPreprocessor(config, feature='v')
+        case 'volume-pct-nz':
+            return VolumeAverageNewPreprocessor(config, feature='pct')
         case 'snp':
             return SnpPreprocessor(config)
         case name:
