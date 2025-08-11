@@ -84,7 +84,7 @@ class RrlConfig:
             / self.dataset.name
             / self.train.group_names
             / 'rrl'
-            / folder_name
+            / ('final' if self.train.final else folder_name)
         )
         add_file_handler(self.train.log_dir / 'train.log')
 
@@ -98,4 +98,6 @@ class RrlConfig:
 
     @property
     def rrl_file(self) -> str:
+        if self.train.final:
+            return str(self.train.log_dir / 'rrl.tsv')
         return str(self.train.log_dir / f'rrl_{self.train.ith_kfold}.tsv')

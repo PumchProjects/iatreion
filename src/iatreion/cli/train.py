@@ -6,11 +6,12 @@ from iatreion.configs import (
     RrlConfig,
     XgboostConfig,
 )
+from iatreion.models import DiscreteRrlModel, RandomForestModel, XgboostModel
 from iatreion.trainers import ModelTrainer, RawModelTrainer
 
 from .common import app
 
-sub_app = App(name='train', help='Train a model.')
+sub_app = App(name='train', help='Train a model.', sort_key=1)
 app.command(sub_app)
 
 
@@ -33,8 +34,6 @@ def xgboost(*, config: XgboostConfig, **param) -> None:
         Parameters for XGBoost. See https://xgboost.readthedocs.io/en/stable/parameter.html
         for more details.
     """
-    from iatreion.models import XgboostModel
-
     config.param = param
     model = XgboostModel(config)
     trainer = ModelTrainer(config.dataset, config.train, model)
@@ -44,8 +43,6 @@ def xgboost(*, config: XgboostConfig, **param) -> None:
 @sub_app.command(sort_key=2)
 def random_forest(*, config: RandomForestConfig) -> None:
     """Train a Random Forest model."""
-    from iatreion.models import RandomForestModel
-
     model = RandomForestModel(config)
     trainer = ModelTrainer(config.dataset, config.train, model)
     trainer.train()
@@ -54,8 +51,6 @@ def random_forest(*, config: RandomForestConfig) -> None:
 @sub_app.command(sort_key=3)
 def rrl_eval(*, config: DiscreteRrlConfig) -> None:
     """Evaluate trained RRL models."""
-    from iatreion.models import DiscreteRrlModel
-
     model = DiscreteRrlModel(config)
     trainer = RawModelTrainer(config.dataset, config.train, model)
     trainer.train()

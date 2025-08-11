@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 from scipy.special import softmax
 
 from iatreion.configs import DiscreteRrlConfig
+from iatreion.utils import logger
 
 from .base import ModelReturn, RawModel
 
@@ -156,7 +157,8 @@ class Line:
 
 
 class Rrl:
-    template = re.compile(r'(?P<label>.*)\(b=(?P<bias>.*)\)')
+    rid_template = re.compile(r'RID\(t=(?P<temp>.*)\)')
+    label_template = re.compile(r'(?P<label>.*)\(b=(?P<bias>.*)\)')
 
     def __init__(self, file: Path) -> None:
         with file.open('r', encoding='utf-8') as f:
@@ -164,8 +166,17 @@ class Rrl:
         headers = texts[0].split('\t')
         self.labels: list[str] = []
         self.biases: list[float] = []
+        match_obj = self.rid_template.match(headers[0])
+        if match_obj is not None:
+            self.temp = float(match_obj.group('temp'))
+        else:
+            self.temp = 0.01
+            logger.warning(
+                f'[bold yellow]Using default temperature {self.temp} for old versions',
+                extra={'markup': True},
+            )
         for header in headers[1:-2]:
-            match_obj = self.template.match(header)
+            match_obj = self.label_template.match(header)
             assert match_obj is not None, f'Invalid header: {header}!'
             self.labels.append(match_obj.group('label').split('_')[-1])
             self.biases.append(float(match_obj.group('bias')))
@@ -175,8 +186,7 @@ class Rrl:
         result = np.repeat([self.biases], data.shape[0], axis=0)
         for line in self.lines:
             result += line.eval(data)
-        # TODO: Use the learned temperature
-        return softmax(result / 0.01, axis=1)
+        return softmax(result / self.temp, axis=1)
 
 
 class DiscreteRrlModel(RawModel):
@@ -199,3 +209,11 @@ class DiscreteRrlModel(RawModel):
         rrl = Rrl(self.config.get_rrl_file(self.exp_root))
         predicted = rrl.eval(X)
         return predicted, {}
+
+    def eval(self, data: pd.DataFrame) -> pd.DataFrame:
+        rrl = Rrl(self.config.get_rrl_file(self.exp_root))
+        result = rrl.eval(data)
+        y_pred = [rrl.labels[i] for i in result.argmax(axis=1)]
+        table = pd.DataFrame(result, columns=rrl.labels, index=data.index)
+        table['y_pred'] = y_pred
+        return table

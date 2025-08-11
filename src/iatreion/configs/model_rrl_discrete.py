@@ -59,7 +59,11 @@ class DiscreteRrlConfig:
 
     def get_best_exp_root(self) -> Path | None:
         groups_root = self.thesaurus / self.dataset.name / self.train.group_names
+        if self.train.final:
+            return groups_root / 'rrl' / 'final'
         return get_best_exp_root(groups_root)
 
     def get_rrl_file(self, exp_root: Path) -> Path:
+        if self.train.final:
+            return exp_root / 'rrl.tsv'
         return exp_root / f'rrl_{self.train.ith_kfold}.tsv'
