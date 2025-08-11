@@ -62,6 +62,10 @@ def train_model(args: RrlConfig, samples: Samples):
         lr_decay_epoch=args.lr_decay_epoch,
         weight_decay=args.weight_decay,
         log_iter=args.log_iter)
+    
+    if args.train.final and args.print_rule:
+        with open(args.rrl_file, 'w') as rrl_file:
+            rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std)
 
 
 def load_model(path):

@@ -80,6 +80,18 @@ class Preprocessor(ABC):
     @abstractmethod
     def get_data(self) -> pd.DataFrame: ...
 
+    @staticmethod
+    def remove_useless_columns(data: pd.DataFrame) -> pd.DataFrame:
+        nunique = data.nunique(dropna=False)
+        columns = nunique[nunique <= 1].index
+        if not columns.empty:
+            logger.warning(
+                f'[bold yellow]Removing useless columns: {", ".join(columns)}',
+                extra={'markup': True},
+            )
+            data = data.drop(columns=columns)
+        return data
+
     def get_augmented_vector_name(self, data: pd.DataFrame) -> list[tuple[str, str]]:
         discrete_th = 10
         augmented_vector_name: list[tuple[str, str]] = []
@@ -129,6 +141,7 @@ class Preprocessor(ABC):
         data = data.merge(group_names, left_index=True, right_index=True, copy=False)
         # HACK: Keep only the first sample of each patient
         data = data[~data.index.duplicated(keep='first')]
+        data = self.remove_useless_columns(data)
         augmented_vector_name = self.get_augmented_vector_name(data)
         logger.info('[bold green]Saving data...', extra={'markup': True})
         self.save_data(data, augmented_vector_name)

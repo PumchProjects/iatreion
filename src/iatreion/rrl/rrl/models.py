@@ -308,7 +308,7 @@ class RRL:
         if not display:
             return layer.rule2weights
         
-        print('RID', end='\t', file=file)
+        print('RID(t={:.4f})'.format(torch.exp(self.net.t).item()), end='\t', file=file)
         for i, ln in enumerate(label_name):
             print('{}(b={:.4f})'.format(ln, layer.bl[i]), end='\t', file=file)
         print('Support\tRule', file=file)

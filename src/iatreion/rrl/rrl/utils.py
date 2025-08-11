@@ -133,6 +133,9 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Samples:
 
     X, y = db_enc.transform(X_df, y_df, normalized=True, keep_stat=True)
 
+    if train.final:
+        return db_enc, X, y, X, y
+
     kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
     train_index, test_index = list(kf.split(X_df, y_df))[train.ith_kfold]
     X_train = X[train_index]
@@ -148,16 +151,14 @@ def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> RawSamples:
     info_path = dataset.info
     X_df, y_df, _ = read_csv(data_path, info_path, train.groups, train.label_pos, shuffle=True)
 
+    if train.final:
+        return X_df, y_df, X_df, y_df
+
     kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
     train_index, test_index = list(kf.split(X_df, y_df))[train.ith_kfold]
     X_train = X_df.iloc[train_index]
     y_train = y_df.iloc[train_index]
     X_test = X_df.iloc[test_index]
     y_test = y_df.iloc[test_index]
-
-    nunique = X_train.nunique(dropna=False)
-    columns = nunique[nunique <= 1].index
-    X_train = X_train.drop(columns=columns)
-    X_test = X_test.drop(columns=columns)
 
     return X_train, y_train, X_test, y_test

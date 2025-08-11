@@ -37,3 +37,8 @@ class RawModelTrainer(Trainer):
         training_time = (end - start) / 1e9
         y_score, complexity = self.model.predict(X_test, y_test)
         return training_time, y_true, y_score, complexity
+
+    @override
+    def train_final(self):
+        X_train, y_train, _, _ = get_raw_samples(self.dataset_config, self.train_config)
+        self.model.fit(X_train, y_train)

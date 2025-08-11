@@ -24,6 +24,9 @@ class TrainConfig:
     device_id: Annotated[int, Parameter(name=['--device-id', '-i'])] = 0
     'Device ID for training. Default is 0.'
 
+    final: Annotated[bool, Parameter(name=['--final', '-f'])] = False
+    'Whether to use the whole dataset for training or testing.'
+
     seed: int = 42
     'Random seed for reproducibility.'
 

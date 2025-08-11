@@ -20,7 +20,13 @@ class Trainer(ABC):
     @abstractmethod
     def train_step(self) -> TrainerReturn: ...
 
+    @abstractmethod
+    def train_final(self) -> None: ...
+
     def train(self) -> None:
+        if self.train_config.final:
+            self.train_final()
+            return
         recorder = Recorder(self.train_config)
         with progress:
             fold_task = progress.add_task('Fold:', total=self.train_config.n_folds)

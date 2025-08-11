@@ -26,3 +26,9 @@ class RrlTrainer(Trainer):
         y_score, complexity = test_model(self.config, samples)
         os.remove(self.config.model)
         return training_time, samples[4], y_score, {'Log#E': complexity}
+
+    @override
+    def train_final(self) -> None:
+        samples = get_samples(self.dataset_config, self.train_config)
+        train_model(self.config, samples)
+        os.remove(self.config.model)
