@@ -11,6 +11,7 @@ from iatreion.utils import set_device, set_seed
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class TrainConfig:
+    # HACK: Force to use the same order as LabelEncoder
     group_names: Annotated[str, Parameter(name=['--groups', '-g'])]
     'Group names of the data.'
 

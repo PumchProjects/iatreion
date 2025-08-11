@@ -1,11 +1,12 @@
 from cyclopts import App
 
 from iatreion.configs import (
+    DiscreteRrlConfig,
     RandomForestConfig,
     RrlConfig,
     XgboostConfig,
 )
-from iatreion.trainers import ModelTrainer
+from iatreion.trainers import ModelTrainer, RawModelTrainer
 
 from .common import app
 
@@ -47,4 +48,14 @@ def random_forest(*, config: RandomForestConfig) -> None:
 
     model = RandomForestModel(config)
     trainer = ModelTrainer(config.dataset, config.train, model)
+    trainer.train()
+
+
+@sub_app.command(sort_key=3)
+def rrl_eval(*, config: DiscreteRrlConfig) -> None:
+    """Evaluate trained RRL models."""
+    from iatreion.models import DiscreteRrlModel
+
+    model = DiscreteRrlModel(config)
+    trainer = RawModelTrainer(config.dataset, config.train, model)
     trainer.train()

@@ -15,7 +15,7 @@ data_name_mapping: dict[DataName, str] = {
     'moca-sum': '认知筛查.xlsx',
     'adl': '认知筛查.xlsx',
     'adl-sum': '认知筛查.xlsx',
-    # HACK: store a tuple of names here
+    # HACK: Store a tuple of names here
     'screen-sum': 'mmse-sum,moca-sum,adl-sum',
     'associative-learning': '认知综合.xlsx',
     'episodic-memory': '认知综合.xlsx',
