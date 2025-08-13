@@ -1,11 +1,17 @@
+import os
 import sys
 
 from cyclopts import App
+from cyclopts.config import Toml
 from rich.console import Console
 
 console = Console()
 app = App(
-    help='An interpretable dementia diagnoser.', console=console, help_on_error=True
+    name='iatreion',
+    help='An interpretable dementia diagnoser.',
+    config=Toml(os.environ.get('IATREION_CONFIG_PATH', 'config.toml')),
+    console=console,
+    help_on_error=True,
 )
 app['--help'].group = 'Admin'
 app['--version'].group = 'Admin'

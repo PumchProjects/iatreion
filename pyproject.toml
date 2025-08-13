@@ -2,7 +2,6 @@
 name = "iatreion"
 version = "0.1.0"
 description = 'An interpretable dementia diagnoser. From Ancient Greek ἰατρεῖον ("clinic").'
-readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "cyclopts>=3.13.1",
