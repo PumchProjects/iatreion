@@ -155,6 +155,13 @@ class Line:
         result = self.rule.eval(data)
         return np.stack([result * weight for weight in self.weights], axis=-1)
 
+    def interpret(self, data: pd.DataFrame, active_rules: list[list[str]]) -> NDArray:
+        result = self.rule.eval(data)
+        if result.item():
+            support_index = np.argmax(self.weights).item()
+            active_rules[support_index].append(str(self.rule)[1:-1])
+        return np.stack([result * weight for weight in self.weights], axis=-1)
+
 
 class Rrl:
     rid_template = re.compile(r'RID\(t=(?P<temp>.*)\)')
@@ -188,17 +195,25 @@ class Rrl:
             result += line.eval(data)
         return softmax(result / self.temp, axis=1)
 
+    def interpret(self, data: pd.DataFrame) -> tuple[NDArray, list[list[str]]]:
+        result = np.repeat([self.biases], data.shape[0], axis=0)
+        active_rules: list[list[str]] = [[] for _ in range(len(self.labels))]
+        for line in self.lines:
+            result += line.interpret(data, active_rules)
+        return softmax(result / self.temp, axis=1), active_rules
+
 
 class DiscreteRrlModel(RawModel):
     def __init__(self, config: DiscreteRrlConfig) -> None:
         super().__init__()
         self.config = config
-        self.exp_root = self.config.get_best_exp_root()
-        if self.exp_root is None:
+        exp_root = self.config.get_best_exp_root()
+        if exp_root is None:
             raise FileNotFoundError(
                 f'No experiment root found for dataset {self.config.dataset.name} '
                 f'and group {self.config.train.group_names}!'
             )
+        self.exp_root = exp_root
 
     @override
     def fit(self, X: pd.DataFrame, y: pd.Series) -> None:
@@ -210,10 +225,8 @@ class DiscreteRrlModel(RawModel):
         predicted = rrl.eval(X)
         return predicted, {}
 
-    def eval(self, data: pd.DataFrame) -> pd.DataFrame:
+    def interpret(self, data: pd.DataFrame) -> tuple[pd.DataFrame, list[list[str]]]:
         rrl = Rrl(self.config.get_rrl_file(self.exp_root))
-        result = rrl.eval(data)
-        y_pred = [rrl.labels[i] for i in result.argmax(axis=1)]
+        result, active_rules = rrl.interpret(data)
         table = pd.DataFrame(result, columns=rrl.labels, index=data.index)
-        table['y_pred'] = y_pred
-        return table
+        return table, active_rules
