@@ -2,7 +2,7 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import override
+from typing import Self, override
 
 import numpy as np
 import pandas as pd
@@ -151,15 +151,17 @@ class Line:
         self.support = float(units[-2])
         self.rule = Rule(units[-1])
 
+    def print_rule(self) -> str:
+        return str(self.rule)[1:-1]
+
     def eval(self, data: pd.DataFrame) -> NDArray:
         result = self.rule.eval(data)
         return np.stack([result * weight for weight in self.weights], axis=-1)
 
-    def interpret(self, data: pd.DataFrame, active_rules: list[list[str]]) -> NDArray:
+    def interpret(self, data: pd.DataFrame, active_lines: list[Self]) -> NDArray:
         result = self.rule.eval(data)
         if result.item():
-            support_index = np.argmax(self.weights).item()
-            active_rules[support_index].append(str(self.rule)[1:-1])
+            active_lines.append(self)
         return np.stack([result * weight for weight in self.weights], axis=-1)
 
 
@@ -195,12 +197,13 @@ class Rrl:
             result += line.eval(data)
         return softmax(result / self.temp, axis=1)
 
-    def interpret(self, data: pd.DataFrame) -> tuple[NDArray, list[list[str]]]:
+    def interpret(self, data: pd.DataFrame) -> tuple[list[float], list[Line]]:
         result = np.repeat([self.biases], data.shape[0], axis=0)
-        active_rules: list[list[str]] = [[] for _ in range(len(self.labels))]
+        active_lines: list[Line] = []
         for line in self.lines:
-            result += line.interpret(data, active_rules)
-        return softmax(result / self.temp, axis=1), active_rules
+            result += line.interpret(data, active_lines)
+        result_list = result.squeeze().tolist()
+        return result_list, active_lines
 
 
 class DiscreteRrlModel(RawModel):
@@ -225,8 +228,7 @@ class DiscreteRrlModel(RawModel):
         predicted = rrl.eval(X)
         return predicted, {}
 
-    def interpret(self, data: pd.DataFrame) -> tuple[pd.DataFrame, list[list[str]]]:
+    def interpret(self, data: pd.DataFrame) -> tuple[list[float], list[Line], Rrl]:
         rrl = Rrl(self.config.get_rrl_file(self.exp_root))
-        result, active_rules = rrl.interpret(data)
-        table = pd.DataFrame(result, columns=rrl.labels, index=data.index)
-        return table, active_rules
+        result, active_lines = rrl.interpret(data)
+        return result, active_lines, rrl

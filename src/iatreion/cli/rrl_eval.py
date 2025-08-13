@@ -1,35 +1,53 @@
 from pathlib import Path
 
-import pandas as pd
-from rich.panel import Panel
+import numpy as np
+from rich import box
+from rich.table import Table
 
 from iatreion.configs import DiscreteRrlConfig, PreprocessorConfig
-from iatreion.models import DiscreteRrlModel
+from iatreion.models import DiscreteRrlModel, Line, Rrl
 from iatreion.preprocessors import get_preprocessor
 
-from .common import app
+from .common import app, console
 
 
-def display_results(result: pd.DataFrame, active_rules: list[list[str]]) -> None:
-    max_index = result.values.argmax().item()
-    result_list = [f'{label}\t{result[label].item():.2%}' for label in result.columns]
-    result_list[max_index] = f'[bold green]{result_list[max_index]}'
-    result_str = '\n'.join(result_list)
-    assert app.console is not None
-    app.console.print(Panel(result_str, title='Results', title_align='left'))
-    supporting_rules = [
-        f'{result.columns[max_index]}\t{rule}' for rule in active_rules[max_index]
-    ]
-    app.console.print(
-        Panel('\n'.join(supporting_rules), title='Supporting Rules', title_align='left')
+def get_max_label(arr: list[float], labels: list[str]) -> int:
+    return labels[np.argmax(arr).item()]
+
+
+def calc_score(arr: list[float]) -> float:
+    return max(arr) - min(arr)
+
+
+def get_table(title: str, *headers: str) -> Table:
+    return Table(
+        *headers,
+        title=title,
+        box=box.ROUNDED,
+        title_style='italic yellow',
     )
-    opposing_rules: list[str] = []
-    for i, rules in enumerate(active_rules):
-        if i != max_index:
-            opposing_rules += [f'{result.columns[i]}\t{rule}' for rule in rules]
-    app.console.print(
-        Panel('\n'.join(opposing_rules), title='Opposing Rules', title_align='left')
-    )
+
+
+def display_results(result: list[float], active_lines: list[Line], rrl: Rrl) -> None:
+    max_label = get_max_label(result, rrl.labels)
+    result_table = get_table('Result', 'Label', 'Score')
+    result_table.add_row(max_label, f'{calc_score(result):.2f}', style='bold green')
+    console.print(result_table)
+    bias_table = get_table('Initial Bias', 'Label', 'Score')
+    bias_max_label = get_max_label(rrl.biases, rrl.labels)
+    bias_table.add_row(bias_max_label, f'{calc_score(rrl.biases):.2f}')
+    console.print(bias_table)
+    support_table = get_table('Supporting Rules', 'Label', 'Score', 'Rule')
+    oppose_table = get_table('Opposing Rules', 'Label', 'Score', 'Rule')
+    for line in active_lines:
+        weight_max_label = get_max_label(line.weights, rrl.labels)
+        score = calc_score(line.weights)
+        if weight_max_label == max_label:
+            support_table.add_row(weight_max_label, f'{score:.2f}', line.print_rule())
+        else:
+            oppose_table.add_row(weight_max_label, f'{score:.2f}', line.print_rule())
+    console.print(support_table)
+    console.print(oppose_table)
 
 
 @app.command(sort_key=2)
@@ -41,5 +59,5 @@ def rrl_eval(*, config: DiscreteRrlConfig) -> None:
     preprocessor = get_preprocessor(process_config)
     data = preprocessor.get_data()
     model = DiscreteRrlModel(config)
-    result, active_rules = model.interpret(data)
-    display_results(result, active_rules)
+    result, active_lines, rrl = model.interpret(data)
+    display_results(result, active_lines, rrl)

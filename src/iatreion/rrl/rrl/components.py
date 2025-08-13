@@ -187,7 +187,7 @@ class LRLayer(nn.Module):
                 rid2dim[rid] = i % prev_layer.output_dim
 
         self.rid2dim = rid2dim
-        self.rule2weights = sorted(marked.items(), key=lambda x: max(map(abs, x[1].values())), reverse=True)
+        self.rule2weights = sorted(marked.items(), key=lambda x: max(x[1].values()) - min(x[1].values()), reverse=True)
 
 
 class ConjunctionLayer(nn.Module):
