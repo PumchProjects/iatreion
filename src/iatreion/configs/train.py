@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Annotated
 
@@ -11,8 +12,7 @@ from iatreion.utils import set_device, set_seed
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class TrainConfig:
-    # HACK: Force to use the same order as LabelEncoder
-    group_names: Annotated[str, Parameter(name=['--groups', '-g'])]
+    group_names_: Annotated[str, Parameter(name=['--groups', '-g'])]
     'Group names of the data.'
 
     n_splits: Annotated[int, Parameter(name=['--n-splits', '-ns'])] = 10
@@ -43,10 +43,10 @@ class TrainConfig:
 
     record_auc: Annotated[bool, Parameter(parse=False)] = True
 
-    @property
+    @cached_property
     def groups(self) -> list[list[str]]:
         groups: list[list[str]] = []
-        for group in self.group_names.split(','):
+        for group in self.group_names_.split(','):
             names: list[str] = []
             i = 0
             while i < len(group):
@@ -56,8 +56,12 @@ class TrainConfig:
                 else:
                     names.append(group[i])
                 i += 1
-            groups.append(names)
-        return groups
+            groups.append(sorted(names))
+        return sorted(groups, key=lambda x: x[0])
+
+    @cached_property
+    def group_names(self) -> str:
+        return ','.join(''.join(group) for group in self.groups)
 
     @property
     def n_folds(self) -> int:
