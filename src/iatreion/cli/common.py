@@ -1,15 +1,16 @@
-import os
 import sys
 
 from cyclopts import App
 from cyclopts.config import Toml
 from rich.console import Console
 
+from iatreion.utils import get_config_path
+
 console = Console()
 app = App(
     name='iatreion',
     help='An interpretable dementia diagnoser.',
-    config=Toml(os.environ.get('IATREION_CONFIG_PATH', 'config.toml')),
+    config=Toml(get_config_path()),
     console=console,
     help_on_error=True,
 )
