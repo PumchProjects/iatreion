@@ -138,10 +138,11 @@ class Recorder:
         for key, value in complexity.items():
             self.result.complexity.setdefault(key, []).append(value)
             width = max(width, len(key))
+        labels = list(range(self.config.num_class))
         if self.result.cm is None:
-            self.result.cm = confusion_matrix(y_true, y_pred)
+            self.result.cm = confusion_matrix(y_true, y_pred, labels=labels)
         else:
-            self.result.cm += confusion_matrix(y_true, y_pred)
+            self.result.cm += confusion_matrix(y_true, y_pred, labels=labels)
         if self.config.record_auc:
             logger.info(f'{"AUC":{width}} {self.result.auc[-1]:.2%}')
         logger.info(f'{"ACC":{width}} {self.result.acc[-1]:.2%}')

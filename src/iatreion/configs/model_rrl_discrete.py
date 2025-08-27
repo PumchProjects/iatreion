@@ -11,27 +11,27 @@ from iatreion.utils import add_file_handler
 from .dataset import DatasetConfig
 from .train import TrainConfig
 
-int_auc_pattern = re.compile(r'INT AUC\s+(.+?)%')
+avg_f1_pattern = re.compile(r'AVG F1\s+(.+?)%')
 
 
-def get_int_auc(exp_root: Path) -> float:
+def get_avg_f1(exp_root: Path) -> float:
     file = exp_root / 'train.log'
     if not file.exists():
         return 0.0
     data = file.read_text(encoding='utf-8')
-    match = int_auc_pattern.search(data)
+    match = avg_f1_pattern.search(data)
     if match:
         return float(match.group(1))
     return 0.0
 
 
 def get_best_exp_root(groups_root: Path) -> Path | None:
-    best_auc = 0.0
+    best_f1 = 0.0
     best_exp_root: Path | None = None
     for exp_root in (groups_root / 'rrl').iterdir():
-        auc = get_int_auc(exp_root)
-        if auc > best_auc:
-            best_auc = auc
+        f1 = get_avg_f1(exp_root)
+        if f1 > best_f1:
+            best_f1 = f1
             best_exp_root = exp_root
     return best_exp_root
 

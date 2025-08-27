@@ -11,7 +11,7 @@ from iatreion.preprocessors import get_preprocessor
 from .common import app, console
 
 
-def get_max_label(arr: list[float], labels: list[str]) -> int:
+def get_max_label(arr: list[float], labels: list[str]) -> str:
     return labels[np.argmax(arr).item()]
 
 
