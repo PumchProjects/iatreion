@@ -16,7 +16,7 @@ data_name_mapping: dict[DataName, str] = {
     'adl': '认知筛查.xlsx',
     'adl-sum': '认知筛查.xlsx',
     # HACK: Store a tuple of names here
-    'screen-sum': 'mmse-sum,moca-sum,adl-sum',
+    's-screen-sum': 'mmse-sum,moca-sum,adl-sum',
     'associative-learning': '认知综合.xlsx',
     'episodic-memory': '认知综合.xlsx',
     'avlt': '认知综合.xlsx',
@@ -47,6 +47,12 @@ class PreprocessorConfig:
     output_prefix: Annotated[Directory, Parameter(name=['--output', '-o'])]
     'Prefix of the output files.'
 
+    vmri_data_path_: Annotated[Path | None, Parameter(parse=False)] = None
+
+    data_path_: Annotated[Path | None, Parameter(parse=False)] = None
+
+    final: Annotated[bool, Parameter(parse=False)] = False
+
     # TODO: Add more parameters for the preprocessor, e.g. filling missing values
 
     def __post_init__(self) -> None:
@@ -62,10 +68,14 @@ class PreprocessorConfig:
 
     @property
     def vmri_data_path(self) -> Path:
+        if self.vmri_data_path_ is not None:
+            return self.vmri_data_path_
         return self.dataset.prefix / 'Vmri_mean_sd.xlsx'
 
     @property
     def data_path(self) -> Path:
+        if self.data_path_ is not None:
+            return self.data_path_
         return self.dataset.prefix / data_name_mapping[self.dataset.name]
 
     @property

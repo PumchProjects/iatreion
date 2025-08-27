@@ -13,6 +13,6 @@ class AvltPreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = pd.read_excel(self.config.data_path, index_col='serial_num')
+        data = self.read_data()
         data = data.loc[:, ['AVLT.1', 'AVLT.I', 'AVLT.4', 'AVLT.5', 'AVLT.T']].dropna()
         return data

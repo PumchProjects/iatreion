@@ -14,7 +14,7 @@ class AdlPreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = pd.read_excel(self.config.data_path, index_col='serial_num')
+        data = self.read_data()
         if not self.is_sum:
             data['其它'] = data['其它'].fillna(0)
             for col in data.loc[:, '自己搭公共汽车':'独自在家'].columns:  # type: ignore

@@ -220,22 +220,24 @@ class DiscreteRrlModel(RawModel):
             )
         self.exp_root = exp_root
 
+    def get_rrl(self) -> Rrl:
+        return Rrl(self.config.get_rrl_file(self.exp_root))
+
     @override
     def fit(self, X: pd.DataFrame, y: pd.Series) -> None:
         pass
 
     @override
     def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
-        rrl = Rrl(self.config.get_rrl_file(self.exp_root))
-        predicted = rrl.eval(X, prob=True)
+        predicted = self.get_rrl().eval(X, prob=True)
         return predicted, {}
 
     def eval(self, data: pd.DataFrame) -> tuple[NDArray, Rrl]:
-        rrl = Rrl(self.config.get_rrl_file(self.exp_root))
+        rrl = self.get_rrl()
         result = rrl.eval(data)
         return result, rrl
 
     def interpret(self, data: pd.DataFrame) -> tuple[list[float], list[Line], Rrl]:
-        rrl = Rrl(self.config.get_rrl_file(self.exp_root))
+        rrl = self.get_rrl()
         result, active_lines = rrl.interpret(data)
         return result, active_lines, rrl

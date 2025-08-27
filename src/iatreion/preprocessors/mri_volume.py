@@ -13,7 +13,7 @@ class VolumePreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = pd.read_excel(self.config.data_path, index_col='serial_num')
+        data = self.read_data()
         columns = [col for col in data.columns if col.endswith('_Z')]
         data = data[columns].dropna(axis=1, how='all').dropna()
         return data
@@ -28,7 +28,7 @@ class VolumeAveragePreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = pd.read_excel(self.config.data_path, index_col='serial_num')
+        data = self.read_data()
         ai_columns = [col for col in data.columns if col.endswith('_Asymmetry_index')]
         columns = [col for col in data.columns if col.endswith(f'_{self.feature}_Z')]
         c_columns = [
@@ -84,12 +84,11 @@ class VolumeAverageNewPreprocessor(Preprocessor):
                 return None
 
     def calc_age_groups(self, data: pd.DataFrame) -> pd.DataFrame:
-        data = data.loc[:, 'MRI_time':'CC_Posterior_pct']  # type: ignore
+        data = data.loc[:, :'CC_Posterior_pct']  # type: ignore
         data = data.dropna(subset=['MRI_time'])
-        birth_dates = self.get_birth_dates()
-        data = data.merge(birth_dates, left_index=True, right_index=True, copy=False)
+        data, birth_dates = self.get_birth_dates(data)
         MRI_time = pd.to_datetime(data['MRI_time'], utc=True)
-        real_ages = (MRI_time - data['birth_date']).dt.days // 365.2422
+        real_ages = (MRI_time - birth_dates).dt.days // 365.2422
         data['age_group'] = real_ages.apply(self.match_group)
         data = data.dropna(subset=['age_group'])
         return data
@@ -104,7 +103,7 @@ class VolumeAverageNewPreprocessor(Preprocessor):
             vmri['sd'], on='age_group', suffixes=(None, '_std'), copy=False
         )
         data = data.loc[:, ~data.columns.str.startswith('Brainstem')]
-        return data.set_index('serial_num')
+        return data.set_index('ID' if self.config.final else 'serial_num')
 
     def get_columns(self, data: pd.DataFrame) -> tuple[list[str], ...]:
         ai_columns = [col for col in data.columns if col.endswith('_Asymmetry_index')]
@@ -153,7 +152,7 @@ class VolumeAverageNewPreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = pd.read_excel(self.config.data_path, index_col='serial_num')
+        data = self.read_data()
         data = self.calc_age_groups(data)
         data = self.get_mean_std(data)
         c_columns, lr_columns, ai_columns = self.get_columns(data)

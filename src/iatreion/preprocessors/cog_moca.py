@@ -13,7 +13,7 @@ class MocaPreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = pd.read_excel(self.config.data_path, index_col='serial_num')
+        data = self.read_data()
         recall_columns = ['moca_huiyi']
         data['MoCA_分类提示'] = (
             data['分类提示']

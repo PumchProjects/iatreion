@@ -13,7 +13,7 @@ class CdrPreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = pd.read_excel(self.config.data_path, index_col='serial_num')
+        data = self.read_data()
         drop_columns = ['性别', '出生年月日', '受教育年限', '填表日期', 'hash_num']
         data = data.drop(columns=drop_columns).dropna()
         return data

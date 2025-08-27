@@ -13,7 +13,7 @@ class MocaSumPreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = pd.read_excel(self.config.data_path, index_col='serial_num')
+        data = self.read_data()
         # 视空间功能
         vis_spa_func_columns = ['连接图形', '复制立方体']
         data = self.sum_columns(data, vis_spa_func_columns, 'MoCA_视空间功能')

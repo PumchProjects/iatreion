@@ -15,9 +15,7 @@ class CsvdPreprocessor(Preprocessor):
     @override
     def get_data(self) -> pd.DataFrame:
         # Set "/" as NaN
-        data = pd.read_excel(
-            self.config.data_path, index_col='serial_num', na_values=['/']
-        )
+        data = self.read_data()
         # Drop unnecessary columns
         drop_columns = ['检查日期/Study.date', '性别/Sex', '年龄/Age', 'hash_num']
         data = data.drop(columns=drop_columns)

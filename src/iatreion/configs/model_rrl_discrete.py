@@ -48,17 +48,15 @@ class DiscreteRrlConfig:
     )
     'Root directory for trained RRL models.'
 
-    batched: Annotated[bool, Parameter(name=['--batched', '-b'], negative='')] = False
-    'Whether to use batched inference.'
-
     def __post_init__(self) -> None:
-        self.train.log_dir = (
-            self.train.log_root
-            / self.dataset.name
-            / self.train.group_names
-            / 'rrl_discrete'
-        )
-        add_file_handler(self.train.log_dir / 'eval.log')
+        if not self.train.final:
+            self.train.log_dir = (
+                self.train.log_root
+                / self.dataset.name
+                / self.train.group_names
+                / 'rrl_discrete'
+            )
+            add_file_handler(self.train.log_dir / 'eval.log')
 
     def get_best_exp_root(self) -> Path | None:
         groups_root = self.thesaurus / self.dataset.name / self.train.group_names

@@ -1,11 +1,10 @@
-from pathlib import Path
-
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
 from rich import box
 from rich.table import Table
 
-from iatreion.configs import DiscreteRrlConfig, PreprocessorConfig
+from iatreion.configs import RrlEvalConfig
 from iatreion.models import DiscreteRrlModel, Line, Rrl
 from iatreion.preprocessors import get_preprocessor
 
@@ -51,27 +50,25 @@ def display_results(result: list[float], active_lines: list[Line], rrl: Rrl) -> 
     console.print(oppose_table)
 
 
-def display_batched_results(results: NDArray, rrl: Rrl) -> None:
+def display_batched_results(results: NDArray, indices: pd.Index, rrl: Rrl) -> None:
     y_pred = [rrl.labels[i] for i in results.argmax(axis=1)]
     y_score = (results.max(axis=1) - results.min(axis=1)).tolist()
-    result_table = get_table('Result', 'Label', 'Score')
-    for label, score in zip(y_pred, y_score, strict=False):
-        result_table.add_row(label, f'{score:.2f}')
+    result_table = get_table('Results', 'ID', 'Label', 'Score')
+    for index, label, score in zip(indices, y_pred, y_score, strict=False):
+        result_table.add_row(str(index), label, f'{score:.2f}')
     console.print(result_table)
 
 
 @app.command(sort_key=2)
-def rrl_eval(*, config: DiscreteRrlConfig) -> None:
+def rrl_eval(*, config: RrlEvalConfig) -> None:
     """Evaluate an RRL model."""
-    config.dataset.simple = True
-    config.train.final = True
-    process_config = PreprocessorConfig(dataset=config.dataset, output_prefix=Path())
+    process_config, rrl_config = config.make_configs()
     preprocessor = get_preprocessor(process_config)
     data = preprocessor.get_data()
-    model = DiscreteRrlModel(config)
+    model = DiscreteRrlModel(rrl_config)
     if config.batched:
         results, rrl = model.eval(data)
-        display_batched_results(results, rrl)
+        display_batched_results(results, data.index, rrl)
     else:
         result, active_lines, rrl = model.interpret(data)
         display_results(result, active_lines, rrl)

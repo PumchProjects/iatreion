@@ -13,7 +13,7 @@ class CompositePreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = pd.read_excel(self.config.data_path, index_col='serial_num')
+        data = self.read_data()
         data.loc[data['接龙A_错误数'] >= 2, '接龙A_A法时间'] = 1000
         data = self.binarize_column(
             data, '单个动作模仿正确数', 6, ge_name='单个动作模仿正常'

@@ -13,7 +13,7 @@ class MmseSumPreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = pd.read_excel(self.config.data_path, index_col='serial_num')
+        data = self.read_data()
         # 时间定向
         time_columns = ['星期几', '几号', '几月', '什么季节', '哪一年']
         data = self.sum_columns(data, time_columns, 'MMSE_时间定向')

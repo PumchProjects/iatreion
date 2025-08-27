@@ -23,15 +23,19 @@ class Preprocessor(ABC):
         )
         return data[['encrypted', 'Ab', 'A_type', 'A_type2']]
 
-    def get_birth_dates(self) -> pd.Series:
-        data = pd.read_excel(self.config.birth_data_path, index_col='serial_num')
-        data.rename(
-            columns={
-                '实际出生日期': 'birth_date',
-            },
-            inplace=True,
-        )
-        return pd.to_datetime(data['birth_date'])
+    def get_birth_dates(self, data: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
+        if self.config.final:
+            birth_dates = pd.to_datetime(data['date of birth'], utc=True)
+            return data, birth_dates
+        else:
+            birth_data = pd.read_excel(
+                self.config.birth_data_path, index_col='serial_num'
+            )
+            birth_dates = pd.to_datetime(birth_data['实际出生日期'])
+            data = data.merge(
+                birth_dates, left_index=True, right_index=True, copy=False
+            )
+            return data, data['实际出生日期']
 
     def sum_columns(
         self, data: pd.DataFrame, columns: list[str], name: str
@@ -74,6 +78,14 @@ class Preprocessor(ABC):
         else:
             data[f'{name} = 0'] = (col == 0).astype('Int64')
             data[f'{name} = 1'] = (col == 1).astype('Int64')
+        return data
+
+    def read_data(self) -> pd.DataFrame:
+        data = pd.read_excel(
+            self.config.data_path,
+            index_col='ID' if self.config.final else 'serial_num',
+            na_values=['/'],
+        )
         return data
 
     @abstractmethod

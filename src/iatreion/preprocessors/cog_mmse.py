@@ -13,7 +13,7 @@ class MmsePreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = pd.read_excel(self.config.data_path, index_col='serial_num')
+        data = self.read_data()
         part_1 = data.loc[:, '星期几':'树木']  # type: ignore
         part_2 = data.loc[:, '减7_1st':'mmse_selfcalc']  # type: ignore
         data = pd.concat([part_1, part_2], axis=1).dropna()

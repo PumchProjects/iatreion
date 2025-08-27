@@ -13,6 +13,6 @@ class EpisodicMemoryPreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = pd.read_excel(self.config.data_path, index_col='serial_num')
+        data = self.read_data()
         data = data.loc[:, ['情景记忆总分']].dropna()
         return data

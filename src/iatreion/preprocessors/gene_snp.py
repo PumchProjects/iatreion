@@ -13,6 +13,7 @@ class SnpPreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
+        # TODO: Use self.read_data()
         data = pd.read_csv(self.config.data_path, index_col='Row.names')
         data = data.drop(columns=['X']).T
         return data

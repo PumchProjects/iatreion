@@ -13,7 +13,7 @@ type DataName = Literal[
     'moca-sum',
     'adl',
     'adl-sum',
-    'screen-sum',
+    's-screen-sum',
     'associative-learning',
     'episodic-memory',
     'avlt',

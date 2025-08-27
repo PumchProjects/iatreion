@@ -4,4 +4,5 @@ from .model_rrl import RrlConfig
 from .model_rrl_discrete import DiscreteRrlConfig
 from .model_xgb import XgboostConfig
 from .preprocessor import PreprocessorConfig
+from .rrl_eval import RrlEvalConfig
 from .train import TrainConfig

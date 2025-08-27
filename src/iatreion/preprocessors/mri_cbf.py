@@ -13,6 +13,6 @@ class CbfPreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = pd.read_excel(self.config.data_path, index_col='serial_num')
+        data = self.read_data()
         data = data.drop(columns=['date', 'hash_num']).dropna()
         return data
