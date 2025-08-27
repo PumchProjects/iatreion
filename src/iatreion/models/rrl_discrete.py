@@ -191,11 +191,13 @@ class Rrl:
             self.biases.append(float(match_obj.group('bias')))
         self.lines = [Line(line) for line in texts[1:]]
 
-    def eval(self, data: pd.DataFrame) -> NDArray:
+    def eval(self, data: pd.DataFrame, prob: bool = False) -> NDArray:
         result = np.repeat([self.biases], data.shape[0], axis=0)
         for line in self.lines:
             result += line.eval(data)
-        return softmax(result / self.temp, axis=1)
+        if prob:
+            return softmax(result / self.temp, axis=1)
+        return result
 
     def interpret(self, data: pd.DataFrame) -> tuple[list[float], list[Line]]:
         result = np.repeat([self.biases], data.shape[0], axis=0)
@@ -225,8 +227,13 @@ class DiscreteRrlModel(RawModel):
     @override
     def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
         rrl = Rrl(self.config.get_rrl_file(self.exp_root))
-        predicted = rrl.eval(X)
+        predicted = rrl.eval(X, prob=True)
         return predicted, {}
+
+    def eval(self, data: pd.DataFrame) -> tuple[NDArray, Rrl]:
+        rrl = Rrl(self.config.get_rrl_file(self.exp_root))
+        result = rrl.eval(data)
+        return result, rrl
 
     def interpret(self, data: pd.DataFrame) -> tuple[list[float], list[Line], Rrl]:
         rrl = Rrl(self.config.get_rrl_file(self.exp_root))

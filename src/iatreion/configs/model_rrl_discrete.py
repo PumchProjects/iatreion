@@ -48,6 +48,9 @@ class DiscreteRrlConfig:
     )
     'Root directory for trained RRL models.'
 
+    batched: Annotated[bool, Parameter(name=['--batched', '-b'], negative='')] = False
+    'Whether to use batched inference.'
+
     def __post_init__(self) -> None:
         self.train.log_dir = (
             self.train.log_root
