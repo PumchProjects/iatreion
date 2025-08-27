@@ -10,7 +10,7 @@ from iatreion.utils import logger, progress
 from .components import BinarizeLayer
 from .components import UnionLayer, LRLayer
 
-TEST_CNT_MOD = 500
+TEST_CNT_MOD = 100
 
 
 class Net(nn.Module):
@@ -159,6 +159,7 @@ class RRL:
         cnt = -1
         avg_batch_loss_rrl = 0.0
         epoch_histc = defaultdict(list)
+        best_loss = 1e20 # NOTE: Please distinguish this from self.best_loss 
         epoch_task = progress.add_task('Epoch:', total=epoch)
         for epo in range(epoch):
             optimizer = self.exp_lr_scheduler(optimizer, epo, init_lr=lr, lr_decay_rate=lr_decay_rate,
@@ -219,14 +220,16 @@ class RRL:
                         self.writer.add_scalar('Accuracy_RRL', acc_b, cnt // TEST_CNT_MOD)
                         self.writer.add_scalar('F1_Score_RRL', f1_b, cnt // TEST_CNT_MOD)
             logger.info('epoch: {}, loss_rrl: {}'.format(epo, epoch_loss_rrl))
+            if epo % TEST_CNT_MOD == 0 and not self.save_best and epoch_loss_rrl < best_loss:
+                logger.info('[bold green]New best model found!', extra={'markup': True})
+                best_loss = epoch_loss_rrl
+                self.save_model()
             if self.writer is not None:
                 self.writer.add_scalar('Training_Loss_RRL', epoch_loss_rrl, epo)
                 self.writer.add_scalar('Abs_Gradient_Max', abs_gradient_max, epo)
                 self.writer.add_scalar('Abs_Gradient_Avg', abs_gradient_avg / ba_cnt, epo)
             progress.update(epoch_task, advance=1)
         progress.remove_task(epoch_task)
-        if not self.save_best:
-            self.save_model()
         return epoch_histc
 
     @torch.no_grad()
@@ -258,11 +261,12 @@ class RRL:
         accuracy_b = metrics.accuracy_score(y_true, y_pred_b_arg)
         f1_score_b = metrics.f1_score(y_true, y_pred_b_arg, average='macro', zero_division=0)
 
+        labels = list(range(self.dim_list[-1]))
         logger.debug('-' * 60)
         logger.debug('On {} Set:\n\tAccuracy of RRL  Model: {}'
                         '\n\tF1 Score of RRL  Model: {}'.format(set_name, accuracy_b, f1_score_b))
         logger.debug('On {} Set:\nPerformance of  RRL Model: \n{}\n{}'.format(
-            set_name, metrics.confusion_matrix(y_true, y_pred_b_arg), metrics.classification_report(y_true, y_pred_b_arg, zero_division=0)))
+            set_name, metrics.confusion_matrix(y_true, y_pred_b_arg, labels=labels), metrics.classification_report(y_true, y_pred_b_arg, zero_division=0)))
         logger.debug('-' * 60)
 
         return y_pred_b, accuracy_b, f1_score_b
