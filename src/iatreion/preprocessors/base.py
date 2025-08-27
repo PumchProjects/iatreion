@@ -34,20 +34,20 @@ class Preprocessor(ABC):
         return pd.to_datetime(data['birth_date'])
 
     def sum_columns(
-        self, data: pd.DataFrame, columns: list[str], name: str, dtype: str = 'Int64'
+        self, data: pd.DataFrame, columns: list[str], name: str
     ) -> pd.DataFrame:
         # skipna=False ensures that NaN will propagate through the sum
-        col: pd.Series = data[columns].sum(axis=1, skipna=False).astype(dtype)
+        col: pd.Series = data[columns].sum(axis=1, skipna=False).astype('Int64')
         data = data.drop(columns=columns)
         min_value, max_value = col.min(), col.max()
         if self.config.dataset.simple:
             data[name] = col
         else:
-            data[f'{name} = {min_value}'] = (col == min_value).astype(dtype)
+            data[f'{name} = {min_value}'] = (col == min_value).astype('Int64')
             for th in range(min_value + 1, max_value):
-                data[f'{name} <= {th}'] = (col <= th).astype(dtype)
-                data[f'{name} >= {th}'] = (col >= th).astype(dtype)
-            data[f'{name} = {max_value}'] = (col == max_value).astype(dtype)
+                data[f'{name} <= {th}'] = (col <= th).astype('Int64')
+                data[f'{name} >= {th}'] = (col >= th).astype('Int64')
+            data[f'{name} = {max_value}'] = (col == max_value).astype('Int64')
         return data
 
     def binarize_column(
@@ -57,9 +57,8 @@ class Preprocessor(ABC):
         threshold: int,
         ge_name: str | None = None,
         lt_name: str | None = None,
-        dtype: str = 'Int64',
     ) -> pd.DataFrame:
-        col: pd.Series = (data[column] >= threshold).astype(dtype)
+        col: pd.Series = (data[column] >= threshold).astype('Int64')
         col[data[column].isnull()] = np.nan
         data = data.drop(columns=[column])
         if ge_name is not None:
@@ -73,8 +72,8 @@ class Preprocessor(ABC):
         if self.config.dataset.simple:
             data[name] = col
         else:
-            data[f'{name} = 0'] = (col == 0).astype(dtype)
-            data[f'{name} = 1'] = (col == 1).astype(dtype)
+            data[f'{name} = 0'] = (col == 0).astype('Int64')
+            data[f'{name} = 1'] = (col == 1).astype('Int64')
         return data
 
     @abstractmethod

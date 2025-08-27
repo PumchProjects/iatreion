@@ -4,7 +4,7 @@ from typing import cast
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import NDArray
 from sklearn.metrics import (
     RocCurveDisplay,
     accuracy_score,
@@ -18,6 +18,8 @@ from sklearn.metrics import (
 
 from iatreion.configs import TrainConfig
 from iatreion.utils import logger
+
+type TrainerReturn = tuple[float, NDArray, NDArray, dict[str, float]]
 
 
 @dataclass
@@ -101,29 +103,21 @@ class Recorder:
         self.result = Record[list[float]]([], [], [], [], [], [], {}, None)
         self.roc = RecordROC(config)
 
-    def record(
-        self,
-        training_time: float,
-        y_true: ArrayLike,
-        y_score: ArrayLike,
-        complexity: dict[str, float],
-    ) -> None:
+    def record(self, results: TrainerReturn) -> None:
+        training_time, y_true, y_score, complexity = results
         self.result.time.append(training_time)
-        y_pred = y_score
-        if self.config.record_auc:
-            y_score = np.asarray(y_score)
-            y_pred = y_score.argmax(axis=1)
-            y_pos_score = y_score[:, 1] if y_score.shape[1] >= 2 else y_score.squeeze()
-            self.result.auc.append(
-                self.roc.record(y_true, y_pos_score, len(self.result.auc) + 1)
-                if self.config.plot_roc
-                else roc_auc_score(
-                    y_true,
-                    y_pos_score if self.config.num_class <= 2 else y_score,
-                    average='macro',
-                    multi_class='ovr',
-                )
+        y_pred = y_score.argmax(axis=1)
+        y_pos_score = y_score[:, 1] if y_score.shape[1] >= 2 else y_score.squeeze()
+        self.result.auc.append(
+            self.roc.record(y_true, y_pos_score, len(self.result.auc) + 1)
+            if self.config.plot_roc
+            else roc_auc_score(
+                y_true,
+                y_pos_score if self.config.num_class <= 2 else y_score,
+                average='macro',
+                multi_class='ovr',
             )
+        )
         self.result.acc.append(accuracy_score(y_true, y_pred))
         self.result.precision.append(
             precision_score(y_true, y_pred, average='macro', zero_division=0)
@@ -143,25 +137,24 @@ class Recorder:
             self.result.cm = confusion_matrix(y_true, y_pred, labels=labels)
         else:
             self.result.cm += confusion_matrix(y_true, y_pred, labels=labels)
-        if self.config.record_auc:
-            logger.info(f'{"AUC":{width}} {self.result.auc[-1]:.2%}')
+        logger.info(f'{"AUC":{width}} {self.result.auc[-1]:.2%}')
         logger.info(f'{"ACC":{width}} {self.result.acc[-1]:.2%}')
         logger.info(f'{"P":{width}} {self.result.precision[-1]:.2%}')
         logger.info(f'{"R":{width}} {self.result.recall[-1]:.2%}')
         logger.info(f'{"F1":{width}} {self.result.f1[-1]:.2%}')
-        for key, value in self.result.complexity.items():
-            logger.info(f'{key:{width}} {value[-1]:.4f}')
+        for key, values in self.result.complexity.items():
+            logger.info(f'{key:{width}} {values[-1]:.4f}')
         logger.info(f'{"Time":{width}} {training_time:.3f}s')
 
     def finish(self) -> Record[float]:
         complexity = {}
         width = 4
-        for key, value in self.result.complexity.items():
-            complexity[key] = np.mean(value).item()
+        for key, values in self.result.complexity.items():
+            complexity[key] = np.mean(values).item()
             width = max(width, len(key))
         final = Record(
             np.mean(self.result.time).item(),
-            np.mean(self.result.auc).item() if self.config.record_auc else 0.0,
+            np.mean(self.result.auc).item(),
             np.mean(self.result.acc).item(),
             np.mean(self.result.precision).item(),
             np.mean(self.result.recall).item(),
@@ -170,10 +163,9 @@ class Recorder:
             self.result.cm,
         )
         logger.info(f'Confusion matrix:\n{final.cm}')
-        if self.config.record_auc:
-            if self.config.plot_roc:
-                logger.info(f'INT {"AUC":{width}} {self.roc.finish():.2%}')
-            logger.info(f'AVG {"AUC":{width}} {final.auc:.2%}')
+        if self.config.plot_roc:
+            logger.info(f'INT {"AUC":{width}} {self.roc.finish():.2%}')
+        logger.info(f'AVG {"AUC":{width}} {final.auc:.2%}')
         logger.info(f'AVG {"ACC":{width}} {final.acc:.2%}')
         logger.info(f'AVG {"P":{width}} {final.precision:.2%}')
         logger.info(f'AVG {"R":{width}} {final.recall:.2%}')

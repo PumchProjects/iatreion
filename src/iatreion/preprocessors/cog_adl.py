@@ -17,7 +17,7 @@ class AdlPreprocessor(Preprocessor):
         data = pd.read_excel(self.config.data_path, index_col='serial_num')
         if not self.is_sum:
             data['其它'] = data['其它'].fillna(0)
-            for col in data.loc[:, '自己搭公共汽车':'独自在家'].columns:
+            for col in data.loc[:, '自己搭公共汽车':'独自在家'].columns:  # type: ignore
                 data = self.sum_columns(data, [col], f'ADL_{col}')
         data['ADL_I'] = data['iadl']
         data['ADL_B'] = data['badl']

@@ -84,7 +84,7 @@ class VolumeAverageNewPreprocessor(Preprocessor):
                 return None
 
     def calc_age_groups(self, data: pd.DataFrame) -> pd.DataFrame:
-        data = data.loc[:, 'MRI_time':'CC_Posterior_pct']
+        data = data.loc[:, 'MRI_time':'CC_Posterior_pct']  # type: ignore
         data = data.dropna(subset=['MRI_time'])
         birth_dates = self.get_birth_dates()
         data = data.merge(birth_dates, left_index=True, right_index=True, copy=False)

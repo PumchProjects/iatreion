@@ -51,9 +51,9 @@ def display_results(result: list[float], active_lines: list[Line], rrl: Rrl) -> 
     console.print(oppose_table)
 
 
-def display_batched_results(result: NDArray, rrl: Rrl) -> None:
-    y_pred = [rrl.labels[i] for i in result.argmax(axis=1)]
-    y_score = (result.max(axis=1) - result.min(axis=1)).tolist()
+def display_batched_results(results: NDArray, rrl: Rrl) -> None:
+    y_pred = [rrl.labels[i] for i in results.argmax(axis=1)]
+    y_score = (results.max(axis=1) - results.min(axis=1)).tolist()
     result_table = get_table('Result', 'Label', 'Score')
     for label, score in zip(y_pred, y_score, strict=False):
         result_table.add_row(label, f'{score:.2f}')
@@ -70,8 +70,8 @@ def rrl_eval(*, config: DiscreteRrlConfig) -> None:
     data = preprocessor.get_data()
     model = DiscreteRrlModel(config)
     if config.batched:
-        result, rrl = model.eval(data)
-        display_batched_results(result, rrl)
+        results, rrl = model.eval(data)
+        display_batched_results(results, rrl)
     else:
         result, active_lines, rrl = model.interpret(data)
         display_results(result, active_lines, rrl)

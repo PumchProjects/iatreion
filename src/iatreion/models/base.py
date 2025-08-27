@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
 
 import pandas as pd
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import NDArray
 
-type ModelReturn = tuple[ArrayLike, dict[str, float]]
+type ModelReturn = tuple[NDArray, dict[str, float]]
 
 
 class Model(ABC):

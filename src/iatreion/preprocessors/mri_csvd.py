@@ -28,7 +28,7 @@ class CsvdPreprocessor(Preprocessor):
         ]
         data = data[columns]
         # Drop rows with less than 80% non-NaN values in the remaining columns
-        threshold = len(data.columns) * 0.8
+        threshold = int(len(data.columns) * 0.8)
         data = data.dropna(thresh=threshold)
         # Drop rows with NaN in specific columns
         keywords = ['额叶', '顶叶', '颞叶', '基底节区', '半卵圆中心区']

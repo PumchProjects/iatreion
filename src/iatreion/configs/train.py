@@ -41,8 +41,6 @@ class TrainConfig:
 
     ith_kfold: Annotated[int, Parameter(parse=False)] = 0
 
-    record_auc: Annotated[bool, Parameter(parse=False)] = True
-
     @cached_property
     def groups(self) -> list[list[str]]:
         groups: list[list[str]] = []

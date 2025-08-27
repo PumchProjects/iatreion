@@ -1,13 +1,9 @@
 from abc import ABC, abstractmethod
 
-from numpy.typing import ArrayLike
-
 from iatreion.configs import DatasetConfig, TrainConfig
 from iatreion.utils import logger, progress
 
-from .recorder import Recorder
-
-type TrainerReturn = tuple[float, ArrayLike, ArrayLike, dict[str, float]]
+from .recorder import Recorder, TrainerReturn
 
 
 class Trainer(ABC):
@@ -36,8 +32,8 @@ class Trainer(ABC):
                     extra={'markup': True},
                 )
                 self.train_config.ith_kfold = fold
-                training_time, y_true, y_score, complexity = self.train_step()
-                recorder.record(training_time, y_true, y_score, complexity)
+                results = self.train_step()
+                recorder.record(results)
                 progress.update(fold_task, advance=1)
                 logger.info('')
         recorder.finish()

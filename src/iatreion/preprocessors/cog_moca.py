@@ -22,9 +22,9 @@ class MocaPreprocessor(Preprocessor):
         )
         data = data[data['MoCA_分类提示'] <= 1]
         data = self.sum_columns(data, recall_columns, 'MoCA_回忆')
-        part_1 = data.loc[:, '连接图形':'骆驼']
-        part_2 = data.loc[:, '顺背.2.1.8.5.4':'手表..尺子']
-        part_3 = data.loc[:, '日期':'moca_selfcalc']
-        part_4 = data.loc[:, 'MoCA_分类提示':]
+        part_1 = data.loc[:, '连接图形':'骆驼']  # type: ignore
+        part_2 = data.loc[:, '顺背.2.1.8.5.4':'手表..尺子']  # type: ignore
+        part_3 = data.loc[:, '日期':'moca_selfcalc']  # type: ignore
+        part_4 = data.loc[:, 'MoCA_分类提示':]  # type: ignore
         data = pd.concat([part_1, part_2, part_3, part_4], axis=1).dropna()
         return data
