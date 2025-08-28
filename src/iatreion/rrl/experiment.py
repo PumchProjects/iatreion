@@ -61,7 +61,8 @@ def train_model(args: RrlConfig, samples: Samples):
         lr_decay_rate=args.lr_decay_rate,
         lr_decay_epoch=args.lr_decay_epoch,
         weight_decay=args.weight_decay,
-        log_iter=args.log_iter)
+        log_iter=args.log_iter,
+        save_interval=args.save_interval)
     
     if args.train.final and args.print_rule:
         rrl = load_model(args.model)

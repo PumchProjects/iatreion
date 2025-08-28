@@ -37,6 +37,9 @@ class RrlConfig:
     log_iter: Annotated[int, Parameter(name=['--log_iter', '-li'])] = 500
     'The number of iterations (batches) to log once.'
 
+    save_interval: Annotated[int, Parameter(name=['--save_interval', '-si'])] = 100
+    'The number of epochs to save the model based on training loss (when save_best=False), or the number of iterations (batches) to save the model based on validation F1 (when save_best=True).'
+
     nlaf: Annotated[bool, Parameter(negative='')] = False
     'Use novel logical activation functions to take less time and GPU memory usage. We recommend trying (alpha, beta, gamma) in {(0.999, 8, 1), (0.999, 8, 3), (0.9, 3, 3)}'
 

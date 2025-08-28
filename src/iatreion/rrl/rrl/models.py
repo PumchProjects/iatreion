@@ -10,8 +10,6 @@ from iatreion.utils import logger, progress
 from .components import BinarizeLayer
 from .components import UnionLayer, LRLayer
 
-TEST_CNT_MOD = 100
-
 
 class Net(nn.Module):
     def __init__(self, dim_list, use_not=False, left=None, right=None, use_nlaf=False, estimated_grad=False, use_skip=True, alpha=0.999, beta=8, gamma=1, temperature=0.01):
@@ -145,7 +143,7 @@ class RRL:
         return optimizer
 
     def train_model(self, data_loader=None, valid_loader=None, epoch=50, lr=0.01, lr_decay_epoch=100, 
-                    lr_decay_rate=0.75, weight_decay=0.0, log_iter=50):
+                    lr_decay_rate=0.75, weight_decay=0.0, log_iter=50, save_interval=100):
 
         if data_loader is None:
             raise Exception("Data loader is unavailable!")
@@ -203,7 +201,7 @@ class RRL:
                     abs_gradient_avg += torch.sum(torch.abs(param.grad)) / (param.grad.numel())
                 self.clip()
 
-                if cnt % (TEST_CNT_MOD * (1 if self.save_best else 10)) == 0:
+                if cnt % (save_interval * (1 if self.save_best else 10)) == 0:
                     if valid_loader is not None:
                         _, acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation')
                     else: # use the data_loader as the valid loader
@@ -217,10 +215,10 @@ class RRL:
                     accuracy_b.append(acc_b)
                     f1_score_b.append(f1_b)
                     if self.writer is not None:
-                        self.writer.add_scalar('Accuracy_RRL', acc_b, cnt // TEST_CNT_MOD)
-                        self.writer.add_scalar('F1_Score_RRL', f1_b, cnt // TEST_CNT_MOD)
+                        self.writer.add_scalar('Accuracy_RRL', acc_b, cnt // save_interval)
+                        self.writer.add_scalar('F1_Score_RRL', f1_b, cnt // save_interval)
             logger.info('epoch: {}, loss_rrl: {}'.format(epo, epoch_loss_rrl))
-            if epo % TEST_CNT_MOD == 0 and not self.save_best and epoch_loss_rrl < best_loss:
+            if epo % save_interval == 0 and not self.save_best and epoch_loss_rrl < best_loss:
                 logger.info('[bold green]New best model found!', extra={'markup': True})
                 best_loss = epoch_loss_rrl
                 self.save_model()
