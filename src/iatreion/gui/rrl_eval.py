@@ -158,7 +158,7 @@ def main() -> None:
                 'Supporting Rules',
                 'Label',
                 'Score',
-                'Rules',
+                'Rule',
                 rule=True,
             )
             make_table(
@@ -169,7 +169,7 @@ def main() -> None:
                 'Opposing Rules',
                 'Label',
                 'Score',
-                'Rules',
+                'Rule',
                 rule=True,
             )
             close_button = ttk.Button(dialog, text='Close', command=dialog.destroy)
