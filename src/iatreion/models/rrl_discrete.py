@@ -200,7 +200,7 @@ class Rrl:
         return result
 
     def interpret(self, data: pd.DataFrame) -> tuple[list[float], list[Line]]:
-        result = np.repeat([self.biases], data.shape[0], axis=0)
+        result = np.array([self.biases])
         active_lines: list[Line] = []
         for line in self.lines:
             result += line.interpret(data, active_lines)
@@ -239,5 +239,5 @@ class DiscreteRrlModel(RawModel):
 
     def interpret(self, data: pd.DataFrame) -> tuple[list[float], list[Line], Rrl]:
         rrl = self.get_rrl()
-        result, active_lines = rrl.interpret(data)
+        result, active_lines = rrl.interpret(data.head(1))
         return result, active_lines, rrl

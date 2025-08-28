@@ -10,6 +10,8 @@ dependencies = [
     "scikit-learn>=1.6.1",
     "xgboost>=3.0.0",
     "matplotlib>=3.10.1",
+    "tomli>=2.2.1",
+    "tomli-w>=1.2.0",
 ]
 
 [project.optional-dependencies]
@@ -32,6 +34,7 @@ cu126 = [
 
 [project.scripts]
 iatreion = "iatreion.cli:main"
+iatreion-gui = "iatreion.gui:main"
 
 [build-system]
 requires = ["hatchling"]
