@@ -116,6 +116,6 @@ def test_model(args: RrlConfig, samples: Samples):
             edge_cnt += len(rule)
             for rid in rule:
                 connected_rid[ln - abs(rid[0])].add(rid[1])
-    complexity = np.log(edge_cnt).item()
+    complexity = np.log(edge_cnt).item() if edge_cnt > 0 else np.nan
     logger.debug('\n\t{} of RRL  Model: {}'.format(metric, complexity))
     return y_score, complexity

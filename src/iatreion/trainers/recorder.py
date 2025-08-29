@@ -10,8 +10,7 @@ from sklearn.metrics import (
     accuracy_score,
     auc,
     confusion_matrix,
-    f1_score,
-    precision_score,
+    precision_recall_fscore_support,
     recall_score,
     roc_auc_score,
 )
@@ -30,6 +29,8 @@ class Record[T]:
     precision: T
     recall: T
     f1: T
+    sensitivity: T
+    specificity: T
     complexity: dict[str, T]
     cm: NDArray | None = None
 
@@ -100,14 +101,19 @@ class RecordROC:
 class Recorder:
     def __init__(self, config: TrainConfig) -> None:
         self.config = config
-        self.result = Record[list[float]]([], [], [], [], [], [], {}, None)
+        self.result = Record[list[float]]([], [], [], [], [], [], [], [], {}, None)
         self.roc = RecordROC(config)
 
     def record(self, results: TrainerReturn) -> None:
         training_time, y_true, y_score, complexity = results
         self.result.time.append(training_time)
         y_pred = y_score.argmax(axis=1)
-        y_pos_score = y_score[:, 1] if y_score.shape[1] >= 2 else y_score.squeeze()
+        labels = list(range(self.config.num_class))
+        if self.result.cm is None:
+            self.result.cm = confusion_matrix(y_true, y_pred, labels=labels)
+        else:
+            self.result.cm += confusion_matrix(y_true, y_pred, labels=labels)
+        y_pos_score = y_score[:, 0] if y_score.shape[1] >= 2 else y_score.squeeze()
         self.result.auc.append(
             self.roc.record(y_true, y_pos_score, len(self.result.auc) + 1)
             if self.config.plot_roc
@@ -116,32 +122,38 @@ class Recorder:
                 y_pos_score if self.config.num_class <= 2 else y_score,
                 average='macro',
                 multi_class='ovr',
+                labels=labels,
             )
         )
         self.result.acc.append(accuracy_score(y_true, y_pred))
-        self.result.precision.append(
-            precision_score(y_true, y_pred, average='macro', zero_division=0)
+        precision, recall, f1, _ = precision_recall_fscore_support(
+            y_true, y_pred, labels=labels, average='macro', zero_division=np.nan
         )
-        self.result.recall.append(
-            recall_score(y_true, y_pred, average='macro', zero_division=0)
+        self.result.precision.append(precision)
+        self.result.recall.append(recall)
+        self.result.f1.append(f1)
+        self.result.sensitivity.append(
+            recall_score(
+                y_true, y_pred, labels=labels, pos_label=0, zero_division=np.nan
+            )
         )
-        self.result.f1.append(
-            f1_score(y_true, y_pred, average='macro', zero_division=0)
+        self.result.specificity.append(
+            recall_score(
+                y_true, y_pred, labels=labels, pos_label=1, zero_division=np.nan
+            )
         )
         width = 4
         for key, value in complexity.items():
             self.result.complexity.setdefault(key, []).append(value)
             width = max(width, len(key))
-        labels = list(range(self.config.num_class))
-        if self.result.cm is None:
-            self.result.cm = confusion_matrix(y_true, y_pred, labels=labels)
-        else:
-            self.result.cm += confusion_matrix(y_true, y_pred, labels=labels)
         logger.info(f'{"AUC":{width}} {self.result.auc[-1]:.2%}')
         logger.info(f'{"ACC":{width}} {self.result.acc[-1]:.2%}')
         logger.info(f'{"P":{width}} {self.result.precision[-1]:.2%}')
         logger.info(f'{"R":{width}} {self.result.recall[-1]:.2%}')
         logger.info(f'{"F1":{width}} {self.result.f1[-1]:.2%}')
+        if self.config.num_class == 2:
+            logger.info(f'{"SEN":{width}} {self.result.sensitivity[-1]:.2%}')
+            logger.info(f'{"SPC":{width}} {self.result.specificity[-1]:.2%}')
         for key, values in self.result.complexity.items():
             logger.info(f'{key:{width}} {values[-1]:.4f}')
         logger.info(f'{"Time":{width}} {training_time:.3f}s')
@@ -150,15 +162,17 @@ class Recorder:
         complexity = {}
         width = 4
         for key, values in self.result.complexity.items():
-            complexity[key] = np.mean(values).item()
+            complexity[key] = np.nanmean(values).item()
             width = max(width, len(key))
         final = Record(
             np.mean(self.result.time).item(),
-            np.mean(self.result.auc).item(),
+            np.nanmean(self.result.auc).item(),
             np.mean(self.result.acc).item(),
-            np.mean(self.result.precision).item(),
-            np.mean(self.result.recall).item(),
-            np.mean(self.result.f1).item(),
+            np.nanmean(self.result.precision).item(),
+            np.nanmean(self.result.recall).item(),
+            np.nanmean(self.result.f1).item(),
+            np.nanmean(self.result.sensitivity).item(),
+            np.nanmean(self.result.specificity).item(),
             complexity,
             self.result.cm,
         )
@@ -170,6 +184,9 @@ class Recorder:
         logger.info(f'AVG {"P":{width}} {final.precision:.2%}')
         logger.info(f'AVG {"R":{width}} {final.recall:.2%}')
         logger.info(f'AVG {"F1":{width}} {final.f1:.2%}')
+        if self.config.num_class == 2:
+            logger.info(f'AVG {"SEN":{width}} {final.sensitivity:.2%}')
+            logger.info(f'AVG {"SPC":{width}} {final.specificity:.2%}')
         for key, value in complexity.items():
             logger.info(f'AVG {key:{width}} {value:.4f}')
         logger.info(f'AVG {"Time":{width}} {final.time:.3f}s')

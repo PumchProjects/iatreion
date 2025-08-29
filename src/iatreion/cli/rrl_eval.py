@@ -1,13 +1,8 @@
-import numpy as np
-import pandas as pd
-from numpy.typing import NDArray
 from rich import box
 from rich.table import Table
 
 from iatreion.api import get_batched_result, get_result
 from iatreion.configs import RrlEvalConfig
-from iatreion.models import DiscreteRrlModel, Line, Rrl
-from iatreion.preprocessors import get_preprocessor
 
 from .common import app, console
 
@@ -46,7 +41,9 @@ def display_result(config: RrlEvalConfig) -> None:
 def display_batched_result(config: RrlEvalConfig) -> None:
     result = get_batched_result(config)
     result_table = get_table('Result', 'ID', 'Label', 'Score')
-    for index, label, score in zip(result.index, result['Label'], result['Score']):
+    for index, label, score in zip(
+        result.index, result['Label'], result['Score'], strict=False
+    ):
         result_table.add_row(str(index), label, f'{score:.2f}')
     console.print(result_table)
 
