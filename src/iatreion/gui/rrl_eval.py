@@ -13,6 +13,13 @@ from iatreion.api import get_batched_result, get_result
 from iatreion.configs import RrlEvalConfig
 from iatreion.utils import get_config_path
 
+groups_list = [
+    ['a', 'ac', 'l', 'g', 'gdn', 'o', 'm', 'ehikj'],
+    ['1', '2', 'f'],
+    ['LA', 'EA', 'LAc', 'EAc'],
+    ['A1', 'A2', 'A3', 'A1c', 'A2c', 'A3c'],
+]
+
 
 def load_config(path: Path) -> RrlEvalConfig:
     if path.is_file():
@@ -34,6 +41,7 @@ def make_row(
     row: int,
     label_text: str,
     variable: tk.StringVar,
+    button_text: str = '',
     command: Callable[[], None] | None = None,
 ) -> None:
     label = ttk.Label(master, text=label_text)
@@ -41,7 +49,8 @@ def make_row(
     entry = ttk.Entry(master, textvariable=variable)
     entry.grid(row=row, column=1, sticky=tk.EW)
     if command is not None:
-        button = ttk.Button(master, text='Browse', command=command)
+        entry.config(state='readonly')
+        button = ttk.Button(master, text=button_text, command=command)
         button.grid(row=row, column=2, sticky=tk.EW)
 
 
@@ -51,6 +60,32 @@ def create_dialog(master: tk.Tk, title: str) -> tk.Toplevel:
     dialog.transient(master)
     dialog.grab_set()
     return dialog
+
+
+def select_groups(master: tk.Tk, init_groups: list[str]) -> list[str]:
+    dialog = create_dialog(master, 'Groups')
+    frm = ttk.Frame(dialog, padding=5)
+    frm.pack()
+    vars: dict[str, tk.BooleanVar] = {}
+    for column, groups in enumerate(groups_list):
+        for row, group in enumerate(groups):
+            var = tk.BooleanVar(value=group in init_groups)
+            chk = ttk.Checkbutton(frm, text=group, variable=var)
+            chk.grid(row=row, column=column, sticky=tk.W, padx=10)
+            vars[group] = var
+    ok_button = ttk.Button(dialog, text='OK', command=dialog.destroy)
+    ok_button.pack(pady=5)
+    master.wait_window(dialog)
+    return [group for group, var in vars.items() if var.get()]
+
+
+def save_batched_result(config: RrlEvalConfig) -> None:
+    result = get_batched_result(config)
+    path = asksaveasfilename(
+        defaultextension='.xlsx', filetypes=[('Excel files', '*.xlsx')]
+    )
+    if path:
+        result.to_excel(path)
 
 
 def make_table(
@@ -81,6 +116,41 @@ def make_table(
         vsb.grid(row=0, column=1, sticky=tk.NS)
 
 
+def show_result(master: tk.Tk, config: RrlEvalConfig) -> None:
+    result_table, bias_table, support_table, oppose_table = get_result(config)
+    dialog = create_dialog(master, 'Results')
+    frm = ttk.Frame(dialog)
+    frm.grid_columnconfigure(1, weight=1)
+    frm.pack(fill=tk.X)
+    make_table(frm, 0, 0, result_table, 'Result', 'Label', 'Score')
+    make_table(frm, 1, 0, bias_table, 'Initial Bias', 'Label', 'Score')
+    make_table(
+        frm,
+        0,
+        1,
+        support_table,
+        'Supporting Rules',
+        'Label',
+        'Score',
+        'Rule',
+        rule=True,
+    )
+    make_table(
+        frm,
+        1,
+        1,
+        oppose_table,
+        'Opposing Rules',
+        'Label',
+        'Score',
+        'Rule',
+        rule=True,
+    )
+    close_button = ttk.Button(dialog, text='Close', command=dialog.destroy)
+    close_button.pack(pady=5)
+    master.wait_window(dialog)
+
+
 def main() -> None:
     config_path = get_config_path()
     config = load_config(config_path)
@@ -98,6 +168,11 @@ def main() -> None:
     data = tk.StringVar(value=os.path.basename(config.data))
     vmri = tk.StringVar(value=os.path.basename(config.vmri))
     batched = tk.BooleanVar(value=config.batched)
+
+    def set_groups() -> None:
+        selected_groups = select_groups(root, config.groups.split(','))
+        config.groups = ','.join(selected_groups)
+        groups.set(config.groups)
 
     def set_thesaurus_path() -> None:
         if path := askdirectory(initialdir=config.thesaurus):
@@ -125,56 +200,19 @@ def main() -> None:
             vmri.set(os.path.basename(path))
 
     make_row(frm, 0, 'Name:', name)
-    make_row(frm, 1, 'Groups:', groups)
-    make_row(frm, 2, 'Models:', thesaurus, set_thesaurus_path)
-    make_row(frm, 3, 'Data:', data, set_data_path)
-    make_row(frm, 4, 'Vmri:', vmri, set_vmri_path)
+    make_row(frm, 1, 'Groups:', groups, 'Select', set_groups)
+    make_row(frm, 2, 'Models:', thesaurus, 'Browse', set_thesaurus_path)
+    make_row(frm, 3, 'Data:', data, 'Browse', set_data_path)
+    make_row(frm, 4, 'Vmri:', vmri, 'Browse', set_vmri_path)
 
     def run_inference() -> None:
         config.name = name.get()
-        config.groups = groups.get()
         config.batched = batched.get()
         save_config(config, config_path)
         if config.batched:
-            result = get_batched_result(config)
-            path = asksaveasfilename(
-                defaultextension='.xlsx', filetypes=[('Excel files', '*.xlsx')]
-            )
-            if path:
-                result.to_excel(path)
+            save_batched_result(config)
         else:
-            result_table, bias_table, support_table, oppose_table = get_result(config)
-            dialog = create_dialog(root, 'Result')
-            frm = ttk.Frame(dialog)
-            frm.grid_columnconfigure(1, weight=1)
-            frm.pack(fill=tk.X)
-            make_table(frm, 0, 0, result_table, 'Result', 'Label', 'Score')
-            make_table(frm, 1, 0, bias_table, 'Initial Bias', 'Label', 'Score')
-            make_table(
-                frm,
-                0,
-                1,
-                support_table,
-                'Supporting Rules',
-                'Label',
-                'Score',
-                'Rule',
-                rule=True,
-            )
-            make_table(
-                frm,
-                1,
-                1,
-                oppose_table,
-                'Opposing Rules',
-                'Label',
-                'Score',
-                'Rule',
-                rule=True,
-            )
-            close_button = ttk.Button(dialog, text='Close', command=dialog.destroy)
-            close_button.pack(pady=5)
-            root.wait_window(dialog)
+            show_result(root, config)
 
     bottom_frm = ttk.Frame(root, padding=(10, 5, 10, 10))
     bottom_frm.pack()
