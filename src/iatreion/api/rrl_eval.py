@@ -26,19 +26,19 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
     data, model = get_data_model(config)
     result, active_lines, rrl = model.interpret(data)
     max_label = get_max_label(result, rrl.labels)
-    result_table = [[max_label, f'{calc_score(result):.2f}']]
+    result_list = [[max_label, f'{calc_score(result):.2f}']]
     bias_max_label = get_max_label(rrl.biases, rrl.labels)
-    bias_table = [[bias_max_label, f'{calc_score(rrl.biases):.2f}']]
-    support_table: list[list[str]] = []
-    oppose_table: list[list[str]] = []
+    bias_list = [[bias_max_label, f'{calc_score(rrl.biases):.2f}']]
+    support_list: list[list[str]] = []
+    oppose_list: list[list[str]] = []
     for line in active_lines:
         weight_max_label = get_max_label(line.weights, rrl.labels)
         score = calc_score(line.weights)
         if weight_max_label == max_label:
-            support_table.append([weight_max_label, f'{score:.2f}', line.print_rule()])
+            support_list.append([weight_max_label, f'{score:.2f}', line.print_rule()])
         else:
-            oppose_table.append([weight_max_label, f'{score:.2f}', line.print_rule()])
-    return result_table, bias_table, support_table, oppose_table
+            oppose_list.append([weight_max_label, f'{score:.2f}', line.print_rule()])
+    return result_list, bias_list, support_list, oppose_list
 
 
 def get_batched_result(config: RrlEvalConfig) -> pd.DataFrame:

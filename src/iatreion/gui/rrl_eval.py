@@ -10,8 +10,12 @@ import tomli
 import tomli_w
 
 from iatreion.api import get_batched_result, get_result
-from iatreion.configs import RrlEvalConfig
+from iatreion.configs import DataName, RrlEvalConfig
 from iatreion.utils import get_config_path
+
+names_mapping: dict[str, DataName] = {
+    'MRI Volume': 'volume-pct-nz',
+}
 
 groups_list = [
     ['a', 'ac', 'l', 'g', 'gdn', 'o', 'm', 'ehikj'],
@@ -34,6 +38,26 @@ def save_config(config: RrlEvalConfig, path: Path) -> None:
     config_dict = {'rrl-eval': asdict(config)}
     with path.open('wb') as f:
         tomli_w.dump(config_dict, f)
+
+
+def get_key[T, U](mapping: dict[T, U], value: U) -> T:
+    for k, v in mapping.items():
+        if v == value:
+            return k
+    return next(iter(mapping))
+
+
+def make_menu_row(
+    master: tk.Misc,
+    row: int,
+    label_text: str,
+    variable: tk.StringVar,
+    *values: str,
+) -> None:
+    label = ttk.Label(master, text=label_text)
+    label.grid(row=row, column=0, sticky=tk.EW)
+    menu = ttk.OptionMenu(master, variable, variable.get(), *values)
+    menu.grid(row=row, column=1, sticky=tk.EW)
 
 
 def make_row(
@@ -117,34 +141,18 @@ def make_table(
 
 
 def show_result(master: tk.Tk, config: RrlEvalConfig) -> None:
-    result_table, bias_table, support_table, oppose_table = get_result(config)
+    result_list, bias_list, support_list, oppose_list = get_result(config)
     dialog = create_dialog(master, 'Results')
     frm = ttk.Frame(dialog)
     frm.grid_columnconfigure(1, weight=1)
     frm.pack(fill=tk.X)
-    make_table(frm, 0, 0, result_table, 'Result', 'Label', 'Score')
-    make_table(frm, 1, 0, bias_table, 'Initial Bias', 'Label', 'Score')
+    make_table(frm, 0, 0, result_list, 'Result', 'Label', 'Score')
+    make_table(frm, 1, 0, bias_list, 'Initial Bias', 'Label', 'Score')
     make_table(
-        frm,
-        0,
-        1,
-        support_table,
-        'Supporting Rules',
-        'Label',
-        'Score',
-        'Rule',
-        rule=True,
+        frm, 0, 1, support_list, 'Supporting Rules', 'Label', 'Score', 'Rule', rule=True
     )
     make_table(
-        frm,
-        1,
-        1,
-        oppose_table,
-        'Opposing Rules',
-        'Label',
-        'Score',
-        'Rule',
-        rule=True,
+        frm, 1, 1, oppose_list, 'Opposing Rules', 'Label', 'Score', 'Rule', rule=True
     )
     close_button = ttk.Button(dialog, text='Close', command=dialog.destroy)
     close_button.pack(pady=5)
@@ -162,7 +170,7 @@ def main() -> None:
     frm.grid_columnconfigure(1, weight=1)
     frm.pack(fill=tk.X)
 
-    name = tk.StringVar(value=config.name)
+    name = tk.StringVar(value=get_key(names_mapping, config.name))
     groups = tk.StringVar(value=config.groups)
     thesaurus = tk.StringVar(value=os.path.basename(config.thesaurus))
     data = tk.StringVar(value=os.path.basename(config.data))
@@ -199,14 +207,14 @@ def main() -> None:
             config.vmri = path
             vmri.set(os.path.basename(path))
 
-    make_row(frm, 0, 'Name:', name)
+    make_menu_row(frm, 0, 'Name:', name, *names_mapping.keys())
     make_row(frm, 1, 'Groups:', groups, 'Select', set_groups)
     make_row(frm, 2, 'Models:', thesaurus, 'Browse', set_thesaurus_path)
     make_row(frm, 3, 'Data:', data, 'Browse', set_data_path)
     make_row(frm, 4, 'Vmri:', vmri, 'Browse', set_vmri_path)
 
     def run_inference() -> None:
-        config.name = name.get()
+        config.name = names_mapping[name.get()]
         config.batched = batched.get()
         save_config(config, config_path)
         if config.batched:

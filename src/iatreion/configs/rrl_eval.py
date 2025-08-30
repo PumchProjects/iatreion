@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated
 
 from cyclopts import Parameter
 
@@ -13,7 +13,7 @@ from .train import TrainConfig
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class RrlEvalConfig:
-    name: Annotated[str, Parameter(name=['--name', '-n'])] = 'volume-pct-nz'
+    name: Annotated[DataName, Parameter(name=['--name', '-n'])] = 'volume-pct-nz'
     'Name of the data file.'
 
     groups: Annotated[str, Parameter(name=['--groups', '-g'])] = 'a,f'
@@ -33,9 +33,7 @@ class RrlEvalConfig:
 
     def make_configs(self) -> tuple[PreprocessorConfig, DiscreteRrlConfig]:
         # HACK: Empty prefix
-        dataset = DatasetConfig(
-            prefix=Path(), name=cast(DataName, self.name), simple=True
-        )
+        dataset = DatasetConfig(prefix=Path(), name=self.name, simple=True)
         train = TrainConfig(group_names_=self.groups, final=True)
         # HACK: Empty output prefix
         process_config = PreprocessorConfig(
