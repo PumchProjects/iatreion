@@ -109,11 +109,12 @@ class Recorder:
         self.result.time.append(training_time)
         y_pred = y_score.argmax(axis=1)
         labels = list(range(self.config.num_class))
+        cm = confusion_matrix(y_true, y_pred, labels=labels)
         if self.result.cm is None:
-            self.result.cm = confusion_matrix(y_true, y_pred, labels=labels)
+            self.result.cm = cm
         else:
-            self.result.cm += confusion_matrix(y_true, y_pred, labels=labels)
-        y_pos_score = y_score[:, 0] if y_score.shape[1] >= 2 else y_score.squeeze()
+            self.result.cm += cm
+        y_pos_score = y_score[:, 1] if y_score.shape[1] >= 2 else y_score.squeeze()
         self.result.auc.append(
             self.roc.record(y_true, y_pos_score, len(self.result.auc) + 1)
             if self.config.plot_roc
@@ -146,6 +147,7 @@ class Recorder:
         for key, value in complexity.items():
             self.result.complexity.setdefault(key, []).append(value)
             width = max(width, len(key))
+        logger.info(f'Confusion matrix:\n{cm}')
         logger.info(f'{"AUC":{width}} {self.result.auc[-1]:.2%}')
         logger.info(f'{"ACC":{width}} {self.result.acc[-1]:.2%}')
         logger.info(f'{"P":{width}} {self.result.precision[-1]:.2%}')
