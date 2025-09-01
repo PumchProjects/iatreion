@@ -201,32 +201,36 @@ class RRL:
                     abs_gradient_avg += torch.sum(torch.abs(param.grad)) / (param.grad.numel())
                 self.clip()
 
-                if cnt % (save_interval * (1 if self.save_best else 10)) == 0:
-                    if valid_loader is not None:
-                        _, acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation')
-                    else: # use the data_loader as the valid loader
-                        _, acc_b, f1_b = self.test(test_loader=data_loader, set_name='Training')
-                    
-                    if self.save_best and (f1_b > self.best_f1 or (np.abs(f1_b - self.best_f1) < 1e-10 and self.best_loss > epoch_loss_rrl)):
-                        self.best_f1 = f1_b
-                        self.best_loss = epoch_loss_rrl
-                        self.save_model()
-                    
-                    accuracy_b.append(acc_b)
-                    f1_score_b.append(f1_b)
-                    if self.writer is not None:
-                        self.writer.add_scalar('Accuracy_RRL', acc_b, cnt // save_interval)
-                        self.writer.add_scalar('F1_Score_RRL', f1_b, cnt // save_interval)
             logger.info('epoch: {}, loss_rrl: {}'.format(epo, epoch_loss_rrl))
-            if epo % save_interval == 0 and not self.save_best and epoch_loss_rrl < best_loss:
-                logger.info('[bold green]New best model found!', extra={'markup': True})
-                best_loss = epoch_loss_rrl
-                self.save_model()
+            if epo % save_interval == 0:
+                if valid_loader is not None:
+                    _, acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation')
+                else: # use the data_loader as the valid loader
+                    _, acc_b, f1_b = self.test(test_loader=data_loader, set_name='Training')
+                
+                if self.save_best and (f1_b > self.best_f1 or (np.abs(f1_b - self.best_f1) < 1e-10 and self.best_loss > epoch_loss_rrl)):
+                    logger.info('[bold yellow]New best model found!', extra={'markup': True})
+                    self.best_f1 = f1_b
+                    self.best_loss = epoch_loss_rrl
+                    self.save_model()
+                elif not self.save_best and epoch_loss_rrl < best_loss:
+                    logger.info('[bold green]New best model found!', extra={'markup': True})
+                    best_loss = epoch_loss_rrl
+                    self.save_model()
+                
+                accuracy_b.append(acc_b)
+                f1_score_b.append(f1_b)
+                if self.writer is not None:
+                    self.writer.add_scalar('Accuracy_RRL', acc_b, epo // save_interval)
+                    self.writer.add_scalar('F1_Score_RRL', f1_b, epo // save_interval)
+
             if self.writer is not None:
                 self.writer.add_scalar('Training_Loss_RRL', epoch_loss_rrl, epo)
                 self.writer.add_scalar('Abs_Gradient_Max', abs_gradient_max, epo)
                 self.writer.add_scalar('Abs_Gradient_Avg', abs_gradient_avg / ba_cnt, epo)
+
             progress.update(epoch_task, advance=1)
+
         progress.remove_task(epoch_task)
         return epoch_histc
 
