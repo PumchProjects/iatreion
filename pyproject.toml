@@ -7,7 +7,7 @@ dependencies = [
     "cyclopts>=3.13.1",
     "pandas[excel]>=2.2.3",
     "pandas-stubs>=2.2.3.250308",
-    "scikit-learn>=1.6.1",
+    "imbalanced-learn>=0.14.0",
     "xgboost>=3.0.0",
     "matplotlib>=3.10.1",
     "tomli>=2.2.1",
@@ -103,6 +103,7 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
+    "imblearn.*",
     "scipy.*",
     "sklearn.*",
 ]

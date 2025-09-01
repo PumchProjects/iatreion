@@ -78,9 +78,10 @@ class RrlConfig:
 
     def __post_init__(self) -> None:
         folder_name = (
-            f'e{self.epoch}_bs{self.batch_size}_lr{self.learning_rate}_lrdr{self.lr_decay_rate}'
-            f'_lrde{self.lr_decay_epoch}_wd{self.weight_decay}_useNOT{self.use_not}_saveBest{self.save_best}'
-            f'_useSkip{self.skip}_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
+            f'e{self.epoch}_os{self.train.over_sampler.upper()}_mns{self.train.min_n_samples}_bs{self.batch_size}'
+            f'_lr{self.learning_rate}_lrdr{self.lr_decay_rate}_lrde{self.lr_decay_epoch}_wd{self.weight_decay}'
+            f'_si{self.save_interval}_useNOT{self.use_not}_saveBest{self.save_best}_useSkip{self.skip}'
+            f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
         )
         self.train.log_dir = (
             self.train.log_root

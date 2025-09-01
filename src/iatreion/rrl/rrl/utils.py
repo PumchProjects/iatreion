@@ -1,11 +1,14 @@
 import numpy as np
 import pandas as pd
+from imblearn.combine import SMOTEENN, SMOTETomek
+from imblearn.over_sampling import SVMSMOTE, SMOTEN, SMOTENC, ADASYN, KMeansSMOTE, SMOTE, BorderlineSMOTE
 from numpy.typing import NDArray
 from sklearn import preprocessing
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import RepeatedStratifiedKFold
 
 from iatreion.configs import DatasetConfig, TrainConfig
+from iatreion.utils import logger
 
 pd.set_option('future.no_silent_downcasting', True)
 
@@ -123,6 +126,46 @@ type Samples = tuple[DBEncoder, NDArray, NDArray, NDArray, NDArray]
 type RawSamples = tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
 
 
+def try_resample(train: TrainConfig, f_df: pd.DataFrame, X, y):
+    if train.over_sampler is None:
+        return X, y
+    categorical = (f_df[1] != 'continuous').values
+    if train.min_n_samples <= 0:
+        strategy = 'auto'
+    else:
+        strategy = {cls: train.min_n_samples for cls in np.unique(y) if sum(y == cls) < train.min_n_samples}
+    if not categorical.any():
+        match train.over_sampler:
+            case 'adasyn':
+                sm = ADASYN(sampling_strategy=strategy, random_state=42)
+            case 'smote':
+                sm = SMOTE(sampling_strategy=strategy, random_state=42)
+            case 'smotetomek':
+                sm = SMOTETomek(sampling_strategy=strategy, random_state=42, n_jobs=4)
+            case 'smoteenn':
+                sm = SMOTEENN(sampling_strategy=strategy, random_state=42, n_jobs=4)
+            case 'borderlinesmote-1':
+                sm = BorderlineSMOTE(sampling_strategy=strategy, random_state=42, kind='borderline-1')
+            case 'borderlinesmote-2':
+                sm = BorderlineSMOTE(sampling_strategy=strategy, random_state=42, kind='borderline-2')
+            case 'svmsmote':
+                sm = SVMSMOTE(sampling_strategy=strategy, random_state=42)
+            case 'kmeanssmote':
+                sm = KMeansSMOTE(sampling_strategy=strategy, random_state=42, n_jobs=4)
+    elif categorical.all():
+        sm = SMOTEN(sampling_strategy=strategy, random_state=42)
+    else:
+        sm = SMOTENC(categorical, sampling_strategy=strategy, random_state=42)
+    try:
+        X, y = sm.fit_resample(X, y)
+    except (ValueError, RuntimeError) as e:
+        logger.warning(
+            f'[bold yellow]Dataset might be too small, disabling SMOTE:[/] {e}',
+            extra={'markup': True}
+        )
+    return X, y
+
+
 def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Samples:
     data_path = dataset.data
     info_path = dataset.info
@@ -134,6 +177,7 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Samples:
     X, y = db_enc.transform(X_df, y_df, normalized=True, keep_stat=True)
 
     if train.final:
+        X, y = try_resample(train, f_df, X, y)
         return db_enc, X, y, X, y
 
     kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
@@ -143,15 +187,17 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Samples:
     X_test = X[test_index]
     y_test = y[test_index]
 
+    X_train, y_train = try_resample(train, f_df, X_train, y_train)
     return db_enc, X_train, y_train, X_test, y_test
 
 
 def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> RawSamples:
     data_path = dataset.data
     info_path = dataset.info
-    X_df, y_df, _ = read_csv(data_path, info_path, train.groups, train.label_pos, shuffle=True)
+    X_df, y_df, f_df = read_csv(data_path, info_path, train.groups, train.label_pos, shuffle=True)
 
     if train.final:
+        X_df, y_df = try_resample(train, f_df, X_df, y_df)
         return X_df, y_df, X_df, y_df
 
     kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
@@ -161,4 +207,5 @@ def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> RawSamples:
     X_test = X_df.iloc[test_index]
     y_test = y_df.iloc[test_index]
 
+    X_train, y_train = try_resample(train, f_df, X_train, y_train)
     return X_train, y_train, X_test, y_test

@@ -1,12 +1,23 @@
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from cyclopts import Parameter
 from cyclopts.types import Directory
 
 from iatreion.utils import set_device, set_seed
+
+type SamplerName = Literal[
+    'adasyn',
+    'smote',
+    'smotetomek',
+    'smoteenn',
+    'borderlinesmote-1',
+    'borderlinesmote-2',
+    'svmsmote',
+    'kmeanssmote',
+]
 
 
 @Parameter(name='*')
@@ -26,6 +37,14 @@ class TrainConfig:
 
     final: Annotated[bool, Parameter(name=['--final', '-f'])] = False
     'Whether to use the whole dataset for training or testing.'
+
+    over_sampler: Annotated[
+        SamplerName | None, Parameter(name=['--over-sampler', '-os'])
+    ] = None
+    'Over-sampling method to use.'
+
+    min_n_samples: Annotated[int, Parameter(name=['--min-n-samples', '-mns'])] = 0
+    'Minimum number of samples for each class after resampling.'
 
     seed: int = 42
     'Random seed for reproducibility.'
