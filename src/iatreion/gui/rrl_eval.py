@@ -3,7 +3,7 @@ import tkinter as tk
 from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
-from tkinter import ttk
+from tkinter import messagebox, ttk
 from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
 
 import tomli
@@ -11,6 +11,7 @@ import tomli_w
 
 from iatreion.api import get_batched_result, get_result
 from iatreion.configs import DataName, RrlEvalConfig
+from iatreion.exceptions import IatreionException
 from iatreion.utils import get_config_path
 
 names_mapping: dict[str, DataName] = {
@@ -159,6 +160,10 @@ def show_result(master: tk.Tk, config: RrlEvalConfig) -> None:
     master.wait_window(dialog)
 
 
+def show_error_message(message: str) -> None:
+    messagebox.showerror('Error', message)
+
+
 def main() -> None:
     config_path = get_config_path()
     config = load_config(config_path)
@@ -217,10 +222,16 @@ def main() -> None:
         config.name = names_mapping[name.get()]
         config.batched = batched.get()
         save_config(config, config_path)
-        if config.batched:
-            save_batched_result(config)
-        else:
-            show_result(root, config)
+        try:
+            if config.batched:
+                save_batched_result(config)
+            else:
+                show_result(root, config)
+        except IatreionException as e:
+            e.update(dataset=name.get(), groups=groups.get())
+            show_error_message(str(e))
+        except Exception as e:
+            show_error_message(str(e))
 
     bottom_frm = ttk.Frame(root, padding=(10, 5, 10, 10))
     bottom_frm.pack()

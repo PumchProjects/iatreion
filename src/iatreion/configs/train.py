@@ -62,6 +62,8 @@ class TrainConfig:
 
     @cached_property
     def groups(self) -> list[list[str]]:
+        if self.group_names_.strip() == '':
+            raise ValueError('No valid groups found.')
         groups: list[list[str]] = []
         for group in self.group_names_.split(','):
             names: list[str] = []

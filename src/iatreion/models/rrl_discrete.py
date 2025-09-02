@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 from scipy.special import softmax
 
 from iatreion.configs import DiscreteRrlConfig
+from iatreion.exceptions import IatreionException
 from iatreion.utils import logger
 
 from .base import ModelReturn, RawModel
@@ -214,9 +215,10 @@ class DiscreteRrlModel(RawModel):
         self.config = config
         exp_root = self.config.get_best_exp_root()
         if exp_root is None:
-            raise FileNotFoundError(
-                f'No experiment root found for dataset {self.config.dataset.name} '
-                f'and group {self.config.train.group_names}!'
+            raise IatreionException(
+                'No experiment root found for $dataset and groups "$groups".',
+                dataset=self.config.dataset.name,
+                groups=self.config.train.group_names,
             )
         self.exp_root = exp_root
 
