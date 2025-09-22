@@ -31,6 +31,7 @@ data_name_mapping: dict[DataName, str] = {
     'volume-v-nz': '核磁_volume.xlsx',
     'volume-pct-nz': '核磁_volume.xlsx',
     'snp': '基因_snp.csv',
+    's-all': 's-screen-sum,s-composite-aea,volume-pct-nz,snp',
 }
 
 
