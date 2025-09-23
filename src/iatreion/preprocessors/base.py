@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
+from typing import Self
 
 import numpy as np
 import pandas as pd
 
-from iatreion.configs import PreprocessorConfig
+from iatreion.configs import DataName, PreprocessorConfig
 from iatreion.utils import logger
 
 
@@ -32,9 +33,7 @@ class Preprocessor(ABC):
                 self.config.birth_data_path, index_col='serial_num'
             )
             birth_dates = pd.to_datetime(birth_data['实际出生日期'])
-            data = data.merge(
-                birth_dates, left_index=True, right_index=True, copy=False
-            )
+            data = data.merge(birth_dates, left_index=True, right_index=True)
             return data, data['实际出生日期']
 
     def sum_columns(
@@ -90,6 +89,19 @@ class Preprocessor(ABC):
 
     @abstractmethod
     def get_data(self) -> pd.DataFrame: ...
+
+    @staticmethod
+    def deduplicate_rows(data: pd.DataFrame) -> pd.DataFrame:
+        # HACK: Keep only the first sample of each patient
+        data = data[~data.index.duplicated(keep='first')]
+        return data
+
+    def get_child_data(self, name: DataName, child: Self) -> pd.DataFrame:
+        original_name = self.config.dataset.name
+        self.config.dataset.name = name
+        data = self.deduplicate_rows(child.get_data())
+        self.config.dataset.name = original_name
+        return data
 
     @staticmethod
     def remove_useless_columns(data: pd.DataFrame) -> pd.DataFrame:
@@ -149,10 +161,12 @@ class Preprocessor(ABC):
     def process(self) -> None:
         group_names = self.get_group_names()
         data = self.get_data()
-        data = data.merge(group_names, left_index=True, right_index=True, copy=False)
-        # HACK: Keep only the first sample of each patient
-        data = data[~data.index.duplicated(keep='first')]
+        data = data.merge(group_names, left_index=True, right_index=True)
+        data = self.deduplicate_rows(data)
         data = self.remove_useless_columns(data)
         augmented_vector_name = self.get_augmented_vector_name(data)
         logger.info('[bold green]Saving data...', extra={'markup': True})
         self.save_data(data, augmented_vector_name)
+
+
+type NamedPreprocessor = tuple[DataName, Preprocessor]

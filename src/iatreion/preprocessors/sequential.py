@@ -2,29 +2,26 @@ from typing import override
 
 import pandas as pd
 
-from iatreion.configs import DataName, PreprocessorConfig
+from iatreion.configs import PreprocessorConfig
+from iatreion.utils import logger
 
-from .base import Preprocessor
+from .base import NamedPreprocessor, Preprocessor
 
 
 class SequentialPreprocessor(Preprocessor):
     def __init__(
-        self, config: PreprocessorConfig, children: list[tuple[DataName, Preprocessor]]
+        self, config: PreprocessorConfig, children: list[NamedPreprocessor]
     ) -> None:
         super().__init__(config)
         self.children = children
-        self.original_name = config.dataset.name
-
-    def get_child_data(self, name: DataName, child: Preprocessor) -> pd.DataFrame:
-        self.config.dataset.name = name
-        data = child.get_data()
-        self.config.dataset.name = self.original_name
-        return data
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = self.get_child_data(*self.children[0])
+        name, child = self.children[0]
+        data = self.get_child_data(name, child)
+        logger.info(f'Got `{name}` data!')
         for name, child in self.children[1:]:
             child_data = self.get_child_data(name, child)
-            data = data.merge(child_data, left_index=True, right_index=True, copy=False)
+            logger.info(f'Merging `{name}` with previous data...')
+            data = data.merge(child_data, left_index=True, right_index=True)
         return data

@@ -1,4 +1,3 @@
-from collections import defaultdict
 from typing import override
 
 import pandas as pd
@@ -15,11 +14,6 @@ class SnpPreprocessor(Preprocessor):
     @override
     def get_data(self) -> pd.DataFrame:
         # TODO: Use self.read_data()
-        column_dtypes = defaultdict(lambda: 'Int8')
-        column_dtypes['X'] = int
-        column_dtypes['Row.names'] = str
-        data = pd.read_csv(
-            self.config.data_path, index_col='Row.names', dtype=column_dtypes
-        )
-        data = data.drop(columns=['X']).T
+        data = pd.read_csv(self.config.data_path, index_col='Row.names')
+        data = data.drop(columns=['X']).astype('Int8').T
         return data

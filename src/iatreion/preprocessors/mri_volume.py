@@ -96,12 +96,8 @@ class VolumeAverageNewPreprocessor(Preprocessor):
     def get_mean_std(self, data: pd.DataFrame) -> pd.DataFrame:
         vmri = pd.read_excel(self.config.vmri_data_path, sheet_name=['mean', 'sd'])
         data = data.reset_index()
-        data = data.merge(
-            vmri['mean'], on='age_group', suffixes=(None, '_mean'), copy=False
-        )
-        data = data.merge(
-            vmri['sd'], on='age_group', suffixes=(None, '_std'), copy=False
-        )
+        data = data.merge(vmri['mean'], on='age_group', suffixes=(None, '_mean'))
+        data = data.merge(vmri['sd'], on='age_group', suffixes=(None, '_std'))
         data = data.loc[:, ~data.columns.str.startswith('Brainstem')]
         return data.set_index('ID' if self.config.final else 'serial_num')
 

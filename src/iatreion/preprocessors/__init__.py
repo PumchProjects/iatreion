@@ -1,6 +1,6 @@
-from iatreion.configs import DataName, PreprocessorConfig
+from iatreion.configs import PreprocessorConfig
 
-from .base import Preprocessor
+from .base import NamedPreprocessor, Preprocessor
 from .blood_biomarker import BiomarkerPreprocessor
 from .cog_adl import AdlPreprocessor
 from .cog_associative import AssociativeLearningPreprocessor
@@ -20,10 +20,11 @@ from .mri_volume import (
     VolumeAveragePreprocessor,
     VolumePreprocessor,
 )
+from .reference import ReferencePreprocessor
 from .sequential import SequentialPreprocessor
 
 
-def get_preprocessor(config: PreprocessorConfig) -> Preprocessor:
+def get_single_preprocessor(config: PreprocessorConfig) -> Preprocessor:
     match config.dataset.name:
         case 'cdr':
             return CdrPreprocessor(config)
@@ -66,11 +67,26 @@ def get_preprocessor(config: PreprocessorConfig) -> Preprocessor:
         case 'snp':
             return SnpPreprocessor(config)
         case name:
-            children: list[tuple[DataName, Preprocessor]] = []
+            children: list[NamedPreprocessor] = []
             for child_name in config.children_names:
+                # HACK: Essential for recursive sequential data
+                # HACK: Ensures that config.children_names works correctly
                 config.dataset.name = child_name
-                children.append((child_name, get_preprocessor(config)))
+                children.append((child_name, get_single_preprocessor(config)))
             if len(children) == 0:
                 raise ValueError(f'Unknown dataset name: {name}')
             config.dataset.name = name
             return SequentialPreprocessor(config, children)
+
+
+def get_preprocessor(config: PreprocessorConfig) -> Preprocessor:
+    if config.dataset.ref_name is None:
+        return get_single_preprocessor(config)
+    else:
+        name, ref_name = config.dataset.name, config.dataset.ref_name
+        child = (name, get_single_preprocessor(config))
+        config.dataset.name = ref_name
+        ref_child = (ref_name, get_single_preprocessor(config))
+        # HACK: Ensures that data are stored in the correct directory
+        config.dataset.name = name
+        return ReferencePreprocessor(config, child, ref_child)
