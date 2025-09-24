@@ -46,11 +46,11 @@ class Preprocessor(ABC):
         if self.config.dataset.simple:
             data[name] = col
         else:
-            data[f'{name} = {min_value}'] = (col == min_value).astype('Int64')
+            data[f'{name} = {min_value}'] = (col == min_value).astype('Int8')
             for th in range(min_value + 1, max_value):
-                data[f'{name} <= {th}'] = (col <= th).astype('Int64')
-                data[f'{name} >= {th}'] = (col >= th).astype('Int64')
-            data[f'{name} = {max_value}'] = (col == max_value).astype('Int64')
+                data[f'{name} <= {th}'] = (col <= th).astype('Int8')
+                data[f'{name} >= {th}'] = (col >= th).astype('Int8')
+            data[f'{name} = {max_value}'] = (col == max_value).astype('Int8')
         return data
 
     def binarize_column(
@@ -58,25 +58,18 @@ class Preprocessor(ABC):
         data: pd.DataFrame,
         column: str,
         threshold: int,
-        ge_name: str | None = None,
-        lt_name: str | None = None,
+        ge_name: str,
+        lt_name: str,
+        ge_main: bool = True,
     ) -> pd.DataFrame:
-        col: pd.Series = (data[column] >= threshold).astype('Int64')
+        col: pd.Series = (data[column] >= threshold).astype('Int8')
         col[data[column].isnull()] = np.nan
         data = data.drop(columns=[column])
-        if ge_name is not None:
-            name = ge_name
-        else:
-            assert lt_name is not None, (
-                'At least one of ge_name or lt_name must be provided'
-            )
-            name = lt_name
-            col = 1 - col
         if self.config.dataset.simple:
-            data[name] = col
+            data[ge_name if ge_main else lt_name] = col
         else:
-            data[f'{name} = 0'] = (col == 0).astype('Int64')
-            data[f'{name} = 1'] = (col == 1).astype('Int64')
+            data[ge_name] = (col == 1).astype('Int8')
+            data[lt_name] = (col == 0).astype('Int8')
         return data
 
     def read_data(self) -> pd.DataFrame:
