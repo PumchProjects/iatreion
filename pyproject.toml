@@ -87,6 +87,7 @@ exclude = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "src/iatreion/configs/*" = ["E501"]
+"src/iatreion/preprocessors/history.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "single"

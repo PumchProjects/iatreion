@@ -13,6 +13,7 @@ from .cog_mmse_sum import MmseSumPreprocessor
 from .cog_moca import MocaPreprocessor
 from .cog_moca_sum import MocaSumPreprocessor
 from .gene_snp import SnpPreprocessor
+from .history import HistoryPreprocessor
 from .mri_cbf import CbfPreprocessor
 from .mri_csvd import CsvdPreprocessor
 from .mri_volume import (
@@ -26,6 +27,14 @@ from .sequential import SequentialPreprocessor
 
 def get_single_preprocessor(config: PreprocessorConfig) -> Preprocessor:
     match config.dataset.name:
+        case (
+            'life'
+            | 'diet-medication'
+            | 'family-history'
+            | 'medical-history'
+            | 'symptom'
+        ):
+            return HistoryPreprocessor(config, config.dataset.name)
         case 'cdr':
             return CdrPreprocessor(config)
         case 'mmse':

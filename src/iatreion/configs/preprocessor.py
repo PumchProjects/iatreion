@@ -8,6 +8,12 @@ from cyclopts.types import Directory
 from .dataset import DataName, DatasetConfig
 
 data_name_mapping: dict[DataName, str] = {
+    'life': '病史_20250924.xlsx',
+    'diet-medication': '病史_20250924.xlsx',
+    'family-history': '病史_20250924.xlsx',
+    'medical-history': '病史_20250924.xlsx',
+    'symptom': '病史_20250924.xlsx',
+    's-history': 'life,diet-medication,family-history,medical-history,symptom',
     'cdr': '认知_cdr.xlsx',
     'mmse': '认知筛查.xlsx',
     'mmse-sum': '认知筛查.xlsx',

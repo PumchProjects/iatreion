@@ -40,6 +40,7 @@ class Preprocessor(ABC):
         self, data: pd.DataFrame, columns: list[str], name: str
     ) -> pd.DataFrame:
         # skipna=False ensures that NaN will propagate through the sum
+        # np.nan is converted
         col: pd.Series = data[columns].sum(axis=1, skipna=False).astype('Int64')
         data = data.drop(columns=columns)
         min_value, max_value = col.min(), col.max()
@@ -63,7 +64,8 @@ class Preprocessor(ABC):
         ge_main: bool = True,
     ) -> pd.DataFrame:
         col: pd.Series = (data[column] >= threshold).astype('Int8')
-        col[data[column].isnull()] = np.nan
+        # pd.NA propagates in comparisons
+        col[data[column].isnull()] = pd.NA
         data = data.drop(columns=[column])
         if self.config.dataset.simple:
             data[ge_name if ge_main else lt_name] = col
@@ -76,7 +78,7 @@ class Preprocessor(ABC):
         data = pd.read_excel(
             self.config.data_path,
             index_col='ID' if self.config.final else 'serial_num',
-            na_values=['/'],
+            na_values=['/', '#NUM!'],
         )
         return data
 
@@ -109,7 +111,7 @@ class Preprocessor(ABC):
         return data
 
     def get_augmented_vector_name(self, data: pd.DataFrame) -> list[tuple[str, str]]:
-        discrete_th = 10
+        discrete_th = 4
         augmented_vector_name: list[tuple[str, str]] = []
         for name in data.columns:
             try:
@@ -134,15 +136,15 @@ class Preprocessor(ABC):
         with self.config.output_info_path.open('w', encoding='utf-8') as f:
             f.writelines(feature_names)
         fmap: list[str] = []
-        for i, (name, type_) in enumerate(augmented_vector_name[:-4]):
-            name = name.replace(' ', self.config.dataset.place_holder)
+        for i, (name_, type_) in enumerate(augmented_vector_name[:-4]):
+            name = name_.replace(' ', self.config.dataset.place_holder)
             match type_:
                 case 'binary':
                     fmap.append(f'{i}\t{name}\ti\n')
                 case 'continuous':
                     fmap.append(f'{i}\t{name}\tq\n')
                 case _:
-                    raise ValueError(f'Unsupported type: {type_}')
+                    raise ValueError(f'Unsupported type `{type_}` for `{name_}`')
         with self.config.output_fmap_path.open('w', encoding='utf-8') as f:
             f.writelines(fmap)
         with self.config.output_data_path.open('w', encoding='utf-8') as f:
