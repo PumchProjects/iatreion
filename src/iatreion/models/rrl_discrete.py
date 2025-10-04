@@ -28,6 +28,18 @@ class Item(ABC):
 
 
 @dataclass
+class BinaryItem(Item):
+    @override
+    def __str__(self) -> str:
+        return self.name
+
+    @override
+    def eval(self, data: pd.DataFrame) -> NDArray[np.bool_]:
+        value = data[self.name].to_numpy()
+        return value == 1
+
+
+@dataclass
 class DiscreteItem(Item):
     value: str | float
 
@@ -67,15 +79,23 @@ class ContinuousItem(Item):
 
 
 def get_item(item: str) -> Item:
-    units = item.strip().split()
+    item = item.strip()
+    units = item.split()
     if len(units) == 1:
         units = units[0].split('_')
-        try:
-            return DiscreteItem(units[0], float(units[1]))
-        except ValueError:
-            return DiscreteItem(*units)
+        if len(units) == 1:
+            return BinaryItem(item)
+        else:
+            try:
+                return DiscreteItem(units[0], float(units[1]))
+            except ValueError:
+                return DiscreteItem(*units)
     elif len(units) == 3:
-        return ContinuousItem(units[0], units[1], float(units[2]))
+        try:
+            return ContinuousItem(units[0], units[1], float(units[2]))
+        except ValueError:
+            # HACK: Make sure that units[2] cannot be converted to float
+            return BinaryItem(item)
     else:
         raise ValueError(f'Unit length != 1 or 3: {item}')
 

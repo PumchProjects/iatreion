@@ -151,9 +151,9 @@ class HistoryPreprocessor(Preprocessor):
         data[f'{stem} = 无'] = (col < 0).astype('Int8')
         min_age, max_age = int(col[col >= 0].min()), int(col.max())
         for th in range(min_age // 5 * 5 + 4, max_age, 5):
-            data[f'{stem} <= {th}'] = ((col <= th) & (col >= 0)).astype('Int8')
+            data[f'{stem} <= {th}岁'] = ((col <= th) & (col >= 0)).astype('Int8')
         for th in range(min_age // 5 * 5 + 5, max_age + 1, 5):
-            data[f'{stem} >= {th}'] = (col >= th).astype('Int8')
+            data[f'{stem} >= {th}岁'] = (col >= th).astype('Int8')
         return data
 
     def process_continuous_data(
