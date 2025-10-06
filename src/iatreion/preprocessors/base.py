@@ -1,17 +1,57 @@
 from abc import ABC, abstractmethod
-from typing import Self
+from typing import Any, Self
 
 import numpy as np
 import pandas as pd
+import tomli
+import tomli_w
 
 from iatreion.configs import DataName, PreprocessorConfig
+from iatreion.exceptions import IatreionException
 from iatreion.utils import logger
+
+from .process_info import ProcessInfo
 
 
 class Preprocessor(ABC):
     def __init__(self, config: PreprocessorConfig) -> None:
         super().__init__()
         self.config = config
+        self.process_info_dict_: dict[str, dict[str, Any]] | None = None
+        self.process_info_: ProcessInfo | None = None
+
+    @property
+    def process_info_dict(self) -> dict[str, dict[str, Any]]:
+        if self.process_info_dict_ is None:
+            if self.config.process_info_path.is_file():
+                with self.config.process_info_path.open('rb') as f:
+                    self.process_info_dict_ = tomli.load(f)
+            else:
+                self.process_info_dict_ = {}
+        return self.process_info_dict_
+
+    @property
+    def process_info(self) -> ProcessInfo:
+        if self.process_info_ is None:
+            if self.config.final:
+                if self.config.dataset.name not in self.process_info_dict:
+                    raise IatreionException(
+                        'No processing info found for "$dataset"',
+                        dataset=self.config.dataset.name,
+                    )
+                else:
+                    info = self.process_info_dict[self.config.dataset.name]
+                    self.process_info_ = ProcessInfo.from_dict(info)
+            else:
+                self.process_info_ = ProcessInfo()
+        return self.process_info_
+
+    def save_process_info(self) -> None:
+        if not self.config.final and self.process_info_ is not None:
+            info = self.process_info_.to_dict()
+            self.process_info_dict[self.config.dataset.name] = info
+            with self.config.process_info_path.open('wb') as f:
+                tomli_w.dump(self.process_info_dict, f)
 
     def get_group_names(self) -> pd.DataFrame:
         data = pd.read_excel(self.config.group_data_path, index_col='serial_num')
@@ -43,10 +83,10 @@ class Preprocessor(ABC):
         # np.nan is converted
         col: pd.Series = data[columns].sum(axis=1, skipna=False).astype('Int64')
         data = data.drop(columns=columns)
-        min_value, max_value = col.min(), col.max()
         if self.config.dataset.simple:
             data[name] = col
         else:
+            min_value, max_value = col.min(), col.max()
             data[f'{name} = {min_value}'] = (col == min_value).astype('Int8')
             for th in range(min_value + 1, max_value):
                 data[f'{name} <= {th}'] = (col <= th).astype('Int8')
@@ -85,6 +125,11 @@ class Preprocessor(ABC):
     @abstractmethod
     def get_data(self) -> pd.DataFrame: ...
 
+    def get_data_outer(self) -> pd.DataFrame:
+        data = self.get_data()
+        self.save_process_info()
+        return data
+
     @staticmethod
     def deduplicate_rows(data: pd.DataFrame) -> pd.DataFrame:
         # HACK: Keep only the first sample of each patient
@@ -94,7 +139,7 @@ class Preprocessor(ABC):
     def get_child_data(self, name: DataName, child: Self) -> pd.DataFrame:
         original_name = self.config.dataset.name
         self.config.dataset.name = name
-        data = self.deduplicate_rows(child.get_data())
+        data = self.deduplicate_rows(child.get_data_outer())
         self.config.dataset.name = original_name
         return data
 
@@ -155,7 +200,7 @@ class Preprocessor(ABC):
 
     def process(self) -> None:
         group_names = self.get_group_names()
-        data = self.get_data()
+        data = self.get_data_outer()
         data = data.merge(group_names, left_index=True, right_index=True)
         data = self.deduplicate_rows(data)
         data = self.remove_useless_columns(data)

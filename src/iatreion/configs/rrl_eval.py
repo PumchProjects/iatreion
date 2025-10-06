@@ -22,6 +22,9 @@ class RrlEvalConfig:
     thesaurus: Annotated[str, Parameter(name=['--thesaurus', '-t'])] = ''
     'Root directory for trained RRL models.'
 
+    process: Annotated[str, Parameter(name=['--process', '-p'])] = ''
+    'Path to the processing info file.'
+
     data: Annotated[str, Parameter(name=['--data', '-d'])] = ''
     'Path to the data file.'
 
@@ -41,6 +44,7 @@ class RrlEvalConfig:
             output_prefix=Path(),
             vmri_data_path_=Path(self.vmri),
             data_path_=Path(self.data),
+            process_info_path_=Path(self.process),
             final=True,
         )
         rrl_config = DiscreteRrlConfig(

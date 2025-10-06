@@ -58,6 +58,8 @@ class PreprocessorConfig:
 
     data_path_: Annotated[Path | None, Parameter(parse=False)] = None
 
+    process_info_path_: Annotated[Path | None, Parameter(parse=False)] = None
+
     final: Annotated[bool, Parameter(parse=False)] = False
 
     # TODO: Add more parameters for the preprocessor, e.g. filling missing values
@@ -84,6 +86,12 @@ class PreprocessorConfig:
         if self.data_path_ is not None:
             return self.data_path_
         return self.dataset.prefix / data_name_mapping[self.dataset.name]
+
+    @property
+    def process_info_path(self) -> Path:
+        if self.process_info_path_ is not None:
+            return self.process_info_path_
+        return self.output_prefix / 'process_info.toml'
 
     @property
     def output_data_path(self) -> Path:

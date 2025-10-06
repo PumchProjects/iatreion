@@ -80,30 +80,34 @@ class HistoryPreprocessor(Preprocessor):
             )
 
     def parse_column_values(
-        self, values: pd.Series
+        self, data: pd.DataFrame, column: str
     ) -> tuple[pd.Series, list[tuple[int, str]]]:
-        val_map: dict[int, str] = {}
-        for val in values.unique():
-            if not pd.isna(val) and (val_match := self.val_pattern.match(val)):
-                value = int(val_match.group('value'))
-                name = val_match.group('name')
-                val_map[value] = name
+        values = data[column]
+        val_map = self.process_info[column].code_map
+        if not self.config.final:
+            for val in values.unique():
+                if not pd.isna(val) and (val_match := self.val_pattern.match(val)):
+                    value = val_match.group('value')
+                    name = val_match.group('name')
+                    val_map[value] = name
         values = values.replace(regex=self.val_pattern, value=r'\g<value>').astype(
             'Int64'
         )
-        val_list = sorted(val_map.items())
+        val_list = sorted((int(value), name) for value, name in val_map.items())
         return values, val_list
 
     def parse_column_codes(
-        self, codes: pd.Series
+        self, data: pd.DataFrame, column: str
     ) -> tuple[pd.Series, list[tuple[str, str]]]:
-        code_map: dict[str, str] = {}
-        for code in codes.unique():
-            if not pd.isna(code):
-                for code_match in self.code_pattern.finditer(code):
-                    code = code_match.group('code')
-                    name = code_match.group('name')
-                    code_map[code] = name
+        codes = data[column]
+        code_map = self.process_info[column].code_map
+        if not self.config.final:
+            for code in codes.unique():
+                if not pd.isna(code):
+                    for code_match in self.code_pattern.finditer(code):
+                        code = code_match.group('code')
+                        name = code_match.group('name')
+                        code_map[code] = name
         codes.replace(regex=self.code_pattern, value=r'\g<code>', inplace=True)
         code_list = sorted(code_map.items())
         return codes, code_list
@@ -111,7 +115,7 @@ class HistoryPreprocessor(Preprocessor):
     def binarize_single_choice(
         self, data: pd.DataFrame, column: str, ordered: bool = True
     ) -> pd.DataFrame:
-        values, val_list = self.parse_column_values(data[column])
+        values, val_list = self.parse_column_values(data, column)
         data = data.drop(columns=[column])
         stem = self.parse_column_name(column)
         if ordered:
@@ -137,7 +141,7 @@ class HistoryPreprocessor(Preprocessor):
         return data
 
     def binarize_multiple_choice(self, data: pd.DataFrame, column: str) -> pd.DataFrame:
-        codes, code_list = self.parse_column_codes(data[column])
+        codes, code_list = self.parse_column_codes(data, column)
         data = data.drop(columns=[column])
         stem = self.parse_column_name(column)
         for code, name in code_list:
@@ -149,7 +153,13 @@ class HistoryPreprocessor(Preprocessor):
         data = data.drop(columns=[column])
         stem = self.parse_column_name(column)
         data[f'{stem} = 无'] = (col < 0).astype('Int8')
-        min_age, max_age = int(col[col >= 0].min()), int(col.max())
+        if self.config.final:
+            min_age = int(self.process_info[column].min)
+            max_age = int(self.process_info[column].max)
+        else:
+            min_age, max_age = int(col[col >= 0].min()), int(col.max())
+            self.process_info[column].min = min_age
+            self.process_info[column].max = max_age
         for th in range(min_age // 5 * 5 + 4, max_age, 5):
             data[f'{stem} <= {th}岁'] = ((col <= th) & (col >= 0)).astype('Int8')
         for th in range(min_age // 5 * 5 + 5, max_age + 1, 5):
@@ -184,12 +194,16 @@ class HistoryPreprocessor(Preprocessor):
             else:
                 data = self.process_continuous_data(data, col, prev)
 
-        # Drop columns with less than `threshold` non-NaN values
-        thresh = int(len(data) * threshold)
-        data = data.dropna(axis=1, thresh=thresh)
-
-        # Drop rows having any NaN values
-        data = data.dropna()
+        if self.config.final:
+            # Keep only the columns in the processing info
+            data = data[self.process_info.columns].dropna()
+        else:
+            # Drop columns with less than `threshold` non-NaN values
+            thresh = int(len(data) * threshold)
+            data = data.dropna(axis=1, thresh=thresh)
+            self.process_info.columns = data.columns.tolist()
+            # Drop rows having any NaN values
+            data = data.dropna()
 
         return data
 
