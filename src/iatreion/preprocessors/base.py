@@ -46,6 +46,13 @@ class Preprocessor(ABC):
                 self.process_info_ = ProcessInfo()
         return self.process_info_
 
+    def store_columns(self, data: pd.DataFrame) -> None:
+        self.process_info.columns = data.columns.tolist()
+
+    def apply_columns(self, data: pd.DataFrame) -> pd.DataFrame:
+        # Keep only the columns in the processing info
+        return data[self.process_info.columns].dropna()
+
     def save_process_info(self) -> None:
         if not self.config.final and self.process_info_ is not None:
             info = self.process_info_.to_dict()
@@ -87,11 +94,11 @@ class Preprocessor(ABC):
             data[name] = col
         else:
             min_value, max_value = col.min(), col.max()
-            data[f'{name} = {min_value}'] = (col == min_value).astype('Int8')
+            data[f'{name} <= {min_value}'] = (col == min_value).astype('Int8')
             for th in range(min_value + 1, max_value):
                 data[f'{name} <= {th}'] = (col <= th).astype('Int8')
                 data[f'{name} >= {th}'] = (col >= th).astype('Int8')
-            data[f'{name} = {max_value}'] = (col == max_value).astype('Int8')
+            data[f'{name} >= {max_value}'] = (col == max_value).astype('Int8')
         return data
 
     def binarize_column(

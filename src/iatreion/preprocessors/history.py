@@ -195,13 +195,12 @@ class HistoryPreprocessor(Preprocessor):
                 data = self.process_continuous_data(data, col, prev)
 
         if self.config.final:
-            # Keep only the columns in the processing info
-            data = data[self.process_info.columns].dropna()
+            data = self.apply_columns(data)
         else:
             # Drop columns with less than `threshold` non-NaN values
             thresh = int(len(data) * threshold)
             data = data.dropna(axis=1, thresh=thresh)
-            self.process_info.columns = data.columns.tolist()
+            self.store_columns(data)
             # Drop rows having any NaN values
             data = data.dropna()
 
