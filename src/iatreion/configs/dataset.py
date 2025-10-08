@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -53,6 +53,10 @@ class DatasetConfig:
 
     simple: bool = False
     'Whether to use the simple (non-binarized) version of the dataset.'
+
+    group_columns: Annotated[list[str], Parameter(parse=False)] = field(
+        default_factory=lambda: ['encrypted', 'Ab', 'AC to 3', 'AC 60']
+    )
 
     place_holder: Annotated[str, Parameter(parse=False)] = 'Excalibur'
 

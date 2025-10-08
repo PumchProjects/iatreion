@@ -69,7 +69,7 @@ class Preprocessor(ABC):
             },
             inplace=True,
         )
-        return data[['encrypted', 'Ab', 'A_type', 'A_type2']]
+        return data[self.config.dataset.group_columns]
 
     def get_birth_dates(self, data: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
         if self.config.final:
@@ -188,7 +188,9 @@ class Preprocessor(ABC):
         with self.config.output_info_path.open('w', encoding='utf-8') as f:
             f.writelines(feature_names)
         fmap: list[str] = []
-        for i, (name_, type_) in enumerate(augmented_vector_name[:-4]):
+        for i, (name_, type_) in enumerate(
+            augmented_vector_name[: -len(self.config.dataset.group_columns)]
+        ):
             name = name_.replace(' ', self.config.dataset.place_holder)
             match type_:
                 case 'binary':

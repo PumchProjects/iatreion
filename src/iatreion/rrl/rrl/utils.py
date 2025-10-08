@@ -29,23 +29,29 @@ def get_group_mapping(groups):
     return group_mapping
 
 
-def read_csv(data_path, info_path, groups, label_pos, shuffle=False):
+def read_csv(dataset: DatasetConfig, train: TrainConfig, shuffle=False):
+    data_path = dataset.data
+    info_path = dataset.info
+    group_columns = dataset.group_columns
+    groups = train.groups
+    base_pos = train.base_pos
+    label_pos = train.label_pos
+
     f_list = read_info(info_path)
     names = [f[0] for f in f_list]
-    D = pd.read_csv(data_path, names=names, dtype={'encrypted': str, 'Ab': str, 'A_type': str, 'A_type2': str})
+    dtype = {col: str for col in group_columns}
+    D = pd.read_csv(data_path, names=names, dtype=dtype)
     group_mapping = get_group_mapping(groups)
-    if any(key[0] in 'LE' for key in group_mapping):
-        D[label_pos] = D['A_type'].fillna(D[label_pos])
-    elif any(key[0] == 'A' for key in group_mapping):
-        D[label_pos] = D['A_type2'].fillna(D[label_pos])
+    if base_pos:
+        D[label_pos] = D[base_pos].fillna(D[label_pos])
     D[label_pos] = D[label_pos].map(group_mapping)
     D = D[D[label_pos].isin(list(group_mapping.values()))]
     if shuffle:
         D = D.sample(frac=1, random_state=0).reset_index(drop=True)
     f_df = pd.DataFrame(f_list)
     y_df = D[label_pos]
-    X_df = D.drop(['encrypted', 'Ab', 'A_type', 'A_type2'], axis=1)
-    f_df = f_df.drop(f_df.index[[-4, -3, -2, -1]])
+    X_df = D.drop(group_columns, axis=1)
+    f_df = f_df.iloc[:-len(group_columns)]
     return X_df, y_df, f_df
 
 
@@ -167,9 +173,7 @@ def try_resample(train: TrainConfig, f_df: pd.DataFrame, X, y):
 
 
 def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Samples:
-    data_path = dataset.data
-    info_path = dataset.info
-    X_df, y_df, f_df = read_csv(data_path, info_path, train.groups, train.label_pos, shuffle=True)
+    X_df, y_df, f_df = read_csv(dataset, train, shuffle=True)
 
     db_enc = DBEncoder(f_df)
     db_enc.fit(X_df, y_df)
@@ -192,9 +196,7 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Samples:
 
 
 def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> RawSamples:
-    data_path = dataset.data
-    info_path = dataset.info
-    X_df, y_df, f_df = read_csv(data_path, info_path, train.groups, train.label_pos, shuffle=True)
+    X_df, y_df, f_df = read_csv(dataset, train, shuffle=True)
 
     if train.final:
         X_df, y_df = try_resample(train, f_df, X_df, y_df)

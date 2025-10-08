@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-from functools import cached_property
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -23,7 +22,7 @@ type SamplerName = Literal[
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class TrainConfig:
-    group_names_: Annotated[str, Parameter(name=['--groups', '-g'])]
+    group_names: Annotated[str, Parameter(name=['--groups', '-g'])]
     'Group names of the data.'
 
     n_splits: Annotated[int, Parameter(name=['--n-splits', '-ns'])] = 10
@@ -60,27 +59,38 @@ class TrainConfig:
 
     ith_kfold: Annotated[int, Parameter(parse=False)] = 0
 
-    @cached_property
-    def groups(self) -> list[list[str]]:
-        if self.group_names_.strip() == '':
+    base_pos: Annotated[str, Parameter(parse=False)] = ''
+
+    label_pos: Annotated[str, Parameter(parse=False)] = 'encrypted'
+
+    groups: Annotated[list[list[str]], Parameter(parse=False)] = field(
+        default_factory=list
+    )
+
+    def set_groups(self) -> None:
+        if self.group_names.strip() == '':
             raise ValueError('No valid groups found.')
-        groups: list[list[str]] = []
-        for group in self.group_names_.split(','):
+        for group in self.group_names.split(','):
             names: list[str] = []
             i = 0
             while i < len(group):
-                if group[i] in 'LEA':
-                    names.append(group[i : i + 2])
-                    i += 1
+                if group[i].isupper():
+                    if group[i + 1] in ['<', '>']:
+                        self.base_pos = 'AC 60'
+                        names.append(group[i : i + 4])
+                        i += 4
+                    else:
+                        self.base_pos = 'AC to 3'
+                        names.append(group[i : i + 2])
+                        i += 2
                 else:
+                    if group[i] in '12':
+                        self.label_pos = 'Ab'
                     names.append(group[i])
-                i += 1
-            groups.append(sorted(names))
-        return sorted(groups, key=lambda x: x[0])
-
-    @cached_property
-    def group_names(self) -> str:
-        return ','.join(''.join(group) for group in self.groups)
+                    i += 1
+            self.groups.append(sorted(names))
+        self.groups.sort(key=lambda x: x[0])
+        self.group_names = ','.join(''.join(group) for group in self.groups)
 
     @property
     def n_folds(self) -> int:
@@ -89,11 +99,6 @@ class TrainConfig:
     @property
     def num_class(self) -> int:
         return len(self.groups)
-
-    @property
-    def label_pos(self) -> str:
-        group_Ab = any(name in '12' for names in self.groups for name in names)
-        return 'Ab' if group_Ab else 'encrypted'
 
     @property
     def roc_file(self) -> Path:
@@ -105,3 +110,4 @@ class TrainConfig:
         if self.num_class > 2:
             # HACK: Disable ROC plot for multiclass classification
             self.plot_roc = False
+        self.set_groups()
