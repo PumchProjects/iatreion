@@ -1,7 +1,6 @@
 import re
 from typing import override
 
-import numpy as np
 import pandas as pd
 
 from iatreion.configs import PreprocessorConfig
@@ -54,37 +53,29 @@ class CsvdPreprocessor(Preprocessor):
             # Drop unnecessary columns
             drop_columns = ['检查日期', '性别', '年龄', 'hash_num']
             data = data.drop(columns=drop_columns)
-            # Drop columns with (more than) 50% NaN or zero values
-            # TODO: Zeros may be valid values and NaNs may be zeros in some columns
-            threshold = len(data) * 0.5
-            columns = data.columns[
-                data.apply(lambda col: col[~col.isin([0, np.nan])].count() >= threshold)
-            ]
-            data = data[columns]
-            # Drop rows with less than 80% non-NaN values in the remaining columns
-            threshold = int(len(data.columns) * 0.8)
-            data = data.dropna(thresh=threshold)
-            # Drop rows with NaN in specific columns
-            keywords = ['额叶', '顶叶', '颞叶', '基底节区', '半卵圆中心区']
-            columns = [
-                col
-                for col in data.columns
-                if any(keyword in col for keyword in keywords)
-            ]
-            data = data.dropna(subset=columns)
-            # Drop columns having any NaN values
-            data = data.dropna(axis=1)
+            # Drop columns with less than 80% non-NaN values
+            threshold = int(len(data) * 0.8)
+            data = data.dropna(axis=1, thresh=threshold)
             self.store_columns(data)
+            # Drop rows having any NaN values
+            data = data.dropna()
         return data
 
     def binarize(self, data: pd.DataFrame) -> pd.DataFrame:
-        binarize_th = 6
-        for col in data.columns:
-            try:
-                if data[col].nunique(dropna=True) <= binarize_th:
-                    data = self.sum_columns(data, [col], col)
-            except ValueError:
-                continue
+        if self.config.dataset.simple:
+            return data
+        binarize_th = 10
+        for name in data.columns:
+            col = data[name]
+            if (values := col.unique()).size <= binarize_th:
+                data = data.drop(columns=[name])
+                values.sort()
+                min_value, max_value = values[0], values[-1]
+                data[f'{name} <= {min_value}'] = (col <= min_value).astype('Int8')
+                for value in values[1:-1]:
+                    data[f'{name} <= {value}'] = (col <= value).astype('Int8')
+                    data[f'{name} >= {value}'] = (col >= value).astype('Int8')
+                data[f'{name} >= {max_value}'] = (col >= max_value).astype('Int8')
         return data
 
     @override

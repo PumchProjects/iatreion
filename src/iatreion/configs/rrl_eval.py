@@ -37,7 +37,7 @@ class RrlEvalConfig:
     def make_configs(self) -> tuple[PreprocessorConfig, DiscreteRrlConfig]:
         # HACK: Empty prefix
         dataset = DatasetConfig(prefix=Path(), name=self.name, simple=True)
-        train = TrainConfig(group_names_=self.groups, final=True)
+        train = TrainConfig(group_names=self.groups, final=True)
         # HACK: Empty output prefix
         process_config = PreprocessorConfig(
             dataset=dataset,

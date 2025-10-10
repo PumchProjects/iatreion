@@ -30,7 +30,7 @@ data_name_mapping: dict[DataName, str] = {
     'composite-bin': '认知综合.xlsx',
     'biomarker': '血液生物标记物_blood_biomarker.xlsx',
     'cbf': '核磁_cbf.xlsx',
-    'csvd': '核磁_csvd.xlsx',
+    'csvd': '核磁_csvd_20251008.xlsx',
     'volume': '核磁_volume.xlsx',
     'volume-v': '核磁_volume.xlsx',
     'volume-pct': '核磁_volume.xlsx',
