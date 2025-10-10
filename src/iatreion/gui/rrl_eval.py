@@ -6,13 +6,10 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
 
-import tomli
-import tomli_w
-
 from iatreion.api import get_batched_result, get_result
 from iatreion.configs import DataName, RrlEvalConfig
 from iatreion.exceptions import IatreionException
-from iatreion.utils import get_config_path
+from iatreion.utils import get_config_path, load_dict, save_dict
 
 names_mapping: dict[str, DataName] = {
     'MRI Volume': 'volume-pct-nz',
@@ -27,18 +24,13 @@ groups_list = [
 
 
 def load_config(path: Path) -> RrlEvalConfig:
-    if path.is_file():
-        with path.open('rb') as f:
-            config_dict = tomli.load(f)
-        return RrlEvalConfig(**config_dict['rrl-eval'])
-    else:
-        return RrlEvalConfig()
+    config_dict = load_dict(path)
+    return RrlEvalConfig(**config_dict.get('rrl-eval', {}))
 
 
 def save_config(config: RrlEvalConfig, path: Path) -> None:
     config_dict = {'rrl-eval': asdict(config)}
-    with path.open('wb') as f:
-        tomli_w.dump(config_dict, f)
+    save_dict(config_dict, path)
 
 
 def get_key[T, U](mapping: dict[T, U], value: U) -> T:

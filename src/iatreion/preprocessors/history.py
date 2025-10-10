@@ -83,7 +83,7 @@ class HistoryPreprocessor(Preprocessor):
         self, data: pd.DataFrame, column: str
     ) -> tuple[pd.Series, list[tuple[int, str]]]:
         values = data[column]
-        val_map = self.process_info[column].code_map
+        val_map = self.process_info(dict[str, str], column)
         if not self.config.final:
             for val in values.unique():
                 if not pd.isna(val) and (val_match := self.val_pattern.match(val)):
@@ -100,7 +100,7 @@ class HistoryPreprocessor(Preprocessor):
         self, data: pd.DataFrame, column: str
     ) -> tuple[pd.Series, list[tuple[str, str]]]:
         codes = data[column]
-        code_map = self.process_info[column].code_map
+        code_map = self.process_info(dict[str, str], column)
         if not self.config.final:
             for code in codes.unique():
                 if not pd.isna(code):
@@ -154,12 +154,12 @@ class HistoryPreprocessor(Preprocessor):
         stem = self.parse_column_name(column)
         data[f'{stem} = 无'] = (col < 0).astype('Int8')
         if self.config.final:
-            min_age = int(self.process_info[column].min)
-            max_age = int(self.process_info[column].max)
+            min_age = self.process_info(int, column, 'min_age')
+            max_age = self.process_info(int, column, 'max_age')
         else:
             min_age, max_age = int(col[col >= 0].min()), int(col.max())
-            self.process_info[column].min = min_age
-            self.process_info[column].max = max_age
+            self.process_info[column, 'min_age'] = min_age
+            self.process_info[column, 'max_age'] = max_age
         for th in range(min_age // 5 * 5 + 4, max_age, 5):
             data[f'{stem} <= {th}岁'] = ((col <= th) & (col >= 0)).astype('Int8')
         for th in range(min_age // 5 * 5 + 5, max_age + 1, 5):

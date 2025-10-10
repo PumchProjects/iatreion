@@ -3,12 +3,10 @@ from typing import Any, Self
 
 import numpy as np
 import pandas as pd
-import tomli
-import tomli_w
 
 from iatreion.configs import DataName, PreprocessorConfig
 from iatreion.exceptions import IatreionException
-from iatreion.utils import logger
+from iatreion.utils import load_dict, logger, save_dict
 
 from .process_info import ProcessInfo
 
@@ -23,42 +21,38 @@ class Preprocessor(ABC):
     @property
     def process_info_dict(self) -> dict[str, dict[str, Any]]:
         if self.process_info_dict_ is None:
-            if self.config.process_info_path.is_file():
-                with self.config.process_info_path.open('rb') as f:
-                    self.process_info_dict_ = tomli.load(f)
-            else:
-                self.process_info_dict_ = {}
+            self.process_info_dict_ = load_dict(self.config.process_info_path)
         return self.process_info_dict_
 
     @property
     def process_info(self) -> ProcessInfo:
         if self.process_info_ is None:
+            name = self.config.dataset.name
             if self.config.final:
-                if self.config.dataset.name not in self.process_info_dict:
+                if name not in self.process_info_dict:
                     raise IatreionException(
                         'No processing info found for "$dataset"',
-                        dataset=self.config.dataset.name,
+                        dataset=name,
                     )
                 else:
-                    info = self.process_info_dict[self.config.dataset.name]
-                    self.process_info_ = ProcessInfo.from_dict(info)
+                    info = self.process_info_dict[name]
+                    self.process_info_ = ProcessInfo(name, info, final=True)
             else:
-                self.process_info_ = ProcessInfo()
+                self.process_info_ = ProcessInfo(name, final=False)
         return self.process_info_
 
     def store_columns(self, data: pd.DataFrame) -> None:
-        self.process_info.columns = data.columns.tolist()
+        self.process_info['columns'] = data.columns.tolist()
 
     def apply_columns(self, data: pd.DataFrame) -> pd.DataFrame:
         # Keep only the columns in the processing info
-        return data[self.process_info.columns].dropna()
+        return data[self.process_info['columns']].dropna()
 
     def save_process_info(self) -> None:
         if not self.config.final and self.process_info_ is not None:
-            info = self.process_info_.to_dict()
+            info = self.process_info_.attributes
             self.process_info_dict[self.config.dataset.name] = info
-            with self.config.process_info_path.open('wb') as f:
-                tomli_w.dump(self.process_info_dict, f)
+            save_dict(self.process_info_dict, self.config.process_info_path)
 
     def get_group_names(self) -> pd.DataFrame:
         data = pd.read_excel(self.config.group_data_path, index_col='serial_num')
@@ -94,11 +88,11 @@ class Preprocessor(ABC):
             data[name] = col
         else:
             min_value, max_value = col.min(), col.max()
-            data[f'{name} <= {min_value}'] = (col == min_value).astype('Int8')
+            data[f'{name} <= {min_value}'] = (col <= min_value).astype('Int8')
             for th in range(min_value + 1, max_value):
                 data[f'{name} <= {th}'] = (col <= th).astype('Int8')
                 data[f'{name} >= {th}'] = (col >= th).astype('Int8')
-            data[f'{name} >= {max_value}'] = (col == max_value).astype('Int8')
+            data[f'{name} >= {max_value}'] = (col >= max_value).astype('Int8')
         return data
 
     def binarize_column(
@@ -132,21 +126,21 @@ class Preprocessor(ABC):
     @abstractmethod
     def get_data(self) -> pd.DataFrame: ...
 
-    def get_data_outer(self) -> pd.DataFrame:
-        data = self.get_data()
-        self.save_process_info()
-        return data
-
     @staticmethod
     def deduplicate_rows(data: pd.DataFrame) -> pd.DataFrame:
-        # HACK: Keep only the first sample of each patient
-        data = data[~data.index.duplicated(keep='first')]
+        # HACK: Keep only the last sample of each patient
+        data = data[~data.index.duplicated(keep='last')]
+        return data
+
+    def get_data_outer(self) -> pd.DataFrame:
+        data = self.deduplicate_rows(self.get_data())
+        self.save_process_info()
         return data
 
     def get_child_data(self, name: DataName, child: Self) -> pd.DataFrame:
         original_name = self.config.dataset.name
         self.config.dataset.name = name
-        data = self.deduplicate_rows(child.get_data_outer())
+        data = child.get_data_outer()
         self.config.dataset.name = original_name
         return data
 
@@ -156,7 +150,7 @@ class Preprocessor(ABC):
         columns = nunique[nunique <= 1].index
         if not columns.empty:
             logger.warning(
-                f'[bold yellow]Removing useless columns: {", ".join(columns)}',
+                f'[bold yellow]Removing useless columns:[/] {", ".join(columns)}',
                 extra={'markup': True},
             )
             data = data.drop(columns=columns)
@@ -211,6 +205,7 @@ class Preprocessor(ABC):
         group_names = self.get_group_names()
         data = self.get_data_outer()
         data = data.merge(group_names, left_index=True, right_index=True)
+        # HACK: Just in case there are duplicate IDs in the group file
         data = self.deduplicate_rows(data)
         data = self.remove_useless_columns(data)
         augmented_vector_name = self.get_augmented_vector_name(data)

@@ -1,41 +1,43 @@
-from dataclasses import asdict, dataclass, field
-from typing import Any, Self
+from collections.abc import Callable
+from dataclasses import KW_ONLY, dataclass, field
+from typing import Any, cast
 
-
-@dataclass
-class ColumnInfo:
-    code_map: dict[str, str] = field(default_factory=dict)
-    min: float = 0.0
-    max: float = 0.0
-
-    def to_dict(self) -> dict[str, Any]:
-        return {k: v for k, v in asdict(self).items() if v}
+from iatreion.exceptions import IatreionException
 
 
 @dataclass
 class ProcessInfo:
-    columns: list[str] = field(default_factory=list)
-    column_info: dict[str, ColumnInfo] = field(default_factory=dict)
+    name: str
+    attributes: dict[str, Any] = field(default_factory=dict)
+    _: KW_ONLY
+    final: bool
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Self:
-        columns = data.get('columns', [])
-        column_info: dict[str, ColumnInfo] = {}
-        for col, info in data.get('column_info', {}).items():
-            column_info[col] = ColumnInfo(**info)
-        return cls(columns, column_info)
+    def get_map(self, *keys: str) -> dict[str, Any]:
+        map = self.attributes
+        for key in keys:
+            map = cast(dict[str, Any], map.setdefault(key, {}))
+        return map
 
-    def to_dict(self) -> dict[str, Any]:
-        process_info: dict[str, Any] = {}
-        if self.columns:
-            process_info['columns'] = self.columns
-        if self.column_info:
-            process_info['column_info'] = {
-                col: info.to_dict() for col, info in self.column_info.items()
-            }
-        return process_info
+    def __getitem__(self, key: str | tuple[str, ...]) -> Any:
+        if isinstance(key, str):
+            key = (key,)
+        map = self.get_map(*key[:-1])
+        if key[-1] not in map:
+            raise IatreionException(
+                'No processing info "$keys" found for "$dataset"',
+                keys='.'.join(key),
+                dataset=self.name,
+            )
+        return map[key[-1]]
 
-    def __getitem__(self, col: str) -> ColumnInfo:
-        if col not in self.column_info:
-            self.column_info[col] = ColumnInfo()
-        return self.column_info[col]
+    def __call__[T](self, default_factory: Callable[[], T], *keys: str) -> T:
+        if self.final:
+            return cast(T, self[*keys])
+        else:
+            map = self.get_map(*keys[:-1])
+            return cast(T, map.setdefault(keys[-1], default_factory()))
+
+    def __setitem__(self, key: str | tuple[str, ...], value: Any) -> None:
+        if isinstance(key, str):
+            key = (key,)
+        self.get_map(*key[:-1])[key[-1]] = value
