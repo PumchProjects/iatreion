@@ -81,7 +81,6 @@ class Preprocessor(ABC):
         self, data: pd.DataFrame, columns: list[str], name: str
     ) -> pd.DataFrame:
         # skipna=False ensures that NaN will propagate through the sum
-        # np.nan is converted
         col: pd.Series = data[columns].sum(axis=1, skipna=False).astype('Int64')
         data = data.drop(columns=columns)
         if self.config.dataset.simple:
@@ -105,8 +104,6 @@ class Preprocessor(ABC):
         ge_main: bool = True,
     ) -> pd.DataFrame:
         col: pd.Series = (data[column] >= threshold).astype('Int8')
-        # pd.NA propagates in comparisons
-        col[data[column].isnull()] = pd.NA
         data = data.drop(columns=[column])
         if self.config.dataset.simple:
             data[ge_name if ge_main else lt_name] = col
@@ -120,6 +117,7 @@ class Preprocessor(ABC):
             self.config.data_path,
             index_col='ID' if self.config.final else 'serial_num',
             na_values=['/', '#NUM!'],
+            dtype_backend='numpy_nullable',
         )
         return data
 

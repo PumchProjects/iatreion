@@ -31,6 +31,6 @@ class ModelTrainer(Trainer):
         return training_time, y_test, y_score, complexity
 
     @override
-    def train_final(self):
+    def train_final(self) -> None:
         _, X_train, y_train, _, _ = get_samples(self.dataset_config, self.train_config)
         self.model.fit(X_train, y_train)

@@ -39,6 +39,6 @@ class RawModelTrainer(Trainer):
         return training_time, y_true, y_score, complexity
 
     @override
-    def train_final(self):
+    def train_final(self) -> None:
         X_train, y_train, _, _ = get_raw_samples(self.dataset_config, self.train_config)
         self.model.fit(X_train, y_train)
