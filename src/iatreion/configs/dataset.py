@@ -48,9 +48,6 @@ class DatasetConfig:
     name: Annotated[DataName, Parameter(name=['--name', '-n'])]
     'Name of the data file.'
 
-    ref_name: Annotated[DataName | None, Parameter(name=['--ref', '-r'])] = None
-    'Reference dataset name for sample alignment.'
-
     simple: bool = False
     'Whether to use the simple (non-binarized) version of the dataset.'
 
@@ -62,11 +59,7 @@ class DatasetConfig:
 
     @property
     def true_name(self) -> str:
-        return (
-            f'{self.name}'
-            f'{f"-ref-{self.ref_name}" if self.ref_name is not None else ""}'
-            f'{"-simple" if self.simple else ""}'
-        )
+        return f'{self.name}-simple' if self.simple else self.name
 
     @property
     def data(self) -> Path:

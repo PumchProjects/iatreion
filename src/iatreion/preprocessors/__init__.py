@@ -21,7 +21,6 @@ from .mri_volume import (
     VolumeAveragePreprocessor,
     VolumePreprocessor,
 )
-from .reference import ReferencePreprocessor
 from .sequential import SequentialPreprocessor
 
 
@@ -89,13 +88,4 @@ def get_single_preprocessor(config: PreprocessorConfig) -> Preprocessor:
 
 
 def get_preprocessor(config: PreprocessorConfig) -> Preprocessor:
-    if config.dataset.ref_name is None:
-        return get_single_preprocessor(config)
-    else:
-        name, ref_name = config.dataset.name, config.dataset.ref_name
-        child = (name, get_single_preprocessor(config))
-        config.dataset.name = ref_name
-        ref_child = (ref_name, get_single_preprocessor(config))
-        # HACK: Ensures that data are stored in the correct directory
-        config.dataset.name = name
-        return ReferencePreprocessor(config, child, ref_child)
+    return get_single_preprocessor(config)
