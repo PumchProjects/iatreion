@@ -14,5 +14,5 @@ class CbfPreprocessor(Preprocessor):
     @override
     def get_data(self) -> pd.DataFrame:
         data = self.read_data()
-        data = data.drop(columns=['date', 'hash_num']).dropna()
+        data = self.drop_columns(data, ['date'], ['hash_num'])
         return data

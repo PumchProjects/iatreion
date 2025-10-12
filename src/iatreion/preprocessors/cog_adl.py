@@ -23,5 +23,5 @@ class AdlPreprocessor(Preprocessor):
         data['ADL_B'] = data['badl']
         data['ADL_T'] = data['adl']
         drop_columns = [col for col in data.columns if not col.startswith('ADL_')]
-        data = data.drop(columns=drop_columns).dropna()
+        data = self.drop_columns(data, drop_columns)
         return data

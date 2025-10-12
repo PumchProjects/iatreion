@@ -47,5 +47,5 @@ class MmseSumPreprocessor(Preprocessor):
         # 总分
         data['MMSE_总分'] = data['mmse_selfcalc']
         drop_columns = [col for col in data.columns if not col.startswith('MMSE_')]
-        data = data.drop(columns=drop_columns).dropna()
+        data = self.drop_columns(data, drop_columns)
         return data

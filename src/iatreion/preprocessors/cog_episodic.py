@@ -14,5 +14,5 @@ class EpisodicMemoryPreprocessor(Preprocessor):
     @override
     def get_data(self) -> pd.DataFrame:
         data = self.read_data()
-        data = data.loc[:, ['情景记忆总分']].dropna()
+        data = data.loc[:, ['情景记忆总分']]
         return data

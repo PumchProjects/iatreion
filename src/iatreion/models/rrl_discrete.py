@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Self, override
 
-import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 from scipy.special import softmax
@@ -24,7 +23,7 @@ class Item(ABC):
     def __str__(self) -> str: ...
 
     @abstractmethod
-    def eval(self, data: pd.DataFrame) -> NDArray[np.bool_]: ...
+    def eval(self, data: pd.DataFrame) -> 'pd.Series[pd.BooleanDtype]': ...
 
 
 @dataclass
@@ -34,8 +33,8 @@ class BinaryItem(Item):
         return self.name
 
     @override
-    def eval(self, data: pd.DataFrame) -> NDArray[np.bool_]:
-        value = data[self.name].to_numpy()
+    def eval(self, data: pd.DataFrame) -> 'pd.Series[pd.BooleanDtype]':
+        value = data[self.name]
         return value == 1
 
 
@@ -48,8 +47,8 @@ class DiscreteItem(Item):
         return f'{self.name} = {self.value}'
 
     @override
-    def eval(self, data: pd.DataFrame) -> NDArray[np.bool_]:
-        value = data[self.name].to_numpy()
+    def eval(self, data: pd.DataFrame) -> 'pd.Series[pd.BooleanDtype]':
+        value = data[self.name]
         return value == self.value
 
 
@@ -63,8 +62,8 @@ class ContinuousItem(Item):
         return f'{self.name} {self.op} {self.th}'
 
     @override
-    def eval(self, data: pd.DataFrame) -> NDArray[np.bool_]:
-        value = data[self.name].to_numpy()
+    def eval(self, data: pd.DataFrame) -> 'pd.Series[pd.BooleanDtype]':
+        value = data[self.name]
         match self.op:
             case '<':
                 return value < self.th
@@ -151,7 +150,7 @@ class Rule:
         inner = f' {self.op} '.join([str(item) for item in self.items])
         return f'{"~" if self.is_not else ""}({inner})'
 
-    def eval(self, data: pd.DataFrame) -> NDArray[np.bool_]:
+    def eval(self, data: pd.DataFrame) -> 'pd.Series[pd.BooleanDtype]':
         result = self.items[0].eval(data)
         for item in self.items[1:]:
             other = item.eval(data)
@@ -166,24 +165,35 @@ class Rule:
 
 
 class Line:
-    def __init__(self, line: str) -> None:
+    def __init__(self, line: str, labels: list[str]) -> None:
         units = line.split('\t')
         self.weights = list(map(float, units[1:-2]))
         self.support = float(units[-2])
         self.rule = Rule(units[-1])
+        self.labels = labels
 
     def print_rule(self) -> str:
         return str(self.rule)[1:-1]
 
-    def eval(self, data: pd.DataFrame) -> NDArray:
+    def eval(self, data: pd.DataFrame) -> pd.DataFrame:
         result = self.rule.eval(data)
-        return np.stack([result * weight for weight in self.weights], axis=-1)
+        return pd.DataFrame(
+            {
+                label: result * weight
+                for label, weight in zip(self.labels, self.weights, strict=False)
+            }
+        )
 
-    def interpret(self, data: pd.DataFrame, active_lines: list[Self]) -> NDArray:
+    def interpret(self, data: pd.DataFrame, active_lines: list[Self]) -> pd.DataFrame:
         result = self.rule.eval(data)
-        if result.item():
+        if not pd.isna(r := result.item()) and r:
             active_lines.append(self)
-        return np.stack([result * weight for weight in self.weights], axis=-1)
+        return pd.DataFrame(
+            {
+                label: result * weight
+                for label, weight in zip(self.labels, self.weights, strict=False)
+            }
+        )
 
 
 class Rrl:
@@ -210,23 +220,38 @@ class Rrl:
             assert match_obj is not None, f'Invalid header: {header}!'
             self.labels.append(match_obj.group('label').split('_')[-1])
             self.biases.append(float(match_obj.group('bias')))
-        self.lines = [Line(line) for line in texts[1:]]
+        self.lines = [Line(line, self.labels) for line in texts[1:]]
 
-    def eval(self, data: pd.DataFrame, prob: bool = False) -> NDArray:
-        result = np.repeat([self.biases], data.shape[0], axis=0)
+    def eval(self, data: pd.DataFrame) -> pd.DataFrame:
+        result = pd.DataFrame(
+            {
+                label: [bias] * len(data)
+                for label, bias in zip(self.labels, self.biases, strict=False)
+            },
+            dtype='Float64',
+            index=data.index,
+        )
         for line in self.lines:
             result += line.eval(data)
-        if prob:
-            return softmax(result / self.temp, axis=1)
         return result
 
-    def interpret(self, data: pd.DataFrame) -> tuple[list[float], list[Line]]:
-        result = np.array([self.biases])
+    def predict(self, data: pd.DataFrame) -> NDArray:
+        result = self.eval(data).astype(float).values
+        return softmax(result / self.temp, axis=1)
+
+    def interpret(self, data: pd.DataFrame) -> tuple[pd.DataFrame, list[Line]]:
+        result = pd.DataFrame(
+            {
+                label: [bias]
+                for label, bias in zip(self.labels, self.biases, strict=False)
+            },
+            dtype='Float64',
+            index=data.index,
+        )
         active_lines: list[Line] = []
         for line in self.lines:
             result += line.interpret(data, active_lines)
-        result_list = result.squeeze().tolist()
-        return result_list, active_lines
+        return result, active_lines
 
 
 class DiscreteRrlModel(RawModel):
@@ -251,15 +276,13 @@ class DiscreteRrlModel(RawModel):
 
     @override
     def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
-        predicted = self.get_rrl().eval(X, prob=True)
+        predicted = self.get_rrl().predict(X)
         return predicted, {}
 
-    def eval(self, data: pd.DataFrame) -> tuple[NDArray, Rrl]:
-        rrl = self.get_rrl()
-        result = rrl.eval(data)
-        return result, rrl
+    def eval(self, data: pd.DataFrame) -> pd.DataFrame:
+        return self.get_rrl().eval(data)
 
-    def interpret(self, data: pd.DataFrame) -> tuple[list[float], list[Line], Rrl]:
+    def interpret(self, data: pd.DataFrame) -> tuple[pd.DataFrame, list[Line], Rrl]:
         rrl = self.get_rrl()
         result, active_lines = rrl.interpret(data.head(1))
         return result, active_lines, rrl

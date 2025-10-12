@@ -14,5 +14,5 @@ class AvltPreprocessor(Preprocessor):
     @override
     def get_data(self) -> pd.DataFrame:
         data = self.read_data()
-        data = data.loc[:, ['AVLT.1', 'AVLT.I', 'AVLT.4', 'AVLT.5', 'AVLT.T']].dropna()
+        data = data.loc[:, ['AVLT.1', 'AVLT.I', 'AVLT.4', 'AVLT.5', 'AVLT.T']]
         return data

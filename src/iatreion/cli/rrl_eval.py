@@ -40,11 +40,11 @@ def display_result(config: RrlEvalConfig) -> None:
 
 def display_batched_result(config: RrlEvalConfig) -> None:
     result = get_batched_result(config)
-    result_table = get_table('Result', 'ID', 'Label', 'Score')
+    result_table = get_table('Result', *result.index.names, 'Label', 'Score')
     for index, label, score in zip(
         result.index, result['Label'], result['Score'], strict=False
     ):
-        result_table.add_row(str(index), label, f'{score:.2f}')
+        result_table.add_row(*index, label, f'{score:.2f}')
     console.print(result_table)
 
 

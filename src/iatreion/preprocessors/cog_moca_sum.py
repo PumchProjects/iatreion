@@ -44,9 +44,11 @@ class MocaSumPreprocessor(Preprocessor):
         data['MoCA_分类提示'] = (
             data['分类提示']
             .div(5 - data[recall_columns[0]].fillna(0), fill_value=0)
+            .astype(float)
             .fillna(1)
+            .astype('Float64')
         )
-        data = data[data['MoCA_分类提示'] <= 1]
+        data.loc[data['MoCA_分类提示'] > 1, 'MoCA_分类提示'] = pd.NA
         data = self.sum_columns(data, recall_columns, 'MoCA_回忆')
         # 时间定向
         time_columns = ['日期', '月份', '年代', '星期']
@@ -57,5 +59,5 @@ class MocaSumPreprocessor(Preprocessor):
         # 总分
         data['MoCA_总分'] = data['moca_selfcalc']
         drop_columns = [col for col in data.columns if not col.startswith('MoCA_')]
-        data = data.drop(columns=drop_columns).dropna()
+        data = self.drop_columns(data, drop_columns)
         return data

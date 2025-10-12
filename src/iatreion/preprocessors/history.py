@@ -3,7 +3,7 @@ from typing import override
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_object_dtype
+from pandas.api.types import is_string_dtype
 
 from iatreion.configs import PreprocessorConfig
 
@@ -189,20 +189,16 @@ class HistoryPreprocessor(Preprocessor):
                 data = self.binarize_multiple_choice(data, col)
             elif col in unordered_columns:
                 data = self.binarize_single_choice(data, col, ordered=False)
-            elif is_object_dtype(data[col]):
+            elif is_string_dtype(data[col]):
                 data = self.binarize_single_choice(data, col)
             else:
                 data = self.process_continuous_data(data, col, prev)
 
-        if self.config.final:
-            data = self.apply_columns(data)
-        else:
+        if not self.config.final:
             # Drop columns with less than `threshold` non-NaN values
             thresh = int(len(data) * threshold)
             data = data.dropna(axis=1, thresh=thresh)
-            self.store_columns(data)
-            # Drop rows having any NaN values
-            data = data.dropna()
+            # Drop rows having any NaN values implicitly
 
         return data
 
@@ -288,7 +284,7 @@ class HistoryPreprocessor(Preprocessor):
 
         # Fill data for normal people
         fill_values = {col: '0(a=无)' for col in data.columns}
-        fill_values['V14_发病时间'] = -1
+        fill_values['V14_发病时间'] = '-1'
         fill_values['V312_首发症状'] = '4(n=无)'
         data.replace('无', fill_values, inplace=True)
 

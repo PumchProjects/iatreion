@@ -47,18 +47,14 @@ class CsvdPreprocessor(Preprocessor):
         return data
 
     def filter(self, data: pd.DataFrame) -> pd.DataFrame:
-        if self.config.final:
-            data = self.apply_columns(data)
-        else:
-            # Drop unnecessary columns
-            drop_columns = ['检查日期', '性别', '年龄', 'hash_num']
-            data = data.drop(columns=drop_columns)
+        # Drop unnecessary columns
+        drop_columns = ['检查日期', '性别', '年龄']
+        data = self.drop_columns(data, drop_columns, ['hash_num'])
+        if not self.config.final:
             # Drop columns with less than 80% non-NaN values
             threshold = int(len(data) * 0.8)
             data = data.dropna(axis=1, thresh=threshold)
-            self.store_columns(data)
-            # Drop rows having any NaN values
-            data = data.dropna()
+            # Drop rows having any NaN values implicitly
         return data
 
     def binarize(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -67,12 +63,13 @@ class CsvdPreprocessor(Preprocessor):
         binarize_th = 10
         for name in data.columns:
             col = data[name]
-            if (values := col.unique()).size <= binarize_th:
+            if (n := col.nunique()) <= binarize_th:
                 data = data.drop(columns=[name])
-                values.sort()
-                min_value, max_value = values[0], values[-1]
+                values = col.unique()
+                values = values[values.argsort()]
+                min_value, max_value = values[0], values[n - 1]
                 data[f'{name} <= {min_value}'] = (col <= min_value).astype('Int8')
-                for value in values[1:-1]:
+                for value in values[1 : n - 1]:
                     data[f'{name} <= {value}'] = (col <= value).astype('Int8')
                     data[f'{name} >= {value}'] = (col >= value).astype('Int8')
                 data[f'{name} >= {max_value}'] = (col >= max_value).astype('Int8')

@@ -14,6 +14,6 @@ class CdrPreprocessor(Preprocessor):
     @override
     def get_data(self) -> pd.DataFrame:
         data = self.read_data()
-        drop_columns = ['性别', '出生年月日', '受教育年限', '填表日期', 'hash_num']
-        data = data.drop(columns=drop_columns).dropna()
+        drop_columns = ['性别', '出生年月日', '受教育年限', '填表日期']
+        data = self.drop_columns(data, drop_columns, ['hash_num'])
         return data

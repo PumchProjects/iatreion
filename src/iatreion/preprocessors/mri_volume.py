@@ -15,7 +15,7 @@ class VolumePreprocessor(Preprocessor):
     def get_data(self) -> pd.DataFrame:
         data = self.read_data()
         columns = [col for col in data.columns if col.endswith('_Z')]
-        data = data[columns].dropna(axis=1, how='all').dropna()
+        data = data[columns].dropna(axis=1, how='all')
         return data
 
 
@@ -48,9 +48,7 @@ class VolumeAveragePreprocessor(Preprocessor):
             data[f'{col}_A_{self.feature}_Z'] = (
                 data[f'{col}_L_{self.feature}_Z'] + data[f'{col}_R_{self.feature}_Z']
             ) * 0.5
-        data = (
-            data[c_columns + a_columns + ai_columns].dropna(axis=1, how='all').dropna()
-        )
+        data = data[c_columns + a_columns + ai_columns].dropna(axis=1, how='all')
         return data
 
 
@@ -85,21 +83,28 @@ class VolumeAverageNewPreprocessor(Preprocessor):
 
     def calc_age_groups(self, data: pd.DataFrame) -> pd.DataFrame:
         data = data.loc[:, :'CC_Posterior_pct']  # type: ignore
-        data = data.dropna(subset=['MRI_time'])
         data, birth_dates = self.get_birth_dates(data)
         MRI_time = pd.to_datetime(data['MRI_time'], utc=True)
         real_ages = (MRI_time - birth_dates).dt.days // 365.2422
-        data['age_group'] = real_ages.apply(self.match_group)
-        data = data.dropna(subset=['age_group'])
+        data['age_group'] = real_ages.apply(self.match_group).astype('string')
         return data
 
     def get_mean_std(self, data: pd.DataFrame) -> pd.DataFrame:
-        vmri = pd.read_excel(self.config.vmri_data_path, sheet_name=['mean', 'sd'])
-        data = data.reset_index()
-        data = data.merge(vmri['mean'], on='age_group', suffixes=(None, '_mean'))
-        data = data.merge(vmri['sd'], on='age_group', suffixes=(None, '_std'))
+        vmri = pd.read_excel(
+            self.config.vmri_data_path,
+            sheet_name=['mean', 'sd'],
+            dtype_backend='numpy_nullable',
+        )
+        data.reset_index(inplace=True)
+        data = data.merge(
+            vmri['mean'], how='left', on='age_group', suffixes=(None, '_mean')
+        )
+        data = data.merge(
+            vmri['sd'], how='left', on='age_group', suffixes=(None, '_std')
+        )
         data = data.loc[:, ~data.columns.str.startswith('Brainstem')]
-        return data.set_index('ID' if self.config.final else 'serial_num')
+        data.set_index(self.index_name, inplace=True)
+        return data
 
     def get_columns(self, data: pd.DataFrame) -> tuple[list[str], ...]:
         ai_columns = [col for col in data.columns if col.endswith('_Asymmetry_index')]
@@ -154,5 +159,5 @@ class VolumeAverageNewPreprocessor(Preprocessor):
         c_columns, lr_columns, ai_columns = self.get_columns(data)
         cz_columns = self.calc_central_z_scores(data, c_columns)
         az_columns = self.calc_average_z_scores(data, lr_columns)
-        data = data[cz_columns + az_columns + ai_columns].dropna()
+        data = data[cz_columns + az_columns + ai_columns]
         return data

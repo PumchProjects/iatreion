@@ -56,5 +56,5 @@ class CompositePreprocessor(Preprocessor):
             data.loc[:, ['AVLT.1', 'AVLT.I', 'AVLT.4', 'AVLT.5', 'AVLT.T']],
             data.loc[:, ['相似性总分', '计算总分']],
         ]
-        data = pd.concat(selected, axis=1).dropna()
+        data = pd.concat(selected, axis=1)
         return data

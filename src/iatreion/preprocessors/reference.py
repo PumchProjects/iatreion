@@ -21,9 +21,10 @@ class ReferencePreprocessor(Preprocessor):
 
     @override
     def get_data(self) -> pd.DataFrame:
-        data = self.get_child_data(*self.child)
+        data = self.get_child_data(*self.child, copy_indices=True)
         logger.info(f'Got `{self.child[0]}` data!')
-        ref_data = self.get_child_data(*self.ref_child)
-        logger.info(f'Referencing to `{self.ref_child[0]}` data...')
-        data = data[data.index.isin(ref_data.index)]
+        if not self.config.final:
+            ref_data = self.get_child_data(*self.ref_child)
+            logger.info(f'Referencing to `{self.ref_child[0]}` data...')
+            data = data[data.index.isin(ref_data.index)]
         return data

@@ -15,8 +15,19 @@ class Preprocessor(ABC):
     def __init__(self, config: PreprocessorConfig) -> None:
         super().__init__()
         self.config = config
+        self.index_name = 'ID' if config.final else 'serial_num'
+        self.final_indices_names: list[str] = []
+        self.final_indices_: pd.DataFrame | None = None
         self.process_info_dict_: dict[str, dict[str, Any]] | None = None
         self.process_info_: ProcessInfo | None = None
+
+    def register_indices(self, *indices: str) -> None:
+        self.final_indices_names += indices
+
+    @property
+    def final_indices(self) -> pd.DataFrame:
+        assert self.final_indices_ is not None
+        return self.final_indices_
 
     @property
     def process_info_dict(self) -> dict[str, dict[str, Any]]:
@@ -41,15 +52,8 @@ class Preprocessor(ABC):
                 self.process_info_ = ProcessInfo(name, final=False)
         return self.process_info_
 
-    def store_columns(self, data: pd.DataFrame) -> None:
-        self.process_info['columns'] = data.columns.tolist()
-
-    def apply_columns(self, data: pd.DataFrame) -> pd.DataFrame:
-        # Keep only the columns in the processing info
-        return data[self.process_info['columns']].dropna()
-
     def save_process_info(self) -> None:
-        if not self.config.final and self.process_info_ is not None:
+        if self.process_info_ is not None:
             info = self.process_info_.attributes
             self.process_info_dict[self.config.dataset.name] = info
             save_dict(self.process_info_dict, self.config.process_info_path)
@@ -74,7 +78,9 @@ class Preprocessor(ABC):
                 self.config.birth_data_path, index_col='serial_num'
             )
             birth_dates = pd.to_datetime(birth_data['实际出生日期'])
-            data = data.merge(birth_dates, left_index=True, right_index=True)
+            data = data.merge(
+                birth_dates, how='left', left_index=True, right_index=True
+            )
             return data, data['实际出生日期']
 
     def sum_columns(
@@ -112,13 +118,28 @@ class Preprocessor(ABC):
             data[lt_name] = (col == 0).astype('Int8')
         return data
 
+    def drop_columns(
+        self,
+        data: pd.DataFrame,
+        columns: list[str] | None = None,
+        additional_columns: list[str] | None = None,
+    ) -> pd.DataFrame:
+        if self.config.final:
+            if columns is not None:
+                data = data.drop(columns=columns)
+        else:
+            data = data.drop(columns=(columns or []) + (additional_columns or []))
+        return data
+
     def read_data(self) -> pd.DataFrame:
         data = pd.read_excel(
             self.config.data_path,
-            index_col='ID' if self.config.final else 'serial_num',
+            # HACK: serial_num is needed for merging birth dates
+            index_col=self.index_name,
             na_values=['/', '#NUM!'],
             dtype_backend='numpy_nullable',
         )
+        self.final_indices_ = data[self.final_indices_names].astype(str)
         return data
 
     @abstractmethod
@@ -130,16 +151,31 @@ class Preprocessor(ABC):
         data = data[~data.index.duplicated(keep='last')]
         return data
 
-    def get_data_outer(self) -> pd.DataFrame:
-        data = self.deduplicate_rows(self.get_data())
-        self.save_process_info()
+    def get_data_outer(self, add_indices: bool = False) -> pd.DataFrame:
+        data = self.get_data()
+        if self.config.final:
+            if len(data) != len(self.final_indices):
+                raise ValueError('The number of samples after processing is changed')
+            if add_indices:
+                data.loc[:, self.final_indices_names] = self.final_indices
+                data.reset_index(inplace=True)
+                data.set_index(
+                    [self.index_name] + self.final_indices_names, inplace=True
+                )
+        else:
+            data = self.deduplicate_rows(data.dropna())
+            self.save_process_info()
         return data
 
-    def get_child_data(self, name: DataName, child: Self) -> pd.DataFrame:
+    def get_child_data(
+        self, name: DataName, child: Self, copy_indices: bool = False
+    ) -> pd.DataFrame:
         original_name = self.config.dataset.name
         self.config.dataset.name = name
         data = child.get_data_outer()
         self.config.dataset.name = original_name
+        if copy_indices:
+            self.final_indices_ = child.final_indices_
         return data
 
     @staticmethod

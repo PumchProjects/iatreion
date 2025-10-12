@@ -20,5 +20,5 @@ class MmsePreprocessor(Preprocessor):
                 data.loc[:, '减7_1st':'mmse_selfcalc'],  # type: ignore
             ],
             axis=1,
-        ).dropna()
+        )
         return data

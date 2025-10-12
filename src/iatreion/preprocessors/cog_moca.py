@@ -18,9 +18,11 @@ class MocaPreprocessor(Preprocessor):
         data['MoCA_分类提示'] = (
             data['分类提示']
             .div(5 - data[recall_columns[0]].fillna(0), fill_value=0)
+            .astype(float)
             .fillna(1)
+            .astype('Float64')
         )
-        data = data[data['MoCA_分类提示'] <= 1]
+        data.loc[data['MoCA_分类提示'] > 1, 'MoCA_分类提示'] = pd.NA
         data = self.sum_columns(data, recall_columns, 'MoCA_回忆')
         data = pd.concat(
             [
@@ -30,5 +32,5 @@ class MocaPreprocessor(Preprocessor):
                 data.loc[:, 'MoCA_分类提示':],  # type: ignore
             ],
             axis=1,
-        ).dropna()
+        )
         return data
