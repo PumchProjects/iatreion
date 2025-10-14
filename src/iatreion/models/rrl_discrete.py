@@ -5,11 +5,9 @@ from pathlib import Path
 from typing import Self, override
 
 import pandas as pd
-from numpy.typing import NDArray
 from scipy.special import softmax
 
-from iatreion.configs import DiscreteRrlConfig
-from iatreion.exceptions import IatreionException
+from iatreion.configs import DataName, DiscreteRrlConfig
 from iatreion.utils import logger
 
 from .base import ModelReturn, RawModel
@@ -175,18 +173,11 @@ class Line:
     def print_rule(self) -> str:
         return str(self.rule)[1:-1]
 
-    def eval(self, data: pd.DataFrame) -> pd.DataFrame:
+    def eval(
+        self, data: pd.DataFrame, active_lines: list[Self] | None = None
+    ) -> pd.DataFrame:
         result = self.rule.eval(data)
-        return pd.DataFrame(
-            {
-                label: result * weight
-                for label, weight in zip(self.labels, self.weights, strict=False)
-            }
-        )
-
-    def interpret(self, data: pd.DataFrame, active_lines: list[Self]) -> pd.DataFrame:
-        result = self.rule.eval(data)
-        if not pd.isna(r := result.item()) and r:
+        if active_lines is not None and not pd.isna(r := result.item()) and r:
             active_lines.append(self)
         return pd.DataFrame(
             {
@@ -222,7 +213,9 @@ class Rrl:
             self.biases.append(float(match_obj.group('bias')))
         self.lines = [Line(line, self.labels) for line in texts[1:]]
 
-    def eval(self, data: pd.DataFrame) -> pd.DataFrame:
+    def eval(
+        self, data: pd.DataFrame, active_lines: list[Self] | None = None
+    ) -> pd.DataFrame:
         result = pd.DataFrame(
             {
                 label: [bias] * len(data)
@@ -232,43 +225,24 @@ class Rrl:
             index=data.index,
         )
         for line in self.lines:
-            result += line.eval(data)
-        return result
-
-    def predict(self, data: pd.DataFrame) -> NDArray:
-        result = self.eval(data).astype(float).values
-        return softmax(result / self.temp, axis=1)
-
-    def interpret(self, data: pd.DataFrame) -> tuple[pd.DataFrame, list[Line]]:
-        result = pd.DataFrame(
-            {
-                label: [bias]
-                for label, bias in zip(self.labels, self.biases, strict=False)
-            },
-            dtype='Float64',
-            index=data.index,
-        )
-        active_lines: list[Line] = []
-        for line in self.lines:
-            result += line.interpret(data, active_lines)
-        return result, active_lines
+            result += line.eval(data, active_lines)
+        return result / self.temp
 
 
 class DiscreteRrlModel(RawModel):
     def __init__(self, config: DiscreteRrlConfig) -> None:
         super().__init__()
         self.config = config
-        exp_root = self.config.get_best_exp_root()
-        if exp_root is None:
-            raise IatreionException(
-                'No experiment root found for $dataset and groups "$groups".',
-                dataset=self.config.dataset.name,
-                groups=self.config.train.group_names,
-            )
-        self.exp_root = exp_root
+        self.exp_roots = config.get_best_exp_roots()
 
-    def get_rrl(self) -> Rrl:
-        return Rrl(self.config.get_rrl_file(self.exp_root))
+    def get_models(self) -> list[Rrl]:
+        return [Rrl(self.config.get_rrl_file(exp_root)) for exp_root in self.exp_roots]
+
+    def aggregate(
+        self, models: list[Rrl], predictions: list[pd.DataFrame]
+    ) -> pd.DataFrame:
+        results = sum(predictions) / len(predictions)
+        return results
 
     @override
     def fit(self, X: pd.DataFrame, y: pd.Series) -> None:
@@ -276,13 +250,34 @@ class DiscreteRrlModel(RawModel):
 
     @override
     def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
-        predicted = self.get_rrl().predict(X)
-        return predicted, {}
+        models = self.get_models()
+        predictions = [model.eval(X) for model in models]
+        results = self.aggregate(models, predictions)
+        return softmax(results.astype(float).values, axis=1), {}
 
-    def eval(self, data: pd.DataFrame) -> pd.DataFrame:
-        return self.get_rrl().eval(data)
+    def eval(self, data: list[pd.DataFrame]) -> pd.DataFrame:
+        models = self.get_models()
+        predictions = [model.eval(X) for X, model in zip(data, models, strict=False)]
+        results = self.aggregate(models, predictions)
+        return results
 
-    def interpret(self, data: pd.DataFrame) -> tuple[pd.DataFrame, list[Line], Rrl]:
-        rrl = self.get_rrl()
-        result, active_lines = rrl.interpret(data.head(1))
-        return result, active_lines, rrl
+    def interpret(
+        self, data: list[pd.DataFrame]
+    ) -> tuple[
+        list[DataName],
+        list[Rrl],
+        list[pd.DataFrame],
+        list[tuple[DataName, Line]],
+        pd.DataFrame,
+    ]:
+        names = self.config.dataset.names
+        models = self.get_models()
+        predictions: list[pd.DataFrame] = []
+        active_lines: list[tuple[DataName, Line]] = []
+        for name, X, model in zip(names, data, models, strict=False):
+            lines: list[Line] = []
+            pred = model.eval(X.head(1), lines)
+            predictions.append(pred)
+            active_lines += [(name, line) for line in lines]
+        result = self.aggregate(models, predictions)
+        return names, models, predictions, active_lines, result

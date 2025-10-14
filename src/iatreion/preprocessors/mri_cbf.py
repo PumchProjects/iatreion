@@ -2,14 +2,14 @@ from typing import override
 
 import pandas as pd
 
-from iatreion.configs import PreprocessorConfig
+from iatreion.configs import DataName, PreprocessorConfig
 
 from .base import Preprocessor
 
 
 class CbfPreprocessor(Preprocessor):
-    def __init__(self, config: PreprocessorConfig) -> None:
-        super().__init__(config)
+    def __init__(self, config: PreprocessorConfig, name: DataName) -> None:
+        super().__init__(config, name)
 
     @override
     def get_data(self) -> pd.DataFrame:

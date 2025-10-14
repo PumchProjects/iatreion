@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_string_dtype
 
-from iatreion.configs import PreprocessorConfig
+from iatreion.configs import DataName, PreprocessorConfig
 
 from .base import Preprocessor
 
@@ -49,9 +49,8 @@ class HistoryPreprocessor(Preprocessor):
         re.VERBOSE,
     )
 
-    def __init__(self, config: PreprocessorConfig, part: str) -> None:
-        super().__init__(config)
-        self.part = part
+    def __init__(self, config: PreprocessorConfig, name: DataName) -> None:
+        super().__init__(config, name)
 
     def convert_object_to_int(
         self, data: pd.DataFrame, columns: list[str]
@@ -310,7 +309,7 @@ class HistoryPreprocessor(Preprocessor):
         # Set "undefined" as NaN
         data.replace(regex=self.unk_pattern, value=np.nan, inplace=True)
 
-        match self.part:
+        match self.name:
             case 'life':
                 data = self.get_life_data(data)
             case 'diet-medication':
@@ -322,6 +321,6 @@ class HistoryPreprocessor(Preprocessor):
             case 'symptom':
                 data = self.get_symptom_data(data)
             case _:
-                raise ValueError(f'Unknown part: {self.part}')
+                raise ValueError(f'Unknown part: {self.name}')
 
         return data

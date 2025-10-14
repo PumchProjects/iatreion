@@ -81,7 +81,7 @@ class Net(nn.Module):
 
 class RRL:
     def __init__(self, dim_list, use_not=False, writer=None, left=None,
-                 right=None, save_best=False, estimated_grad=False, save_path=None, use_skip=False, 
+                 right=None, save_best=False, estimated_grad=False, save_model_callback=None, use_skip=False,
                  use_nlaf=False, alpha=0.999, beta=8, gamma=1, temperature=0.01):
         super(RRL, self).__init__()
         self.dim_list = dim_list
@@ -97,7 +97,7 @@ class RRL:
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.save_best = save_best
         self.estimated_grad = estimated_grad
-        self.save_path = save_path
+        self.save_model_callback = save_model_callback
         
         self.writer = writer
 
@@ -274,9 +274,7 @@ class RRL:
         return y_pred_b, accuracy_b, f1_score_b
 
     def save_model(self):
-        rrl_args = {'dim_list': self.dim_list, 'use_not': self.use_not, 'use_skip': self.use_skip, 'estimated_grad': self.estimated_grad, 
-                    'use_nlaf': self.use_nlaf, 'alpha': self.alpha, 'beta': self.beta, 'gamma': self.gamma}
-        torch.save({'model_state_dict': self.net.state_dict(), 'rrl_args': rrl_args}, self.save_path)
+        self.save_model_callback(self)
 
     def detect_dead_node(self, data_loader=None):
         with torch.no_grad():

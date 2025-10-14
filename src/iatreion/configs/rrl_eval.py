@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated
 
@@ -13,10 +13,14 @@ from .train import TrainConfig
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class RrlEvalConfig:
-    name: Annotated[DataName, Parameter(name=['--name', '-n'])] = 'volume-pct-nz'
+    names: Annotated[
+        list[DataName], Parameter(name=['--names', '-n'], consume_multiple=True)
+    ] = field(default_factory=list)
     'Name of the data file.'
 
-    groups: Annotated[str, Parameter(name=['--groups', '-g'])] = 'a,f'
+    groups: Annotated[
+        list[str], Parameter(name=['--groups', '-g'], consume_multiple=True)
+    ] = field(default_factory=list)
     'Group names of the data.'
 
     thesaurus: Annotated[str, Parameter(name=['--thesaurus', '-t'])] = ''
@@ -25,7 +29,9 @@ class RrlEvalConfig:
     process: Annotated[str, Parameter(name=['--process', '-p'])] = ''
     'Path to the processing info file.'
 
-    data: Annotated[str, Parameter(name=['--data', '-d'])] = ''
+    data: Annotated[dict[str, str], Parameter(name=['--data', '-d'])] = field(
+        default_factory=dict
+    )
     'Path to the data file.'
 
     vmri: Annotated[str, Parameter(name=['--vmri', '-v'])] = ''
@@ -34,18 +40,22 @@ class RrlEvalConfig:
     batched: Annotated[bool, Parameter(name=['--batched', '-b'], negative='')] = False
     'Whether to use batched inference.'
 
+    debug: Annotated[bool, Parameter(name=['--debug', '-D'], negative='')] = False
+    'Whether to enable debug mode.'
+
     def make_configs(self) -> tuple[PreprocessorConfig, DiscreteRrlConfig]:
-        # HACK: Empty prefix
-        dataset = DatasetConfig(prefix=Path(), name=self.name, simple=True)
+        # HACK: Empty prefix, set simple to True implicitly
+        dataset = DatasetConfig(prefix=Path(), names=self.names)
         train = TrainConfig(group_names=self.groups, final=True)
         # HACK: Empty output prefix
         process_config = PreprocessorConfig(
             dataset=dataset,
             output_prefix=Path(),
             vmri_data_path_=Path(self.vmri),
-            data_path_=Path(self.data),
+            data_paths={name: Path(path) for name, path in self.data.items()},
             process_info_path_=Path(self.process),
             final=True,
+            debug=self.debug,
         )
         rrl_config = DiscreteRrlConfig(
             dataset=dataset, train=train, thesaurus=Path(self.thesaurus)

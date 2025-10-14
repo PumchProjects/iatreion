@@ -5,7 +5,7 @@ import pandas as pd
 
 from iatreion.configs import RrlEvalConfig
 from iatreion.models import DiscreteRrlModel
-from iatreion.preprocessors import get_preprocessor
+from iatreion.preprocessors import get_preprocessors
 
 
 @overload
@@ -43,42 +43,57 @@ def calc_score(arr: list[float] | pd.DataFrame) -> 'float | pd.Series[float]':
         return (arr.max(axis=1) - arr.min(axis=1)).astype(float)
 
 
-def get_data_model(config: RrlEvalConfig) -> tuple[pd.DataFrame, DiscreteRrlModel]:
+def get_data_model(
+    config: RrlEvalConfig,
+) -> tuple[list[pd.DataFrame], list[pd.DataFrame], DiscreteRrlModel]:
     process_config, rrl_config = config.make_configs()
-    preprocessor = get_preprocessor(process_config)
-    data = preprocessor.get_data_outer(add_indices=True)
+    preprocessors = get_preprocessors(process_config)
+    data = [preprocessor.get_data_outer() for preprocessor in preprocessors]
+    additional_data = process_config.final_indices
     model = DiscreteRrlModel(rrl_config)
-    return data, model
+    return data, additional_data, model
 
 
 def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
-    data, model = get_data_model(config)
-    result, active_lines, rrl = model.interpret(data)
+    data, _, model = get_data_model(config)
+    names, models, predictions, active_lines, result = model.interpret(data)
     max_label = get_max_label(result).item()
     result_list = [[max_label, f'{calc_score(result).item():.2f}']]
-    bias_max_label = get_max_label(rrl.biases, rrl.labels)
-    bias_list = [[bias_max_label, f'{calc_score(rrl.biases):.2f}']]
+    score_list: list[list[str]] = []
+    for name, pred in zip(names, predictions, strict=False):
+        pred_max_label = get_max_label(pred).item()
+        pred_score = calc_score(pred).item()
+        score_list.append([name, pred_max_label, f'{pred_score:.2f}'])
+    bias_list: list[list[str]] = []
+    for name, rrl in zip(names, models, strict=False):
+        bias_max_label = get_max_label(rrl.biases, rrl.labels)
+        bias_score = calc_score(rrl.biases)
+        bias_list.append([name, bias_max_label, f'{bias_score / rrl.temp:.2f}'])
     support_list: list[list[str]] = []
     oppose_list: list[list[str]] = []
     if max_label:
-        for line in active_lines:
-            weight_max_label = get_max_label(line.weights, rrl.labels)
+        for name, line in active_lines:
+            weight_max_label = get_max_label(line.weights, line.labels)
             score = calc_score(line.weights)
+            rule_list = [
+                name,
+                weight_max_label,
+                f'{score / rrl.temp:.2f}',
+                line.print_rule(),
+            ]
             if weight_max_label == max_label:
-                support_list.append(
-                    [weight_max_label, f'{score:.2f}', line.print_rule()]
-                )
+                support_list.append(rule_list)
             else:
-                oppose_list.append(
-                    [weight_max_label, f'{score:.2f}', line.print_rule()]
-                )
-    return result_list, bias_list, support_list, oppose_list
+                oppose_list.append(rule_list)
+    return result_list, score_list, bias_list, support_list, oppose_list
 
 
 def get_batched_result(config: RrlEvalConfig) -> pd.DataFrame:
-    data, model = get_data_model(config)
+    data, additional_data, model = get_data_model(config)
     result = model.eval(data)
     y_pred = get_max_label(result)
+    y_pred.name = 'Label'
     y_score = calc_score(result)
-    df = pd.DataFrame({'Label': y_pred, 'Score': y_score})
+    y_score.name = 'Score'
+    df = pd.concat(additional_data + [y_pred, y_score], axis=1)
     return df

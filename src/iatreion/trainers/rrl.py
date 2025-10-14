@@ -1,6 +1,5 @@
-import os
 from time import perf_counter_ns
-from typing import override
+from typing import Any, override
 
 from iatreion.configs import RrlConfig
 from iatreion.rrl import get_samples
@@ -14,21 +13,26 @@ class RrlTrainer(Trainer):
     def __init__(self, config: RrlConfig) -> None:
         super().__init__(config.dataset, config.train)
         self.config = config
+        self.samples = get_samples(config.dataset, config.train)
+        self.model: Any = None
         set_seed_torch(self.train_config.seed)
+
+    def save_model_callback(self, model: Any | None) -> Any:
+        if model is not None:
+            self.model = model
+        return self.model
 
     @override
     def train_step(self) -> TrainerReturn:
-        samples = get_samples(self.dataset_config, self.train_config)
+        samples = next(self.samples)
         start = perf_counter_ns()
-        train_model(self.config, samples)
+        train_model(self.config, self.save_model_callback, samples)
         end = perf_counter_ns()
         training_time = (end - start) / 1e9
-        y_score, complexity = test_model(self.config, samples)
-        os.remove(self.config.model)
+        y_score, complexity = test_model(self.config, self.model, samples)
         return training_time, samples[4], y_score, {'Log#E': complexity}
 
     @override
     def train_final(self) -> None:
-        samples = get_samples(self.dataset_config, self.train_config)
-        train_model(self.config, samples)
-        os.remove(self.config.model)
+        samples = next(self.samples)
+        train_model(self.config, self.save_model_callback, samples)

@@ -2,14 +2,16 @@ from typing import override
 
 import pandas as pd
 
-from iatreion.configs import PreprocessorConfig
+from iatreion.configs import DataName, PreprocessorConfig
 
 from .base import Preprocessor
 
 
 class AdlPreprocessor(Preprocessor):
-    def __init__(self, config: PreprocessorConfig, is_sum: bool = False) -> None:
-        super().__init__(config)
+    def __init__(
+        self, config: PreprocessorConfig, name: DataName, is_sum: bool = False
+    ) -> None:
+        super().__init__(config, name)
         self.is_sum = is_sum
 
     @override

@@ -17,12 +17,11 @@ class ModelTrainer(Trainer):
     ) -> None:
         super().__init__(dataset_config, train_config)
         self.model = model
+        self.samples = get_samples(dataset_config, train_config)
 
     @override
     def train_step(self) -> TrainerReturn:
-        _, X_train, y_train, X_test, y_test = get_samples(
-            self.dataset_config, self.train_config
-        )
+        _, X_train, y_train, X_test, y_test = next(self.samples)
         start = perf_counter_ns()
         self.model.fit(X_train, y_train)
         end = perf_counter_ns()
@@ -32,5 +31,5 @@ class ModelTrainer(Trainer):
 
     @override
     def train_final(self) -> None:
-        _, X_train, y_train, _, _ = get_samples(self.dataset_config, self.train_config)
+        _, X_train, y_train, _, _ = next(self.samples)
         self.model.fit(X_train, y_train)

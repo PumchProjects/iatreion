@@ -22,11 +22,14 @@ class RandomForestModel(Model):
         self.feature_names = self.get_feature_names()
 
     def get_feature_names(self) -> list[str]:
-        with self.config.dataset.fmap.open('r', encoding='utf-8') as f:
-            feature_names = [
-                line.split('\t')[1].replace(self.config.dataset.place_holder, ' ')
-                for line in f
-            ]
+        feature_names: list[str] = []
+        for name in self.config.dataset.names:
+            fmap = self.config.dataset.get_fmap(name)
+            with fmap.open('r', encoding='utf-8') as f:
+                feature_names += [
+                    line.split('\t')[1].replace(self.config.dataset.place_holder, ' ')
+                    for line in f
+                ]
         return feature_names
 
     @override

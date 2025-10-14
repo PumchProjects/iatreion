@@ -35,7 +35,6 @@ type DataName = Literal[
     'volume-pct-nz',
     'snp',
     's-all',
-    'tic-tac-toe',  # sanity test
 ]
 
 
@@ -45,30 +44,37 @@ class DatasetConfig:
     prefix: Annotated[ExistingDirectory, Parameter(name=['--prefix', '-p'])]
     'Prefix of the data files.'
 
-    name: Annotated[DataName, Parameter(name=['--name', '-n'])]
-    'Name of the data file.'
+    names: Annotated[
+        list[DataName], Parameter(name=['--names', '-n'], consume_multiple=True)
+    ]
+    """Names of the data files.
+For discrete RRL, separate models are evaluated and then aggregated.
+For other models, features are concatenated.
+"""
 
-    simple: bool = False
+    simple: Annotated[bool, Parameter(parse=False)] = False
     'Whether to use the simple (non-binarized) version of the dataset.'
 
     group_columns: Annotated[list[str], Parameter(parse=False)] = field(
         default_factory=lambda: ['encrypted', 'Ab', 'AC to 3', 'AC 60']
     )
 
+    index_name: Annotated[str, Parameter(parse=False)] = 'serial_num'
+
     place_holder: Annotated[str, Parameter(parse=False)] = 'Excalibur'
 
     @property
-    def true_name(self) -> str:
-        return f'{self.name}-simple' if self.simple else self.name
+    def name_str(self) -> str:
+        return ', '.join(self.names)
 
-    @property
-    def data(self) -> Path:
-        return self.prefix / f'{self.true_name}.data'
+    def true_name(self, name: DataName) -> str:
+        return f'{name}-simple' if self.simple else name
 
-    @property
-    def info(self) -> Path:
-        return self.prefix / f'{self.true_name}.info'
+    def get_data(self, name: DataName, prefix: Path | None = None) -> Path:
+        return (prefix or self.prefix) / f'{self.true_name(name)}.data'
 
-    @property
-    def fmap(self) -> Path:
-        return self.prefix / f'{self.true_name}.fmap'
+    def get_info(self, name: DataName, prefix: Path | None = None) -> Path:
+        return (prefix or self.prefix) / f'{self.true_name(name)}.info'
+
+    def get_fmap(self, name: DataName, prefix: Path | None = None) -> Path:
+        return (prefix or self.prefix) / f'{self.true_name(name)}.fmap'

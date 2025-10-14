@@ -17,6 +17,7 @@ class RawModelTrainer(Trainer):
     ) -> None:
         super().__init__(dataset_config, train_config)
         self.model = model
+        self.samples = get_raw_samples(dataset_config, train_config)
         self.group_mapping = self.get_group_mapping()
 
     def get_group_mapping(self) -> dict[str, int]:
@@ -27,9 +28,7 @@ class RawModelTrainer(Trainer):
 
     @override
     def train_step(self) -> TrainerReturn:
-        X_train, y_train, X_test, y_test = get_raw_samples(
-            self.dataset_config, self.train_config
-        )
+        X_train, y_train, X_test, y_test = next(self.samples)
         y_true = y_test.map(self.group_mapping).to_numpy()
         start = perf_counter_ns()
         self.model.fit(X_train, y_train)
@@ -40,5 +39,5 @@ class RawModelTrainer(Trainer):
 
     @override
     def train_final(self) -> None:
-        X_train, y_train, _, _ = get_raw_samples(self.dataset_config, self.train_config)
+        X_train, y_train, _, _ = next(self.samples)
         self.model.fit(X_train, y_train)

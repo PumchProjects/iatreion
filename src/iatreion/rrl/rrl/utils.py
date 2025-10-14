@@ -1,3 +1,5 @@
+from collections.abc import Generator
+
 import numpy as np
 import pandas as pd
 from imblearn.combine import SMOTEENN, SMOTETomek
@@ -7,7 +9,7 @@ from sklearn import preprocessing
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import RepeatedStratifiedKFold
 
-from iatreion.configs import DatasetConfig, TrainConfig
+from iatreion.configs import DataName, DatasetConfig, TrainConfig
 from iatreion.utils import logger
 
 pd.set_option('future.no_silent_downcasting', True)
@@ -29,30 +31,48 @@ def get_group_mapping(groups):
     return group_mapping
 
 
-def read_csv(dataset: DatasetConfig, train: TrainConfig, shuffle=False):
-    data_path = dataset.data
-    info_path = dataset.info
+def read_csv(name: DataName, dataset: DatasetConfig, train: TrainConfig):
+    data_path = dataset.get_data(name)
+    info_path = dataset.get_info(name)
     group_columns = dataset.group_columns
+    index_name = dataset.index_name
     groups = train.groups
     base_pos = train.base_pos
     label_pos = train.label_pos
 
     f_list = read_info(info_path)
-    names = [f[0] for f in f_list]
+    names = [index_name] + [f[0] for f in f_list]
     dtype = {col: str for col in group_columns}
-    D = pd.read_csv(data_path, names=names, dtype=dtype)
+    D = pd.read_csv(data_path, names=names, index_col=index_name, dtype=dtype)
     group_mapping = get_group_mapping(groups)
     if base_pos:
         D[label_pos] = D[base_pos].fillna(D[label_pos])
     D[label_pos] = D[label_pos].map(group_mapping)
     D = D[D[label_pos].isin(list(group_mapping.values()))]
-    if shuffle:
-        D = D.sample(frac=1, random_state=0).reset_index(drop=True)
-    f_df = pd.DataFrame(f_list)
     y_df = D[label_pos]
-    X_df = D.drop(group_columns, axis=1)
-    f_df = f_df.iloc[:-len(group_columns)]
-    return X_df, y_df, f_df
+    X_df = D.drop(columns=group_columns)
+    f_list = f_list[:-len(group_columns)]
+    return X_df, y_df, f_list
+
+
+def read_data(dataset: DatasetConfig, train: TrainConfig, shuffle: bool = False):
+    X_df, y_df, f_list = read_csv(dataset.names[0], dataset, train)
+    for name in dataset.names[1:]:
+        child_X_df, _, child_f_list = read_csv(name, dataset, train)
+        X_df = X_df.merge(child_X_df, how='inner', left_index=True, right_index=True)
+        f_list += child_f_list
+    y_df = y_df[X_df.index]
+    f_df = pd.DataFrame(f_list)
+    if train.ref_names is not None:
+        _, ref_y_df, _ = read_csv(train.ref_names[0], dataset, train)
+        for name in train.ref_names[1:]:
+            _, child_y_df, _ = read_csv(name, dataset, train)
+            ref_y_df = ref_y_df[ref_y_df.index.intersection(child_y_df.index)]
+    else:
+        ref_y_df = y_df
+    if shuffle:
+        ref_y_df = ref_y_df.sample(frac=1, random_state=0)
+    return X_df, y_df, ref_y_df, f_df
 
 
 class DBEncoder:
@@ -172,8 +192,8 @@ def try_resample(train: TrainConfig, f_df: pd.DataFrame, X, y):
     return X, y
 
 
-def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Samples:
-    X_df, y_df, f_df = read_csv(dataset, train, shuffle=True)
+def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Samples, None, None]:
+    X_df, y_df, ref_y_df, f_df = read_data(dataset, train, shuffle=True)
 
     db_enc = DBEncoder(f_df)
     db_enc.fit(X_df, y_df)
@@ -182,32 +202,44 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Samples:
 
     if train.final:
         X, y = try_resample(train, f_df, X, y)
-        return db_enc, X, y, X, y
+        yield db_enc, X, y, X, y
+    else:
+        kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
+        for train_, test in kf.split(ref_y_df, ref_y_df):
+            test_index = ref_y_df.index[test]
+            if train.true_ref:
+                train_index = ref_y_df.index[train_]
+            else:
+                train_index = X_df.index.difference(test_index)
+            train_arr = np.array([X_df.index.get_loc(i) for i in train_index])
+            test_arr = np.array([X_df.index.get_loc(i) for i in test_index])
+            X_train = X[train_arr]
+            y_train = y[train_arr]
+            X_test = X[test_arr]
+            y_test = y[test_arr]
 
-    kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
-    train_index, test_index = list(kf.split(X_df, y_df))[train.ith_kfold]
-    X_train = X[train_index]
-    y_train = y[train_index]
-    X_test = X[test_index]
-    y_test = y[test_index]
-
-    X_train, y_train = try_resample(train, f_df, X_train, y_train)
-    return db_enc, X_train, y_train, X_test, y_test
+            X_train, y_train = try_resample(train, f_df, X_train, y_train)
+            yield db_enc, X_train, y_train, X_test, y_test
 
 
-def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> RawSamples:
-    X_df, y_df, f_df = read_csv(dataset, train, shuffle=True)
+def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[RawSamples, None, None]:
+    X_df, y_df, ref_y_df, f_df = read_data(dataset, train, shuffle=True)
 
     if train.final:
         X_df, y_df = try_resample(train, f_df, X_df, y_df)
-        return X_df, y_df, X_df, y_df
+        yield X_df, y_df, X_df, y_df
+    else:
+        kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
+        for train_, test in kf.split(ref_y_df, ref_y_df):
+            test_index = ref_y_df.index[test]
+            if train.true_ref:
+                train_index = ref_y_df.index[train_]
+            else:
+                train_index = X_df.index.difference(test_index)
+            X_train = X_df.loc[train_index]
+            y_train = y_df.loc[train_index]
+            X_test = X_df.loc[test_index]
+            y_test = y_df.loc[test_index]
 
-    kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
-    train_index, test_index = list(kf.split(X_df, y_df))[train.ith_kfold]
-    X_train = X_df.iloc[train_index]
-    y_train = y_df.iloc[train_index]
-    X_test = X_df.iloc[test_index]
-    y_test = y_df.iloc[test_index]
-
-    X_train, y_train = try_resample(train, f_df, X_train, y_train)
-    return X_train, y_train, X_test, y_test
+            X_train, y_train = try_resample(train, f_df, X_train, y_train)
+            yield X_train, y_train, X_test, y_test

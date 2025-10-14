@@ -1,42 +1,68 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 
+import pandas as pd
 from cyclopts import Parameter
 from cyclopts.types import Directory
 
+from iatreion.utils import load_dict, logger, save_dict
+
 from .dataset import DataName, DatasetConfig
 
-data_name_mapping: dict[DataName, str] = {
-    'life': '病史_20250924.xlsx',
-    'diet-medication': '病史_20250924.xlsx',
-    'family-history': '病史_20250924.xlsx',
-    'medical-history': '病史_20250924.xlsx',
-    'symptom': '病史_20250924.xlsx',
-    's-history': 'life,diet-medication,family-history,medical-history,symptom',
+data_file_mapping: dict[str, str] = {
+    'history': '病史_20250924.xlsx',
     'cdr': '认知_cdr.xlsx',
-    'mmse': '认知筛查.xlsx',
-    'mmse-sum': '认知筛查.xlsx',
-    'moca': '认知筛查.xlsx',
-    'moca-sum': '认知筛查.xlsx',
-    'adl': '认知筛查.xlsx',
-    'adl-sum': '认知筛查.xlsx',
-    # HACK: Store a tuple of names here
-    's-screen-sum': 'mmse-sum,moca-sum,adl-sum',
-    'associative-learning': '认知综合.xlsx',
-    'episodic-memory': '认知综合.xlsx',
-    'avlt': '认知综合.xlsx',
-    's-composite-aea': 'associative-learning,episodic-memory,avlt',
-    'composite-bin': '认知综合.xlsx',
+    'screen': '认知筛查.xlsx',
+    'composite': '认知综合.xlsx',
     'biomarker': '血液生物标记物_blood_biomarker.xlsx',
     'cbf': '核磁_cbf.xlsx',
     'csvd': '核磁_csvd_20251008.xlsx',
     'volume': '核磁_volume.xlsx',
-    'volume-v': '核磁_volume.xlsx',
-    'volume-pct': '核磁_volume.xlsx',
-    'volume-v-nz': '核磁_volume.xlsx',
-    'volume-pct-nz': '核磁_volume.xlsx',
     'snp': '基因_snp.csv',
+}
+
+data_indices_mapping: dict[str, list[str]] = {
+    'history': [],
+    'cdr': ['填表日期'],
+    'screen': ['测试日期'],
+    'composite': ['填表日期'],
+    'biomarker': [],
+    'cbf': ['date'],
+    'csvd': ['检查日期/Study.date'],
+    'volume': ['MRI_time'],
+    'snp': [],
+}
+
+name_data_mapping: dict[DataName, str] = {
+    'life': 'history',
+    'diet-medication': 'history',
+    'family-history': 'history',
+    'medical-history': 'history',
+    'symptom': 'history',
+    's-history': 'life,diet-medication,family-history,medical-history,symptom',
+    'cdr': 'cdr',
+    'mmse': 'screen',
+    'mmse-sum': 'screen',
+    'moca': 'screen',
+    'moca-sum': 'screen',
+    'adl': 'screen',
+    'adl-sum': 'screen',
+    's-screen-sum': 'mmse-sum,moca-sum,adl-sum',
+    'associative-learning': 'composite',
+    'episodic-memory': 'composite',
+    'avlt': 'composite',
+    's-composite-aea': 'associative-learning,episodic-memory,avlt',
+    'composite-bin': 'composite',
+    'biomarker': 'biomarker',
+    'cbf': 'cbf',
+    'csvd': 'csvd',
+    'volume': 'volume',
+    'volume-v': 'volume',
+    'volume-pct': 'volume',
+    'volume-v-nz': 'volume',
+    'volume-pct-nz': 'volume',
+    'snp': 'snp',
     's-all': 's-screen-sum,s-composite-aea,volume-pct-nz,snp',
 }
 
@@ -56,16 +82,32 @@ class PreprocessorConfig:
 
     vmri_data_path_: Annotated[Path | None, Parameter(parse=False)] = None
 
-    data_path_: Annotated[Path | None, Parameter(parse=False)] = None
+    data_paths: Annotated[dict[str, Path] | None, Parameter(parse=False)] = None
 
     process_info_path_: Annotated[Path | None, Parameter(parse=False)] = None
 
     final: Annotated[bool, Parameter(parse=False)] = False
 
+    debug: Annotated[bool, Parameter(parse=False)] = False
+
+    data: Annotated[dict[str, pd.DataFrame], Parameter(parse=False)] = field(
+        default_factory=dict
+    )
+
+    final_indices: Annotated[list[pd.DataFrame], Parameter(parse=False)] = field(
+        default_factory=list
+    )
+
+    process_info_dict_: Annotated[
+        dict[str, dict[str, Any]] | None, Parameter(parse=False)
+    ] = None
+
     # TODO: Add more parameters for the preprocessor, e.g. filling missing values
 
     def __post_init__(self) -> None:
         self.output_prefix.mkdir(parents=True, exist_ok=True)
+        if self.final and not self.debug:
+            self.dataset.index_name = 'ID'
 
     @property
     def group_data_path(self) -> Path:
@@ -81,11 +123,16 @@ class PreprocessorConfig:
             return self.vmri_data_path_
         return self.dataset.prefix / 'Vmri_mean_sd.xlsx'
 
-    @property
-    def data_path(self) -> Path:
-        if self.data_path_ is not None:
-            return self.data_path_
-        return self.dataset.prefix / data_name_mapping[self.dataset.name]
+    def data_name(self, name: DataName) -> str:
+        return name_data_mapping[name]
+
+    def data_path(self, data_name: str) -> Path:
+        if self.data_paths is not None:
+            return self.data_paths[data_name]
+        return self.dataset.prefix / data_file_mapping[data_name]
+
+    def indices_names(self, data_name: str) -> list[str]:
+        return data_indices_mapping[data_name]
 
     @property
     def process_info_path(self) -> Path:
@@ -93,23 +140,30 @@ class PreprocessorConfig:
             return self.process_info_path_
         return self.output_prefix / 'process_info.toml'
 
-    @property
-    def output_data_path(self) -> Path:
-        return self.output_prefix / f'{self.dataset.true_name}.data'
+    def output_data_path(self, name: DataName) -> Path:
+        return self.dataset.get_data(name, self.output_prefix)
 
-    @property
-    def output_info_path(self) -> Path:
-        return self.output_prefix / f'{self.dataset.true_name}.info'
+    def output_info_path(self, name: DataName) -> Path:
+        return self.dataset.get_info(name, self.output_prefix)
 
-    @property
-    def output_fmap_path(self) -> Path:
-        return self.output_prefix / f'{self.dataset.true_name}.fmap'
+    def output_fmap_path(self, name: DataName) -> Path:
+        return self.dataset.get_fmap(name, self.output_prefix)
 
-    @property
-    def children_names(self) -> list[DataName]:
-        if self.dataset.name.startswith('s-'):
+    def children_names(self, name: DataName) -> list[DataName]:
+        if name.startswith('s-'):
             return [
-                cast(DataName, name)
-                for name in data_name_mapping[self.dataset.name].split(',')
+                cast(DataName, child_name)
+                for child_name in name_data_mapping[name].split(',')
             ]
         return []
+
+    @property
+    def process_info_dict(self) -> dict[str, dict[str, Any]]:
+        if self.process_info_dict_ is None:
+            self.process_info_dict_ = load_dict(self.process_info_path)
+        return self.process_info_dict_
+
+    def save_process_info_dict(self) -> None:
+        if self.process_info_dict_ is not None:
+            logger.info('[bold green]Saving processing info...', extra={'markup': True})
+            save_dict(self.process_info_dict_, self.process_info_path)

@@ -1,6 +1,6 @@
-from iatreion.configs import PreprocessorConfig
+from iatreion.configs import DataName, PreprocessorConfig
 
-from .base import NamedPreprocessor, Preprocessor
+from .base import Preprocessor
 from .blood_biomarker import BiomarkerPreprocessor
 from .cog_adl import AdlPreprocessor
 from .cog_associative import AssociativeLearningPreprocessor
@@ -24,8 +24,8 @@ from .mri_volume import (
 from .sequential import SequentialPreprocessor
 
 
-def get_single_preprocessor(config: PreprocessorConfig) -> Preprocessor:
-    match config.dataset.name:
+def get_single_preprocessor(config: PreprocessorConfig, name: DataName) -> Preprocessor:
+    match name:
         case (
             'life'
             | 'diet-medication'
@@ -33,59 +33,55 @@ def get_single_preprocessor(config: PreprocessorConfig) -> Preprocessor:
             | 'medical-history'
             | 'symptom'
         ):
-            return HistoryPreprocessor(config, config.dataset.name)
+            return HistoryPreprocessor(config, name)
         case 'cdr':
-            return CdrPreprocessor(config)
+            return CdrPreprocessor(config, name)
         case 'mmse':
-            return MmsePreprocessor(config)
+            return MmsePreprocessor(config, name)
         case 'mmse-sum':
-            return MmseSumPreprocessor(config)
+            return MmseSumPreprocessor(config, name)
         case 'moca':
-            return MocaPreprocessor(config)
+            return MocaPreprocessor(config, name)
         case 'moca-sum':
-            return MocaSumPreprocessor(config)
+            return MocaSumPreprocessor(config, name)
         case 'adl':
-            return AdlPreprocessor(config)
+            return AdlPreprocessor(config, name)
         case 'adl-sum':
-            return AdlPreprocessor(config, is_sum=True)
+            return AdlPreprocessor(config, name, is_sum=True)
         case 'associative-learning':
-            return AssociativeLearningPreprocessor(config)
+            return AssociativeLearningPreprocessor(config, name)
         case 'episodic-memory':
-            return EpisodicMemoryPreprocessor(config)
+            return EpisodicMemoryPreprocessor(config, name)
         case 'avlt':
-            return AvltPreprocessor(config)
+            return AvltPreprocessor(config, name)
         case 'composite-bin':
-            return CompositePreprocessor(config)
+            return CompositePreprocessor(config, name)
         case 'biomarker':
-            return BiomarkerPreprocessor(config)
+            return BiomarkerPreprocessor(config, name)
         case 'cbf':
-            return CbfPreprocessor(config)
+            return CbfPreprocessor(config, name)
         case 'csvd':
-            return CsvdPreprocessor(config)
+            return CsvdPreprocessor(config, name)
         case 'volume':
-            return VolumePreprocessor(config)
+            return VolumePreprocessor(config, name)
         case 'volume-v':
-            return VolumeAveragePreprocessor(config, feature='v')
+            return VolumeAveragePreprocessor(config, name, feature='v')
         case 'volume-pct':
-            return VolumeAveragePreprocessor(config, feature='pct')
+            return VolumeAveragePreprocessor(config, name, feature='pct')
         case 'volume-v-nz':
-            return VolumeAverageNewPreprocessor(config, feature='v')
+            return VolumeAverageNewPreprocessor(config, name, feature='v')
         case 'volume-pct-nz':
-            return VolumeAverageNewPreprocessor(config, feature='pct')
+            return VolumeAverageNewPreprocessor(config, name, feature='pct')
         case 'snp':
-            return SnpPreprocessor(config)
-        case name:
-            children: list[NamedPreprocessor] = []
-            for child_name in config.children_names:
-                # HACK: Essential for recursive sequential data
-                # HACK: Ensures that config.children_names works correctly
-                config.dataset.name = child_name
-                children.append((child_name, get_single_preprocessor(config)))
+            return SnpPreprocessor(config, name)
+        case _:
+            children: list[Preprocessor] = []
+            for child_name in config.children_names(name):
+                children.append(get_single_preprocessor(config, child_name))
             if len(children) == 0:
                 raise ValueError(f'Unknown dataset name: {name}')
-            config.dataset.name = name
-            return SequentialPreprocessor(config, children)
+            return SequentialPreprocessor(config, name, children)
 
 
-def get_preprocessor(config: PreprocessorConfig) -> Preprocessor:
-    return get_single_preprocessor(config)
+def get_preprocessors(config: PreprocessorConfig) -> list[Preprocessor]:
+    return [get_single_preprocessor(config, name) for name in config.dataset.names]

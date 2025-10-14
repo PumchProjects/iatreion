@@ -17,22 +17,28 @@ def get_table(title: str, *headers: str) -> Table:
 
 
 def display_result(config: RrlEvalConfig) -> None:
-    result_list, bias_list, support_list, oppose_list = get_result(config)
+    result_list, score_list, bias_list, support_list, oppose_list = get_result(config)
 
     result_table = get_table('Result', 'Label', 'Score')
     result_table.add_row(*result_list[0], style='bold green')
     console.print(result_table)
 
-    bias_table = get_table('Initial Bias', 'Label', 'Score')
-    bias_table.add_row(*bias_list[0])
+    score_table = get_table('Scores', 'Module', 'Label', 'Score')
+    for line in score_list:
+        score_table.add_row(*line)
+    console.print(score_table)
+
+    bias_table = get_table('Initial Biases', 'Module', 'Label', 'Score')
+    for line in bias_list:
+        bias_table.add_row(*line)
     console.print(bias_table)
 
-    support_table = get_table('Supporting Rules', 'Label', 'Score', 'Rule')
+    support_table = get_table('Supporting Rules', 'Module', 'Label', 'Score', 'Rule')
     for line in support_list:
         support_table.add_row(*line)
     console.print(support_table)
 
-    oppose_table = get_table('Opposing Rules', 'Label', 'Score', 'Rule')
+    oppose_table = get_table('Opposing Rules', 'Module', 'Label', 'Score', 'Rule')
     for line in oppose_list:
         oppose_table.add_row(*line)
     console.print(oppose_table)
@@ -40,11 +46,9 @@ def display_result(config: RrlEvalConfig) -> None:
 
 def display_batched_result(config: RrlEvalConfig) -> None:
     result = get_batched_result(config)
-    result_table = get_table('Result', *result.index.names, 'Label', 'Score')
-    for index, label, score in zip(
-        result.index, result['Label'], result['Score'], strict=False
-    ):
-        result_table.add_row(*index, label, f'{score:.2f}')
+    result_table = get_table('Result', 'ID', *result.columns)
+    for row in result.itertuples():
+        result_table.add_row(str(row.Index), *row[1:-1], f'{row.Score:.2f}')
     console.print(result_table)
 
 

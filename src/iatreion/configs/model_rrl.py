@@ -77,6 +77,7 @@ class RrlConfig:
     'Set the number of nodes in the binarization layer and logical layers. E.g., 10@64, 10@64@32@16.'
 
     def __post_init__(self) -> None:
+        self.dataset.simple = False
         folder_name = (
             f'e{self.epoch}_os{self.train.over_sampler.upper()}_mns{self.train.min_n_samples}_bs{self.batch_size}'
             f'_lr{self.learning_rate}_lrdr{self.lr_decay_rate}_lrde{self.lr_decay_epoch}_wd{self.weight_decay}'
@@ -85,20 +86,18 @@ class RrlConfig:
         )
         self.train.log_dir = (
             self.train.log_root
-            / self.dataset.name
-            / self.train.group_names
+            / self.dataset.name_str
+            / self.train.group_name_str
             / 'rrl'
-            / ('final' if self.train.final else folder_name)
+            / self.train.ref_name_str
         )
+        if not self.train.final:
+            self.train.log_dir /= folder_name
         add_file_handler(self.train.log_dir / 'train.log')
 
     @property
     def folder_path(self) -> str:
         return str(self.train.log_dir)
-
-    @property
-    def model(self) -> str:
-        return str(self.train.log_dir / f'model_{self.train.ith_kfold}.pth')
 
     @property
     def rrl_file(self) -> str:

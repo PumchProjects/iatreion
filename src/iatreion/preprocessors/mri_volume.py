@@ -2,14 +2,14 @@ from typing import Literal, override
 
 import pandas as pd
 
-from iatreion.configs import PreprocessorConfig
+from iatreion.configs import DataName, PreprocessorConfig
 
 from .base import Preprocessor
 
 
 class VolumePreprocessor(Preprocessor):
-    def __init__(self, config: PreprocessorConfig) -> None:
-        super().__init__(config)
+    def __init__(self, config: PreprocessorConfig, name: DataName) -> None:
+        super().__init__(config, name)
 
     @override
     def get_data(self) -> pd.DataFrame:
@@ -21,9 +21,9 @@ class VolumePreprocessor(Preprocessor):
 
 class VolumeAveragePreprocessor(Preprocessor):
     def __init__(
-        self, config: PreprocessorConfig, feature: Literal['v', 'pct']
+        self, config: PreprocessorConfig, name: DataName, feature: Literal['v', 'pct']
     ) -> None:
-        super().__init__(config)
+        super().__init__(config, name)
         self.feature = feature
 
     @override
@@ -54,9 +54,9 @@ class VolumeAveragePreprocessor(Preprocessor):
 
 class VolumeAverageNewPreprocessor(Preprocessor):
     def __init__(
-        self, config: PreprocessorConfig, feature: Literal['v', 'pct']
+        self, config: PreprocessorConfig, name: DataName, feature: Literal['v', 'pct']
     ) -> None:
-        super().__init__(config)
+        super().__init__(config, name)
         self.feature = feature
 
     @staticmethod
@@ -103,7 +103,7 @@ class VolumeAverageNewPreprocessor(Preprocessor):
             vmri['sd'], how='left', on='age_group', suffixes=(None, '_std')
         )
         data = data.loc[:, ~data.columns.str.startswith('Brainstem')]
-        data.set_index(self.index_name, inplace=True)
+        data.set_index(self.config.dataset.index_name, inplace=True)
         return data
 
     def get_columns(self, data: pd.DataFrame) -> tuple[list[str], ...]:

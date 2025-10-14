@@ -7,6 +7,8 @@ from cyclopts.types import Directory
 
 from iatreion.utils import set_device, set_seed
 
+from .dataset import DataName
+
 type SamplerName = Literal[
     'adasyn',
     'smote',
@@ -22,8 +24,25 @@ type SamplerName = Literal[
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class TrainConfig:
-    group_names: Annotated[str, Parameter(name=['--groups', '-g'])]
+    group_names: Annotated[
+        list[str], Parameter(name=['--groups', '-g'], consume_multiple=True)
+    ]
     'Group names of the data.'
+
+    ref_names: Annotated[
+        list[DataName] | None, Parameter(name=['--refs', '-r'], consume_multiple=True)
+    ] = None
+    """Names of the reference data files.
+When final=False, align test data to the reference data.
+Training data are also aligned when true_ref=True.
+For discrete RRL, this parameter is used to gather the correct RRL models.
+When final=True, the whole dataset is used for training and no alignment is performed.
+For RRL, this parameter is used to extract the weight of the corresponding model.
+When evaluating RRL, this parameter is useless.
+"""
+
+    true_ref: Annotated[bool, Parameter(name=['--true-ref', '-tr'])] = False
+    'Align not only the test data, but also the training data to the reference data.'
 
     n_splits: Annotated[int, Parameter(name=['--n-splits', '-ns'])] = 10
     'Number of splits for cross-validation.'
@@ -68,9 +87,9 @@ class TrainConfig:
     )
 
     def set_groups(self) -> None:
-        if self.group_names.strip() == '':
+        if not self.group_names:
             raise ValueError('No valid groups found.')
-        for group in self.group_names.split(','):
+        for group in self.group_names:
             names: list[str] = []
             i = 0
             while i < len(group):
@@ -90,7 +109,20 @@ class TrainConfig:
                     i += 1
             self.groups.append(sorted(names))
         self.groups.sort(key=lambda x: x[0])
-        self.group_names = ','.join(''.join(group) for group in self.groups)
+
+    @property
+    def group_name_str(self) -> str:
+        return ', '.join(''.join(group) for group in self.groups)
+
+    @property
+    def ref_name_str(self) -> str:
+        if self.final:
+            return 'final'
+        elif self.ref_names is None:
+            return 'original'
+        else:
+            ref_names = ', '.join(self.ref_names)
+            return f'{"ref" if self.true_ref else "of"} {ref_names}'
 
     @property
     def n_folds(self) -> int:

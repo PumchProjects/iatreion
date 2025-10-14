@@ -3,7 +3,7 @@ from typing import override
 
 import pandas as pd
 
-from iatreion.configs import PreprocessorConfig
+from iatreion.configs import DataName, PreprocessorConfig
 
 from .base import Preprocessor
 
@@ -20,8 +20,8 @@ class CsvdPreprocessor(Preprocessor):
         re.VERBOSE,
     )
 
-    def __init__(self, config: PreprocessorConfig) -> None:
-        super().__init__(config)
+    def __init__(self, config: PreprocessorConfig, name: DataName) -> None:
+        super().__init__(config, name)
 
     def parse_column_name(self, column: str, previous: str) -> str:
         if col_match := self.col_pattern.match(column):

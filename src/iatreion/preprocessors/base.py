@@ -1,62 +1,43 @@
 from abc import ABC, abstractmethod
-from typing import Any, Self
 
 import numpy as np
 import pandas as pd
 
 from iatreion.configs import DataName, PreprocessorConfig
 from iatreion.exceptions import IatreionException
-from iatreion.utils import load_dict, logger, save_dict
+from iatreion.utils import logger
 
 from .process_info import ProcessInfo
 
 
 class Preprocessor(ABC):
-    def __init__(self, config: PreprocessorConfig) -> None:
+    def __init__(self, config: PreprocessorConfig, name: DataName) -> None:
         super().__init__()
         self.config = config
-        self.index_name = 'ID' if config.final else 'serial_num'
-        self.final_indices_names: list[str] = []
-        self.final_indices_: pd.DataFrame | None = None
-        self.process_info_dict_: dict[str, dict[str, Any]] | None = None
+        self.name = name
+        self.data_name = config.data_name(name)
         self.process_info_: ProcessInfo | None = None
-
-    def register_indices(self, *indices: str) -> None:
-        self.final_indices_names += indices
-
-    @property
-    def final_indices(self) -> pd.DataFrame:
-        assert self.final_indices_ is not None
-        return self.final_indices_
-
-    @property
-    def process_info_dict(self) -> dict[str, dict[str, Any]]:
-        if self.process_info_dict_ is None:
-            self.process_info_dict_ = load_dict(self.config.process_info_path)
-        return self.process_info_dict_
 
     @property
     def process_info(self) -> ProcessInfo:
         if self.process_info_ is None:
-            name = self.config.dataset.name
             if self.config.final:
-                if name not in self.process_info_dict:
+                if self.name not in self.config.process_info_dict:
                     raise IatreionException(
                         'No processing info found for "$dataset"',
-                        dataset=name,
+                        dataset=self.name,
                     )
                 else:
-                    info = self.process_info_dict[name]
-                    self.process_info_ = ProcessInfo(name, info, final=True)
+                    info = self.config.process_info_dict[self.name]
+                    self.process_info_ = ProcessInfo(self.name, info, final=True)
             else:
-                self.process_info_ = ProcessInfo(name, final=False)
+                self.process_info_ = ProcessInfo(self.name, final=False)
         return self.process_info_
 
     def save_process_info(self) -> None:
         if self.process_info_ is not None:
             info = self.process_info_.attributes
-            self.process_info_dict[self.config.dataset.name] = info
-            save_dict(self.process_info_dict, self.config.process_info_path)
+            self.config.process_info_dict[self.name] = info
 
     def get_group_names(self) -> pd.DataFrame:
         data = pd.read_excel(self.config.group_data_path, index_col='serial_num')
@@ -132,15 +113,18 @@ class Preprocessor(ABC):
         return data
 
     def read_data(self) -> pd.DataFrame:
-        data = pd.read_excel(
-            self.config.data_path,
-            # HACK: serial_num is needed for merging birth dates
-            index_col=self.index_name,
-            na_values=['/', '#NUM!'],
-            dtype_backend='numpy_nullable',
-        )
-        self.final_indices_ = data[self.final_indices_names].astype(str)
-        return data
+        if self.data_name not in self.config.data:
+            data = pd.read_excel(
+                self.config.data_path(self.data_name),
+                # HACK: serial_num is needed for merging birth dates
+                index_col=self.config.dataset.index_name,
+                na_values=['/', '#NUM!'],
+                dtype_backend='numpy_nullable',
+            )
+            self.config.data[self.data_name] = data
+            if indices_names := self.config.indices_names(self.data_name):
+                self.config.final_indices.append(data[indices_names].astype(str))
+        return self.config.data[self.data_name].copy()
 
     @abstractmethod
     def get_data(self) -> pd.DataFrame: ...
@@ -151,31 +135,11 @@ class Preprocessor(ABC):
         data = data[~data.index.duplicated(keep='last')]
         return data
 
-    def get_data_outer(self, add_indices: bool = False) -> pd.DataFrame:
+    def get_data_outer(self) -> pd.DataFrame:
         data = self.get_data()
-        if self.config.final:
-            if len(data) != len(self.final_indices):
-                raise ValueError('The number of samples after processing is changed')
-            if add_indices:
-                data.loc[:, self.final_indices_names] = self.final_indices
-                data.reset_index(inplace=True)
-                data.set_index(
-                    [self.index_name] + self.final_indices_names, inplace=True
-                )
-        else:
+        if not self.config.final:
             data = self.deduplicate_rows(data.dropna())
             self.save_process_info()
-        return data
-
-    def get_child_data(
-        self, name: DataName, child: Self, copy_indices: bool = False
-    ) -> pd.DataFrame:
-        original_name = self.config.dataset.name
-        self.config.dataset.name = name
-        data = child.get_data_outer()
-        self.config.dataset.name = original_name
-        if copy_indices:
-            self.final_indices_ = child.final_indices_
         return data
 
     @staticmethod
@@ -213,7 +177,7 @@ class Preprocessor(ABC):
         self, data: pd.DataFrame, augmented_vector_name: list[tuple[str, str]]
     ) -> None:
         feature_names = [f'{pair[0]} {pair[1]}\n' for pair in augmented_vector_name]
-        with self.config.output_info_path.open('w', encoding='utf-8') as f:
+        with self.config.output_info_path(self.name).open('w', encoding='utf-8') as f:
             f.writelines(feature_names)
         fmap: list[str] = []
         for i, (name_, type_) in enumerate(
@@ -226,16 +190,19 @@ class Preprocessor(ABC):
                 case 'continuous':
                     fmap.append(f'{i}\t{name}\tq\n')
                 case _:
-                    raise ValueError(f'Unsupported type `{type_}` for `{name_}`')
-        with self.config.output_fmap_path.open('w', encoding='utf-8') as f:
+                    raise ValueError(f'Unsupported type "{type_}" for "{name_}"')
+        with self.config.output_fmap_path(self.name).open('w', encoding='utf-8') as f:
             f.writelines(fmap)
-        with self.config.output_data_path.open('w', encoding='utf-8') as f:
-            raw = data.to_string(header=False, index=False, index_names=False).split(
-                '\n'
-            )
+        with self.config.output_data_path(self.name).open('w', encoding='utf-8') as f:
+            raw = data.to_string(header=False, index_names=False).split('\n')
             f.write('\n'.join([','.join(element.split()) for element in raw]))
 
-    def process(self) -> None:
+    def process_once(self) -> None:
+        binarized = f'({"non-" if self.config.dataset.simple else ""}binarized)'
+        logger.info(
+            f'[bold green]Processing "{self.name}" data[/] [yellow]{binarized}...',
+            extra={'markup': True},
+        )
         group_names = self.get_group_names()
         data = self.get_data_outer()
         data = data.merge(group_names, left_index=True, right_index=True)
@@ -243,8 +210,10 @@ class Preprocessor(ABC):
         data = self.deduplicate_rows(data)
         data = self.remove_useless_columns(data)
         augmented_vector_name = self.get_augmented_vector_name(data)
-        logger.info('[bold green]Saving data...', extra={'markup': True})
+        logger.info('Saving data...')
         self.save_data(data, augmented_vector_name)
 
-
-type NamedPreprocessor = tuple[DataName, Preprocessor]
+    def process(self) -> None:
+        for simple in [False, True]:
+            self.config.dataset.simple = simple
+            self.process_once()

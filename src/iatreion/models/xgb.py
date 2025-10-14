@@ -61,7 +61,15 @@ class XgboostModel(Model):
             verbose_eval=False,
             callbacks=callbacks,
         )
-        score = self.bst.get_fscore(self.config.dataset.fmap)
+        if len(self.config.dataset.names) > 1:
+            logger.warning(
+                'Multiple datasets found, '
+                'feature importance will use indices instead of names.'
+            )
+            score = self.bst.get_fscore()
+        else:
+            fmap = self.config.dataset.get_fmap(self.config.dataset.names[0])
+            score = self.bst.get_fscore(fmap)
         score = {
             f.replace(self.config.dataset.place_holder, ' '): v
             for f, v in score.items()

@@ -4,6 +4,7 @@ from torch.utils.data.dataset import random_split
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 from collections import defaultdict
+from collections.abc import Callable
 
 from iatreion.configs import RrlConfig
 from iatreion.utils import logger
@@ -31,7 +32,7 @@ def get_data_loader(args: RrlConfig, samples: Samples, pin_memory=False):
     return db_enc, train_loader, valid_loader, test_loader
 
 
-def train_model(args: RrlConfig, samples: Samples):
+def train_model(args: RrlConfig, save_model_callback: Callable[[RRL | None], RRL], samples: Samples):
     writer = SummaryWriter(args.folder_path)
 
     db_enc, train_loader, valid_loader, _ = get_data_loader(args, samples, pin_memory=True)
@@ -46,7 +47,7 @@ def train_model(args: RrlConfig, samples: Samples):
               save_best=args.save_best,
               estimated_grad=args.estimated_grad,
               use_skip=args.skip,
-              save_path=args.model,
+              save_model_callback=save_model_callback,
               use_nlaf=args.nlaf,
               alpha=args.alpha,
               beta=args.beta,
@@ -65,29 +66,12 @@ def train_model(args: RrlConfig, samples: Samples):
         save_interval=args.save_interval)
     
     if args.train.final and args.print_rule:
-        rrl = load_model(args.model)
+        rrl = save_model_callback(None)
         with open(args.rrl_file, 'w') as rrl_file:
             rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std)
 
 
-def load_model(path):
-    checkpoint = torch.load(path, map_location='cpu', weights_only=False)
-    saved_args = checkpoint['rrl_args']
-    rrl = RRL(
-        dim_list=saved_args['dim_list'],
-        use_not=saved_args['use_not'],
-        estimated_grad=saved_args['estimated_grad'],
-        use_skip=saved_args['use_skip'],
-        use_nlaf=saved_args['use_nlaf'],
-        alpha=saved_args['alpha'],
-        beta=saved_args['beta'],
-        gamma=saved_args['gamma'])
-    rrl.net.load_state_dict(checkpoint['model_state_dict'])
-    return rrl
-
-
-def test_model(args: RrlConfig, samples: Samples):
-    rrl = load_model(args.model)
+def test_model(args: RrlConfig, rrl: RRL, samples: Samples):
     db_enc, train_loader, _, test_loader = get_data_loader(args, samples)
     y_score, _, _ = rrl.test(test_loader=test_loader, set_name='Test')
     if args.print_rule:
