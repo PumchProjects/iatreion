@@ -3,10 +3,9 @@ from pathlib import Path
 
 from cyclopts import Parameter
 
-from iatreion.utils import add_file_handler
-
 from .dataset import DatasetConfig
 from .train import TrainConfig
+from .utils import register_log_dir
 
 
 @Parameter(name='*')
@@ -28,11 +27,4 @@ class RandomForestConfig:
 
     def __post_init__(self) -> None:
         self.dataset.simple = True
-        self.train.log_dir = (
-            self.train.log_root
-            / self.dataset.name_str
-            / self.train.group_name_str
-            / 'random_forest'
-            / self.train.ref_name_str
-        )
-        add_file_handler(self.train.log_dir / 'train.log')
+        register_log_dir(self.dataset, self.train, 'random_forest')

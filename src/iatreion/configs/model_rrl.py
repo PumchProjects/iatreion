@@ -1,12 +1,12 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated
 
 from cyclopts import Parameter
 
-from iatreion.utils import add_file_handler
-
 from .dataset import DatasetConfig
 from .train import TrainConfig
+from .utils import get_best_exp_root, get_rrl_file, register_log_dir
 
 
 @Parameter(name='*')
@@ -84,16 +84,10 @@ class RrlConfig:
             f'_si{self.save_interval}_useNOT{self.use_not}_saveBest{self.save_best}_useSkip{self.skip}'
             f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
         )
-        self.train.log_dir = (
-            self.train.log_root
-            / self.dataset.name_str
-            / self.train.group_name_str
-            / 'rrl'
-            / self.train.ref_name_str
-        )
-        if not self.train.final:
-            self.train.log_dir /= folder_name
-        add_file_handler(self.train.log_dir / 'train.log')
+        register_log_dir(self.dataset, self.train, 'rrl', folder_name)
+
+    def get_best_exp_root(self) -> tuple[Path, float]:
+        return get_best_exp_root(self.dataset.name_str, self.train, final=False)
 
     @property
     def folder_path(self) -> str:
@@ -101,6 +95,4 @@ class RrlConfig:
 
     @property
     def rrl_file(self) -> str:
-        if self.train.final:
-            return str(self.train.log_dir / 'rrl.tsv')
-        return str(self.train.log_dir / f'rrl_{self.train.ith_kfold}.tsv')
+        return str(get_rrl_file(self.train.log_dir, self.train))

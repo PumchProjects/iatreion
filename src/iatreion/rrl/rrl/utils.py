@@ -10,7 +10,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.model_selection import RepeatedStratifiedKFold
 
 from iatreion.configs import DataName, DatasetConfig, TrainConfig
-from iatreion.utils import logger
+from iatreion.utils import logger, encode_string
 
 pd.set_option('future.no_silent_downcasting', True)
 
@@ -41,6 +41,8 @@ def read_csv(name: DataName, dataset: DatasetConfig, train: TrainConfig):
     label_pos = train.label_pos
 
     f_list = read_info(info_path)
+    for f in f_list[:-len(group_columns)]:
+        f[0] = encode_string(f[0])
     names = [index_name] + [f[0] for f in f_list]
     dtype = {col: str for col in group_columns}
     D = pd.read_csv(data_path, names=names, index_col=index_name, dtype=dtype)

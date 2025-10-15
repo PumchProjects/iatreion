@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from cyclopts import Parameter
-from cyclopts.types import ExistingDirectory
+from cyclopts.types import Directory
 
 type DataName = Literal[
     'life',
@@ -41,7 +41,7 @@ type DataName = Literal[
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class DatasetConfig:
-    prefix: Annotated[ExistingDirectory, Parameter(name=['--prefix', '-p'])]
+    prefix: Annotated[Directory, Parameter(name=['--prefix', '-p'])]
     'Prefix of the data files.'
 
     names: Annotated[
@@ -61,20 +61,18 @@ For other models, features are concatenated.
 
     index_name: Annotated[str, Parameter(parse=False)] = 'serial_num'
 
-    place_holder: Annotated[str, Parameter(parse=False)] = 'Excalibur'
-
     @property
     def name_str(self) -> str:
         return ', '.join(self.names)
 
-    def true_name(self, name: DataName) -> str:
+    def get_true_name(self, name: DataName) -> str:
         return f'{name}-simple' if self.simple else name
 
-    def get_data(self, name: DataName, prefix: Path | None = None) -> Path:
-        return (prefix or self.prefix) / f'{self.true_name(name)}.data'
+    def get_data(self, name: DataName) -> Path:
+        return self.prefix / f'{self.get_true_name(name)}.data'
 
-    def get_info(self, name: DataName, prefix: Path | None = None) -> Path:
-        return (prefix or self.prefix) / f'{self.true_name(name)}.info'
+    def get_info(self, name: DataName) -> Path:
+        return self.prefix / f'{self.get_true_name(name)}.info'
 
-    def get_fmap(self, name: DataName, prefix: Path | None = None) -> Path:
-        return (prefix or self.prefix) / f'{self.true_name(name)}.fmap'
+    def get_fmap(self, name: DataName) -> Path:
+        return self.prefix / f'{self.get_true_name(name)}.fmap'

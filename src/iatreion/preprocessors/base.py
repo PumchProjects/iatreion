@@ -5,7 +5,7 @@ import pandas as pd
 
 from iatreion.configs import DataName, PreprocessorConfig
 from iatreion.exceptions import IatreionException
-from iatreion.utils import logger
+from iatreion.utils import encode_string, logger
 
 from .process_info import ProcessInfo
 
@@ -15,7 +15,7 @@ class Preprocessor(ABC):
         super().__init__()
         self.config = config
         self.name = name
-        self.data_name = config.data_name(name)
+        self.data_name = config.get_data_name(name)
         self.process_info_: ProcessInfo | None = None
 
     @property
@@ -73,7 +73,13 @@ class Preprocessor(ABC):
         if self.config.dataset.simple:
             data[name] = col
         else:
-            min_value, max_value = col.min(), col.max()
+            if self.config.final:
+                min_value = self.process_info(int, name, 'min')
+                max_value = self.process_info(int, name, 'max')
+            else:
+                min_value, max_value = col.min(), col.max()
+                self.process_info[name, 'min'] = min_value
+                self.process_info[name, 'max'] = max_value
             data[f'{name} <= {min_value}'] = (col <= min_value).astype('Int8')
             for th in range(min_value + 1, max_value):
                 data[f'{name} <= {th}'] = (col <= th).astype('Int8')
@@ -115,14 +121,14 @@ class Preprocessor(ABC):
     def read_data(self) -> pd.DataFrame:
         if self.data_name not in self.config.data:
             data = pd.read_excel(
-                self.config.data_path(self.data_name),
+                self.config.get_data_path(self.data_name),
                 # HACK: serial_num is needed for merging birth dates
                 index_col=self.config.dataset.index_name,
                 na_values=['/', '#NUM!'],
                 dtype_backend='numpy_nullable',
             )
             self.config.data[self.data_name] = data
-            if indices_names := self.config.indices_names(self.data_name):
+            if indices_names := self.config.get_indices_names(self.data_name):
                 self.config.final_indices.append(data[indices_names].astype(str))
         return self.config.data[self.data_name].copy()
 
@@ -137,7 +143,9 @@ class Preprocessor(ABC):
 
     def get_data_outer(self) -> pd.DataFrame:
         data = self.get_data()
-        if not self.config.final:
+        if self.config.final:
+            data.rename(columns=encode_string, inplace=True)
+        else:
             data = self.deduplicate_rows(data.dropna())
             self.save_process_info()
         return data
@@ -177,13 +185,13 @@ class Preprocessor(ABC):
         self, data: pd.DataFrame, augmented_vector_name: list[tuple[str, str]]
     ) -> None:
         feature_names = [f'{pair[0]} {pair[1]}\n' for pair in augmented_vector_name]
-        with self.config.output_info_path(self.name).open('w', encoding='utf-8') as f:
+        with self.config.dataset.get_info(self.name).open('w', encoding='utf-8') as f:
             f.writelines(feature_names)
         fmap: list[str] = []
         for i, (name_, type_) in enumerate(
             augmented_vector_name[: -len(self.config.dataset.group_columns)]
         ):
-            name = name_.replace(' ', self.config.dataset.place_holder)
+            name = encode_string(name_, ' ')
             match type_:
                 case 'binary':
                     fmap.append(f'{i}\t{name}\ti\n')
@@ -191,9 +199,9 @@ class Preprocessor(ABC):
                     fmap.append(f'{i}\t{name}\tq\n')
                 case _:
                     raise ValueError(f'Unsupported type "{type_}" for "{name_}"')
-        with self.config.output_fmap_path(self.name).open('w', encoding='utf-8') as f:
+        with self.config.dataset.get_fmap(self.name).open('w', encoding='utf-8') as f:
             f.writelines(fmap)
-        with self.config.output_data_path(self.name).open('w', encoding='utf-8') as f:
+        with self.config.dataset.get_data(self.name).open('w', encoding='utf-8') as f:
             raw = data.to_string(header=False, index_names=False).split('\n')
             f.write('\n'.join([','.join(element.split()) for element in raw]))
 

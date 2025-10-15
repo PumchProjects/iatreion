@@ -116,9 +116,7 @@ When evaluating RRL, this parameter is useless.
 
     @property
     def ref_name_str(self) -> str:
-        if self.final:
-            return 'final'
-        elif self.ref_names is None:
+        if self.ref_names is None:
             return 'original'
         else:
             ref_names = ', '.join(self.ref_names)

@@ -32,7 +32,7 @@ def get_data_loader(args: RrlConfig, samples: Samples, pin_memory=False):
     return db_enc, train_loader, valid_loader, test_loader
 
 
-def train_model(args: RrlConfig, save_model_callback: Callable[[RRL | None], RRL], samples: Samples):
+def train_model(args: RrlConfig, save_model_callback: Callable[[RRL | None], tuple[RRL, float | None]], samples: Samples):
     writer = SummaryWriter(args.folder_path)
 
     db_enc, train_loader, valid_loader, _ = get_data_loader(args, samples, pin_memory=True)
@@ -66,9 +66,10 @@ def train_model(args: RrlConfig, save_model_callback: Callable[[RRL | None], RRL
         save_interval=args.save_interval)
     
     if args.train.final and args.print_rule:
-        rrl = save_model_callback(None)
+        rrl, weight = save_model_callback(None)
+        assert weight is not None
         with open(args.rrl_file, 'w') as rrl_file:
-            rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std)
+            rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std, weight=weight)
 
 
 def test_model(args: RrlConfig, rrl: RRL, samples: Samples):

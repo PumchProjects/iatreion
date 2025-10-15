@@ -286,7 +286,7 @@ class RRL:
                 x_bar = x.to(self.device)
                 self.net.bi_forward(x_bar, count=True)
 
-    def rule_print(self, feature_name, label_name, train_loader, file=sys.stdout, mean=None, std=None, display=True):
+    def rule_print(self, feature_name, label_name, train_loader, file=sys.stdout, mean=None, std=None, display=True, weight=1.0):
         if self.net.layer_list[1] is None and train_loader is None:
             raise Exception("Need train_loader for the dead nodes detection.")
 
@@ -312,14 +312,15 @@ class RRL:
         if not display:
             return layer.rule2weights
         
-        print('RID(t={:.4f})'.format(torch.exp(self.net.t).item()), end='\t', file=file)
+        temp = torch.exp(self.net.t).item()
+        print('RID(w={:.4f},t={:.5f})'.format(weight, temp), end='\t', file=file)
         for i, ln in enumerate(label_name):
-            print('{}(b={:.4f})'.format(ln, layer.bl[i]), end='\t', file=file)
+            print('{}(b={:.4f})'.format(ln, layer.bl[i] / temp), end='\t', file=file)
         print('Support\tRule', file=file)
         for rid, w in layer.rule2weights:
             print(rid, end='\t', file=file)
             for li in range(len(label_name)):
-                print('{:.4f}'.format(w[li]), end='\t', file=file)
+                print('{:.4f}'.format(w[li] / temp), end='\t', file=file)
             now_layer = self.net.layer_list[-1 + rid[0]]
             print('{:.4f}'.format((now_layer.node_activation_cnt[layer.rid2dim[rid]] / now_layer.forward_tot).item()),
                   end='\t', file=file)

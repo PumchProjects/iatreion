@@ -6,7 +6,7 @@ import xgboost as xgb
 from numpy.typing import NDArray
 
 from iatreion.configs import XgboostConfig
-from iatreion.utils import logger
+from iatreion.utils import decode_string, logger
 
 from .base import Model, ModelReturn
 
@@ -70,10 +70,7 @@ class XgboostModel(Model):
         else:
             fmap = self.config.dataset.get_fmap(self.config.dataset.names[0])
             score = self.bst.get_fscore(fmap)
-        score = {
-            f.replace(self.config.dataset.place_holder, ' '): v
-            for f, v in score.items()
-        }
+        score = {decode_string(f): v for f, v in score.items()}
         with self.config.score_file.open('w', encoding='utf-8') as f:
             json.dump(score, f, ensure_ascii=False, indent=4)
 

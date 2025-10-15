@@ -153,12 +153,12 @@ class HistoryPreprocessor(Preprocessor):
         stem = self.parse_column_name(column)
         data[f'{stem} = 无'] = (col < 0).astype('Int8')
         if self.config.final:
-            min_age = self.process_info(int, column, 'min_age')
-            max_age = self.process_info(int, column, 'max_age')
+            min_age = self.process_info(int, column, 'min')
+            max_age = self.process_info(int, column, 'max')
         else:
             min_age, max_age = int(col[col >= 0].min()), int(col.max())
-            self.process_info[column, 'min_age'] = min_age
-            self.process_info[column, 'max_age'] = max_age
+            self.process_info[column, 'min'] = min_age
+            self.process_info[column, 'max'] = max_age
         for th in range(min_age // 5 * 5 + 4, max_age, 5):
             data[f'{stem} <= {th}岁'] = ((col <= th) & (col >= 0)).astype('Int8')
         for th in range(min_age // 5 * 5 + 5, max_age + 1, 5):

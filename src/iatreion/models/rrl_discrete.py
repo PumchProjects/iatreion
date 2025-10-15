@@ -8,7 +8,7 @@ import pandas as pd
 from scipy.special import softmax
 
 from iatreion.configs import DataName, DiscreteRrlConfig
-from iatreion.utils import logger
+from iatreion.utils import decode_string, logger
 
 from .base import ModelReturn, RawModel
 
@@ -16,6 +16,10 @@ from .base import ModelReturn, RawModel
 @dataclass
 class Item(ABC):
     name: str
+
+    @property
+    def true_name(self) -> str:
+        return decode_string(self.name)
 
     @abstractmethod
     def __str__(self) -> str: ...
@@ -28,7 +32,7 @@ class Item(ABC):
 class BinaryItem(Item):
     @override
     def __str__(self) -> str:
-        return self.name
+        return self.true_name
 
     @override
     def eval(self, data: pd.DataFrame) -> 'pd.Series[pd.BooleanDtype]':
@@ -42,7 +46,7 @@ class DiscreteItem(Item):
 
     @override
     def __str__(self) -> str:
-        return f'{self.name} = {self.value}'
+        return f'{self.true_name} = {self.value}'
 
     @override
     def eval(self, data: pd.DataFrame) -> 'pd.Series[pd.BooleanDtype]':
@@ -57,7 +61,7 @@ class ContinuousItem(Item):
 
     @override
     def __str__(self) -> str:
-        return f'{self.name} {self.op} {self.th}'
+        return f'{self.true_name} {self.op} {self.th}'
 
     @override
     def eval(self, data: pd.DataFrame) -> 'pd.Series[pd.BooleanDtype]':
@@ -88,11 +92,7 @@ def get_item(item: str) -> Item:
             except ValueError:
                 return DiscreteItem(*units)
     elif len(units) == 3:
-        try:
-            return ContinuousItem(units[0], units[1], float(units[2]))
-        except ValueError:
-            # HACK: Make sure that units[2] cannot be converted to float
-            return BinaryItem(item)
+        return ContinuousItem(units[0], units[1], float(units[2]))
     else:
         raise ValueError(f'Unit length != 1 or 3: {item}')
 
@@ -188,10 +188,10 @@ class Line:
 
 
 class Rrl:
-    rid_template = re.compile(r'RID\(t=(?P<temp>.*)\)')
+    rid_template = re.compile(r'RID\(w=(?P<weight>.*),t=(?P<temp>.*)\)')
     label_template = re.compile(r'(?P<label>.*)\(b=(?P<bias>.*)\)')
 
-    def __init__(self, file: Path) -> None:
+    def __init__(self, file: Path, weight: float | None = None) -> None:
         with file.open('r', encoding='utf-8') as f:
             texts = f.readlines()
         headers = texts[0].split('\t')
@@ -200,8 +200,12 @@ class Rrl:
         match_obj = self.rid_template.match(headers[0])
         if match_obj is not None:
             self.temp = float(match_obj.group('temp'))
+            self.weight = (
+                weight if weight is not None else float(match_obj.group('weight'))
+            )
         else:
             self.temp = 0.01
+            self.weight = weight if weight is not None else 1.0
             logger.warning(
                 f'[bold yellow]Using default temperature {self.temp} for old versions',
                 extra={'markup': True},
@@ -226,7 +230,7 @@ class Rrl:
         )
         for line in self.lines:
             result += line.eval(data, active_lines)
-        return result / self.temp
+        return result
 
 
 class DiscreteRrlModel(RawModel):
@@ -236,12 +240,18 @@ class DiscreteRrlModel(RawModel):
         self.exp_roots = config.get_best_exp_roots()
 
     def get_models(self) -> list[Rrl]:
-        return [Rrl(self.config.get_rrl_file(exp_root)) for exp_root in self.exp_roots]
+        return [
+            Rrl(self.config.get_rrl_file(exp_root), weight)
+            for exp_root, weight in self.exp_roots
+        ]
 
     def aggregate(
         self, models: list[Rrl], predictions: list[pd.DataFrame]
     ) -> pd.DataFrame:
-        results = sum(predictions) / len(predictions)
+        results = sum(
+            pred * model.weight
+            for pred, model in zip(predictions, models, strict=False)
+        )
         return results
 
     @override

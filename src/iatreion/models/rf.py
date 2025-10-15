@@ -5,6 +5,7 @@ from numpy.typing import NDArray
 from sklearn.ensemble import RandomForestClassifier
 
 from iatreion.configs import RandomForestConfig
+from iatreion.utils import decode_string
 
 from .base import Model, ModelReturn
 
@@ -26,10 +27,7 @@ class RandomForestModel(Model):
         for name in self.config.dataset.names:
             fmap = self.config.dataset.get_fmap(name)
             with fmap.open('r', encoding='utf-8') as f:
-                feature_names += [
-                    line.split('\t')[1].replace(self.config.dataset.place_holder, ' ')
-                    for line in f
-                ]
+                feature_names += [decode_string(line.split('\t')[1]) for line in f]
         return feature_names
 
     @override

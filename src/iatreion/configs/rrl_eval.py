@@ -44,20 +44,20 @@ class RrlEvalConfig:
     'Whether to enable debug mode.'
 
     def make_configs(self) -> tuple[PreprocessorConfig, DiscreteRrlConfig]:
-        # HACK: Empty prefix, set simple to True implicitly
+        # HACK: Empty prefix, set simple to False implicitly
         dataset = DatasetConfig(prefix=Path(), names=self.names)
-        train = TrainConfig(group_names=self.groups, final=True)
-        # HACK: Empty output prefix
+        train = TrainConfig(
+            group_names=self.groups, final=True, log_root=Path(self.thesaurus)
+        )
+        # HACK: Empty input prefix
         process_config = PreprocessorConfig(
             dataset=dataset,
-            output_prefix=Path(),
+            input_prefix=Path(),
             vmri_data_path_=Path(self.vmri),
             data_paths={name: Path(path) for name, path in self.data.items()},
             process_info_path_=Path(self.process),
             final=True,
             debug=self.debug,
         )
-        rrl_config = DiscreteRrlConfig(
-            dataset=dataset, train=train, thesaurus=Path(self.thesaurus)
-        )
+        rrl_config = DiscreteRrlConfig(dataset=dataset, train=train)
         return process_config, rrl_config

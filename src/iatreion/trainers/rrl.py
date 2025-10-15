@@ -15,12 +15,15 @@ class RrlTrainer(Trainer):
         self.config = config
         self.samples = get_samples(config.dataset, config.train)
         self.model: Any = None
+        self.weight: float | None = None
+        if config.train.final:
+            _, self.weight = config.get_best_exp_root()
         set_seed_torch(self.train_config.seed)
 
-    def save_model_callback(self, model: Any | None) -> Any:
+    def save_model_callback(self, model: Any | None) -> tuple[Any, float | None]:
         if model is not None:
             self.model = model
-        return self.model
+        return self.model, self.weight
 
     @override
     def train_step(self) -> TrainerReturn:

@@ -4,6 +4,7 @@ from typing import override
 import pandas as pd
 
 from iatreion.configs import DataName, PreprocessorConfig
+from iatreion.exceptions import IatreionException
 
 from .base import Preprocessor
 
@@ -63,16 +64,24 @@ class CsvdPreprocessor(Preprocessor):
         binarize_th = 10
         for name in data.columns:
             col = data[name]
-            if (n := col.nunique()) <= binarize_th:
-                data = data.drop(columns=[name])
+            if self.config.final:
+                try:
+                    values = self.process_info[name, 'values']
+                except IatreionException:
+                    continue
+            elif (n := col.nunique()) <= binarize_th:
                 values = col.unique()
-                values = values[values.argsort()]
-                min_value, max_value = values[0], values[n - 1]
-                data[f'{name} <= {min_value}'] = (col <= min_value).astype('Int8')
-                for value in values[1 : n - 1]:
-                    data[f'{name} <= {value}'] = (col <= value).astype('Int8')
-                    data[f'{name} >= {value}'] = (col >= value).astype('Int8')
-                data[f'{name} >= {max_value}'] = (col >= max_value).astype('Int8')
+                values = values[values.argsort()].tolist()[:n]
+                self.process_info[name, 'values'] = values
+            else:
+                continue
+            data = data.drop(columns=[name])
+            min_value, max_value = values[0], values[-1]
+            data[f'{name} <= {min_value}'] = (col <= min_value).astype('Int8')
+            for value in values[1:-1]:
+                data[f'{name} <= {value}'] = (col <= value).astype('Int8')
+                data[f'{name} >= {value}'] = (col >= value).astype('Int8')
+            data[f'{name} >= {max_value}'] = (col >= max_value).astype('Int8')
         return data
 
     @override

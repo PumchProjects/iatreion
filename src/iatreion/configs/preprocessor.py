@@ -4,7 +4,7 @@ from typing import Annotated, Any, cast
 
 import pandas as pd
 from cyclopts import Parameter
-from cyclopts.types import Directory
+from cyclopts.types import ExistingDirectory
 
 from iatreion.utils import load_dict, logger, save_dict
 
@@ -77,8 +77,8 @@ class PreprocessorConfig:
     # TODO: Read Cyclopts documentation to find a better way
     dataset: DatasetConfig
 
-    output_prefix: Annotated[Directory, Parameter(name=['--output', '-o'])]
-    'Prefix of the output files.'
+    input_prefix: Annotated[ExistingDirectory, Parameter(name=['--input', '-i'])]
+    'Prefix of the input files.'
 
     vmri_data_path_: Annotated[Path | None, Parameter(parse=False)] = None
 
@@ -105,49 +105,40 @@ class PreprocessorConfig:
     # TODO: Add more parameters for the preprocessor, e.g. filling missing values
 
     def __post_init__(self) -> None:
-        self.output_prefix.mkdir(parents=True, exist_ok=True)
+        self.dataset.prefix.mkdir(parents=True, exist_ok=True)
         if self.final and not self.debug:
             self.dataset.index_name = 'ID'
 
     @property
     def group_data_path(self) -> Path:
-        return self.dataset.prefix / '患者及分组加密对应表_AGE分组_20250924.xlsx'
+        return self.input_prefix / '患者及分组加密对应表_AGE分组_20250924.xlsx'
 
     @property
     def birth_data_path(self) -> Path:
-        return self.dataset.prefix / '基本信息.xlsx'
+        return self.input_prefix / '基本信息.xlsx'
 
     @property
     def vmri_data_path(self) -> Path:
         if self.vmri_data_path_ is not None:
             return self.vmri_data_path_
-        return self.dataset.prefix / 'Vmri_mean_sd.xlsx'
+        return self.input_prefix / 'Vmri_mean_sd.xlsx'
 
-    def data_name(self, name: DataName) -> str:
+    def get_data_name(self, name: DataName) -> str:
         return name_data_mapping[name]
 
-    def data_path(self, data_name: str) -> Path:
+    def get_data_path(self, data_name: str) -> Path:
         if self.data_paths is not None:
             return self.data_paths[data_name]
-        return self.dataset.prefix / data_file_mapping[data_name]
+        return self.input_prefix / data_file_mapping[data_name]
 
-    def indices_names(self, data_name: str) -> list[str]:
+    def get_indices_names(self, data_name: str) -> list[str]:
         return data_indices_mapping[data_name]
 
     @property
     def process_info_path(self) -> Path:
         if self.process_info_path_ is not None:
             return self.process_info_path_
-        return self.output_prefix / 'process_info.toml'
-
-    def output_data_path(self, name: DataName) -> Path:
-        return self.dataset.get_data(name, self.output_prefix)
-
-    def output_info_path(self, name: DataName) -> Path:
-        return self.dataset.get_info(name, self.output_prefix)
-
-    def output_fmap_path(self, name: DataName) -> Path:
-        return self.dataset.get_fmap(name, self.output_prefix)
+        return self.dataset.prefix / 'process_info.toml'
 
     def children_names(self, name: DataName) -> list[DataName]:
         if name.startswith('s-'):

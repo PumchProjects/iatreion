@@ -68,19 +68,14 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
     for name, rrl in zip(names, models, strict=False):
         bias_max_label = get_max_label(rrl.biases, rrl.labels)
         bias_score = calc_score(rrl.biases)
-        bias_list.append([name, bias_max_label, f'{bias_score / rrl.temp:.2f}'])
+        bias_list.append([name, bias_max_label, f'{bias_score:.2f}'])
     support_list: list[list[str]] = []
     oppose_list: list[list[str]] = []
     if max_label:
         for name, line in active_lines:
             weight_max_label = get_max_label(line.weights, line.labels)
             score = calc_score(line.weights)
-            rule_list = [
-                name,
-                weight_max_label,
-                f'{score / rrl.temp:.2f}',
-                line.print_rule(),
-            ]
+            rule_list = [name, weight_max_label, f'{score:.2f}', line.print_rule()]
             if weight_max_label == max_label:
                 support_list.append(rule_list)
             else:
