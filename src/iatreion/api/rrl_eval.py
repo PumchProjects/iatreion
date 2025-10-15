@@ -56,14 +56,24 @@ def get_data_model(
 
 def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
     data, _, model = get_data_model(config)
-    names, models, predictions, active_lines, result = model.interpret(data)
+    names, models, predictions, active_lines, result, confidence = model.interpret(data)
     max_label = get_max_label(result).item()
-    result_list = [[max_label, f'{calc_score(result).item():.2f}']]
+    result_list = [
+        [max_label, f'{calc_score(result).item():.2f}', f'{confidence.item():.2%}']
+    ]
     score_list: list[list[str]] = []
-    for name, pred in zip(names, predictions, strict=False):
+    for name, rrl, (pred, conf) in zip(names, models, predictions, strict=False):
         pred_max_label = get_max_label(pred).item()
         pred_score = calc_score(pred).item()
-        score_list.append([name, pred_max_label, f'{pred_score:.2f}'])
+        score_list.append(
+            [
+                name,
+                pred_max_label,
+                f'{pred_score:.2f}',
+                f'{conf.item():.2%}',
+                f'{rrl.weight:.2%}',
+            ]
+        )
     bias_list: list[list[str]] = []
     for name, rrl in zip(names, models, strict=False):
         bias_max_label = get_max_label(rrl.biases, rrl.labels)
@@ -85,10 +95,11 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
 
 def get_batched_result(config: RrlEvalConfig) -> pd.DataFrame:
     data, additional_data, model = get_data_model(config)
-    result = model.eval(data)
+    result, confidence = model.eval(data)
     y_pred = get_max_label(result)
     y_pred.name = 'Label'
     y_score = calc_score(result)
     y_score.name = 'Score'
-    df = pd.concat(additional_data + [y_pred, y_score], axis=1)
+    confidence.name = 'Confidence'
+    df = pd.concat(additional_data + [y_pred, y_score, confidence], axis=1)
     return df

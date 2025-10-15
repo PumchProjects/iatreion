@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Self, override
 
 import pandas as pd
-from scipy.special import softmax
+from scipy.special import expit, softmax
 
 from iatreion.configs import DataName, DiscreteRrlConfig
 from iatreion.utils import decode_string, logger
@@ -179,12 +179,12 @@ class Line:
         result = self.rule.eval(data)
         if active_lines is not None and not pd.isna(r := result.item()) and r:
             active_lines.append(self)
-        return pd.DataFrame(
-            {
-                label: result * weight
-                for label, weight in zip(self.labels, self.weights, strict=False)
-            }
-        )
+        table: dict[str, pd.Series] = {}
+        for label, weight in zip(self.labels, self.weights, strict=False):
+            col = result * weight
+            table[f'{label}_upper'] = col.fillna(max(0, weight))
+            table[f'{label}_lower'] = col.fillna(min(0, weight))
+        return pd.DataFrame(table)
 
 
 class Rrl:
@@ -219,18 +219,28 @@ class Rrl:
 
     def eval(
         self, data: pd.DataFrame, active_lines: list[Self] | None = None
-    ) -> pd.DataFrame:
+    ) -> tuple[pd.DataFrame, pd.Series]:
         result = pd.DataFrame(
             {
-                label: [bias] * len(data)
+                name: [bias] * len(data)
                 for label, bias in zip(self.labels, self.biases, strict=False)
+                for name in (f'{label}_upper', f'{label}_lower')
             },
             dtype='Float64',
             index=data.index,
         )
         for line in self.lines:
             result += line.eval(data, active_lines)
-        return result
+        mean_result = pd.DataFrame(
+            {
+                label: (result[f'{label}_upper'] + result[f'{label}_lower']) / 2
+                for label in self.labels
+            }
+        )
+        max_lower = result[[f'{label}_lower' for label in self.labels]].max(axis=1)
+        min_upper = result[[f'{label}_upper' for label in self.labels]].min(axis=1)
+        confidence = (max_lower - min_upper).apply(expit)
+        return mean_result, confidence
 
 
 class DiscreteRrlModel(RawModel):
@@ -246,13 +256,15 @@ class DiscreteRrlModel(RawModel):
         ]
 
     def aggregate(
-        self, models: list[Rrl], predictions: list[pd.DataFrame]
-    ) -> pd.DataFrame:
+        self, models: list[Rrl], predictions: list[tuple[pd.DataFrame, pd.Series]]
+    ) -> tuple[pd.DataFrame, pd.Series]:
         results = sum(
-            pred * model.weight
-            for pred, model in zip(predictions, models, strict=False)
+            pred.mul(confidence, axis=0) * model.weight
+            for (pred, confidence), model in zip(predictions, models, strict=False)
         )
-        return results
+        confidence = pd.concat([c for _, c in predictions], axis=1).max(axis=1)
+        results.loc[confidence < 0.5] = pd.NA
+        return results, confidence
 
     @override
     def fit(self, X: pd.DataFrame, y: pd.Series) -> None:
@@ -262,32 +274,32 @@ class DiscreteRrlModel(RawModel):
     def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
         models = self.get_models()
         predictions = [model.eval(X) for model in models]
-        results = self.aggregate(models, predictions)
+        results, _ = self.aggregate(models, predictions)
         return softmax(results.astype(float).values, axis=1), {}
 
-    def eval(self, data: list[pd.DataFrame]) -> pd.DataFrame:
+    def eval(self, data: list[pd.DataFrame]) -> tuple[pd.DataFrame, pd.Series]:
         models = self.get_models()
         predictions = [model.eval(X) for X, model in zip(data, models, strict=False)]
-        results = self.aggregate(models, predictions)
-        return results
+        results, confidence = self.aggregate(models, predictions)
+        return results, confidence
 
     def interpret(
         self, data: list[pd.DataFrame]
     ) -> tuple[
         list[DataName],
         list[Rrl],
-        list[pd.DataFrame],
+        list[tuple[pd.DataFrame, pd.Series]],
         list[tuple[DataName, Line]],
         pd.DataFrame,
+        pd.Series,
     ]:
         names = self.config.dataset.names
         models = self.get_models()
-        predictions: list[pd.DataFrame] = []
+        predictions: list[tuple[pd.DataFrame, pd.Series]] = []
         active_lines: list[tuple[DataName, Line]] = []
         for name, X, model in zip(names, data, models, strict=False):
             lines: list[Line] = []
-            pred = model.eval(X.head(1), lines)
-            predictions.append(pred)
+            predictions.append(model.eval(X.head(1), lines))
             active_lines += [(name, line) for line in lines]
-        result = self.aggregate(models, predictions)
-        return names, models, predictions, active_lines, result
+        result, confidence = self.aggregate(models, predictions)
+        return names, models, predictions, active_lines, result, confidence

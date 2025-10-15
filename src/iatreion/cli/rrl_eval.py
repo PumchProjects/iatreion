@@ -19,11 +19,13 @@ def get_table(title: str, *headers: str) -> Table:
 def display_result(config: RrlEvalConfig) -> None:
     result_list, score_list, bias_list, support_list, oppose_list = get_result(config)
 
-    result_table = get_table('Result', 'Label', 'Score')
+    result_table = get_table('Result', 'Label', 'Score', 'Confidence')
     result_table.add_row(*result_list[0], style='bold green')
     console.print(result_table)
 
-    score_table = get_table('Scores', 'Module', 'Label', 'Score')
+    score_table = get_table(
+        'Scores', 'Module', 'Label', 'Score', 'Confidence', 'Weight'
+    )
     for line in score_list:
         score_table.add_row(*line)
     console.print(score_table)
@@ -48,7 +50,9 @@ def display_batched_result(config: RrlEvalConfig) -> None:
     result = get_batched_result(config)
     result_table = get_table('Result', 'ID', *result.columns)
     for row in result.itertuples():
-        result_table.add_row(str(row.Index), *row[1:-1], f'{row.Score:.2f}')
+        result_table.add_row(
+            str(row.Index), *row[1:-2], f'{row.Score:.2f}', f'{row.Confidence:.2%}'
+        )
     console.print(result_table)
 
 
