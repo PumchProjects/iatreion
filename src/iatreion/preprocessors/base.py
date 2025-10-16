@@ -50,15 +50,17 @@ class Preprocessor(ABC):
         )
         return data[self.config.dataset.group_columns]
 
-    def get_birth_dates(self, data: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
-        if self.config.final:
+    def get_birth_dates(
+        self, data: pd.DataFrame, force_final: bool = False
+    ) -> tuple[pd.DataFrame, pd.Series]:
+        if self.config.final or force_final:
             birth_dates = pd.to_datetime(data['date of birth'], utc=True)
             return data, birth_dates
         else:
             birth_data = pd.read_excel(
                 self.config.birth_data_path, index_col='serial_num'
             )
-            birth_dates = pd.to_datetime(birth_data['实际出生日期'])
+            birth_dates = pd.to_datetime(birth_data['实际出生日期'], utc=True)
             data = data.merge(
                 birth_dates, how='left', left_index=True, right_index=True
             )

@@ -33,6 +33,10 @@ type DataName = Literal[
     'volume-pct',
     'volume-v-nz',
     'volume-pct-nz',
+    'volume-v-pl',
+    'volume-pct-pl',
+    'volume-v-al',
+    'volume-pct-al',
     'snp',
     's-all',
 ]
@@ -56,7 +60,7 @@ For other models, features are concatenated.
     'Whether to use the simple (non-binarized) version of the dataset.'
 
     group_columns: Annotated[list[str], Parameter(parse=False)] = field(
-        default_factory=lambda: ['encrypted', 'Ab', 'AC to 3', 'AC 60']
+        default_factory=lambda: ['encrypted', 'Ab']
     )
 
     index_name: Annotated[str, Parameter(parse=False)] = 'serial_num'

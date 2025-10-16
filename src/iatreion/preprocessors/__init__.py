@@ -64,14 +64,12 @@ def get_single_preprocessor(config: PreprocessorConfig, name: DataName) -> Prepr
             return CsvdPreprocessor(config, name)
         case 'volume':
             return VolumePreprocessor(config, name)
-        case 'volume-v':
-            return VolumeAveragePreprocessor(config, name, feature='v')
-        case 'volume-pct':
-            return VolumeAveragePreprocessor(config, name, feature='pct')
-        case 'volume-v-nz':
-            return VolumeAverageNewPreprocessor(config, name, feature='v')
-        case 'volume-pct-nz':
-            return VolumeAverageNewPreprocessor(config, name, feature='pct')
+        case 'volume-v' | 'volume-pct':
+            return VolumeAveragePreprocessor(config, name)
+        case 'volume-v-nz' | 'volume-pct-nz':
+            return VolumeAverageNewPreprocessor(config, name)
+        case 'volume-v-pl' | 'volume-pct-pl':
+            return VolumeAverageNewPreprocessor(config, name, new=True)
         case 'snp':
             return SnpPreprocessor(config, name)
         case _:

@@ -19,6 +19,8 @@ data_file_mapping: dict[str, str] = {
     'cbf': '核磁_cbf.xlsx',
     'csvd': '核磁_csvd_20251008.xlsx',
     'volume': '核磁_volume.xlsx',
+    'volume-pl': '核磁_volume202510_首次.xlsx',
+    'volume-al': '核磁_volume202510_历次.xlsx',
     'snp': '基因_snp.csv',
 }
 
@@ -31,6 +33,8 @@ data_indices_mapping: dict[str, list[str]] = {
     'cbf': ['date'],
     'csvd': ['检查日期/Study.date'],
     'volume': ['MRI_time'],
+    'volume-pl': ['检查日期/Study date'],
+    'volume-al': ['检查日期/Study date'],
     'snp': [],
 }
 
@@ -62,6 +66,10 @@ name_data_mapping: dict[DataName, str] = {
     'volume-pct': 'volume',
     'volume-v-nz': 'volume',
     'volume-pct-nz': 'volume',
+    'volume-v-pl': 'volume-pl',
+    'volume-pct-pl': 'volume-pl',
+    'volume-v-al': 'volume-al',
+    'volume-pct-al': 'volume-al',
     'snp': 'snp',
     's-all': 's-screen-sum,s-composite-aea,volume-pct-nz,snp',
 }
@@ -81,6 +89,8 @@ class PreprocessorConfig:
     'Prefix of the input files.'
 
     vmri_data_path_: Annotated[Path | None, Parameter(parse=False)] = None
+
+    vmri_change_path_: Annotated[Path | None, Parameter(parse=False)] = None
 
     data_paths: Annotated[dict[str, Path] | None, Parameter(parse=False)] = None
 
@@ -111,17 +121,23 @@ class PreprocessorConfig:
 
     @property
     def group_data_path(self) -> Path:
-        return self.input_prefix / '患者及分组加密对应表_AGE分组_20250924.xlsx'
+        return self.input_prefix / '患者及分组加密对应表202510.xlsx'
 
     @property
     def birth_data_path(self) -> Path:
-        return self.input_prefix / '基本信息.xlsx'
+        return self.input_prefix / '基本信息202510.xlsx'
 
     @property
     def vmri_data_path(self) -> Path:
         if self.vmri_data_path_ is not None:
             return self.vmri_data_path_
         return self.input_prefix / 'Vmri_mean_sd.xlsx'
+
+    @property
+    def vmri_change_path(self) -> Path:
+        if self.vmri_change_path_ is not None:
+            return self.vmri_change_path_
+        return self.input_prefix / '表头变化202510.xlsx'
 
     def get_data_name(self, name: DataName) -> str:
         return name_data_mapping[name]
