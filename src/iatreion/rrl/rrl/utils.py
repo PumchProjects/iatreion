@@ -15,7 +15,7 @@ from imblearn.over_sampling import (
 from numpy.typing import NDArray
 from sklearn import preprocessing
 from sklearn.impute import SimpleImputer
-from sklearn.model_selection import RepeatedStratifiedKFold
+from sklearn.model_selection import StratifiedGroupKFold, RepeatedStratifiedKFold
 
 from iatreion.configs import DataName, DatasetConfig, TrainConfig
 from iatreion.utils import encode_string, logger
@@ -46,7 +46,7 @@ def make_data_labels(D: pd.DataFrame, dataset: DatasetConfig, train: TrainConfig
     return X_df, y_df
 
 
-def read_csv(name: DataName, dataset: DatasetConfig, train: TrainConfig):
+def read_csv(name: DataName, dataset: DatasetConfig, train: TrainConfig, shuffle: bool = False):
     data_path = dataset.get_data(name)
     info_path = dataset.get_info(name)
     group_columns = dataset.group_columns
@@ -58,12 +58,27 @@ def read_csv(name: DataName, dataset: DatasetConfig, train: TrainConfig):
     names = [index_name] + [f[0] for f in f_list]
     dtype = {col: str for col in group_columns}
     D = pd.read_csv(data_path, names=names, index_col=index_name, dtype=dtype)
+    if shuffle:
+        D = D.sample(frac=1, random_state=0)
     X_df, y_df = make_data_labels(D, dataset, train)
     f_list = f_list[:-len(group_columns)]
     return X_df, y_df, f_list
 
 
 def read_data(dataset: DatasetConfig, train: TrainConfig, shuffle: bool = False):
+    if any(dataset.exempt_dedup(name) for name in dataset.names):
+        if train.n_repeats == 1:
+            if train.ref_names is None:
+                if len(dataset.names) == 1:
+                    X_df, y_df, f_list = read_csv(dataset.names[0], dataset, train, shuffle)
+                    f_df = pd.DataFrame(f_list)
+                    return X_df, y_df, None, f_df
+                raise ValueError('Datasets must be deduplicated when multiple datasets are used.')
+            raise ValueError('Datasets must be deduplicated when reference datasets are used.')
+        raise ValueError('Datasets must be deduplicated when repeated CV is used.')
+    if any(dataset.exempt_dedup(name) for name in (train.ref_names or [])):
+        raise ValueError('Reference datasets must be deduplicated.')
+
     X_df, y_df, f_list = read_csv(dataset.names[0], dataset, train)
     for name in dataset.names[1:]:
         child_X_df, _, child_f_list = read_csv(name, dataset, train)
@@ -211,6 +226,16 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Samples
     if train.final:
         X, y = try_resample(train, f_df, X, y)
         yield db_enc, X, y, X, y
+    elif ref_y_df is None:
+        kf = StratifiedGroupKFold(n_splits=train.n_splits, shuffle=True, random_state=36851234)
+        for train_index, test_index in kf.split(X_df, y_df, groups=X_df.index):
+            X_train = X[train_index]
+            y_train = y[train_index]
+            X_test = X[test_index]
+            y_test = y[test_index]
+
+            X_train, y_train = try_resample(train, f_df, X_train, y_train)
+            yield db_enc, X_train, y_train, X_test, y_test
     else:
         kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
         for train_, test in kf.split(ref_y_df, ref_y_df):
@@ -236,6 +261,16 @@ def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Raw
     if train.final:
         X_df, y_df = try_resample(train, f_df, X_df, y_df)
         yield X_df, y_df, X_df, y_df
+    elif ref_y_df is None:
+        kf = StratifiedGroupKFold(n_splits=train.n_splits, shuffle=True, random_state=36851234)
+        for train_index, test_index in kf.split(X_df, y_df, groups=X_df.index):
+            X_train = X_df.iloc[train_index]
+            y_train = y_df.iloc[train_index]
+            X_test = X_df.iloc[test_index]
+            y_test = y_df.iloc[test_index]
+
+            X_train, y_train = try_resample(train, f_df, X_train, y_train)
+            yield X_train, y_train, X_test, y_test
     else:
         kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
         for train_, test in kf.split(ref_y_df, ref_y_df):

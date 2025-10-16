@@ -34,7 +34,7 @@ data_indices_mapping: dict[str, list[str]] = {
     'csvd': ['检查日期/Study.date'],
     'volume': ['MRI_time'],
     'volume-pl': ['检查日期/Study date'],
-    'volume-al': ['检查日期/Study date'],
+    'volume-al': ['level_type', '检查日期/Study date'],
     'snp': [],
 }
 

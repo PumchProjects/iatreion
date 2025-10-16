@@ -41,6 +41,8 @@ type DataName = Literal[
     's-all',
 ]
 
+exempt_dedup: list[DataName] = ['volume-v-al', 'volume-pct-al']
+
 
 @Parameter(name='*')
 @dataclass(kw_only=True)
@@ -68,6 +70,9 @@ For other models, features are concatenated.
     @property
     def name_str(self) -> str:
         return ', '.join(self.names)
+
+    def exempt_dedup(self, name: DataName) -> bool:
+        return name in exempt_dedup
 
     def get_true_name(self, name: DataName) -> str:
         return f'{name}-simple' if self.simple else name

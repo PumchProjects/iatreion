@@ -139,10 +139,10 @@ class Preprocessor(ABC):
     @abstractmethod
     def get_data(self) -> pd.DataFrame: ...
 
-    @staticmethod
-    def deduplicate_rows(data: pd.DataFrame) -> pd.DataFrame:
-        # HACK: Keep only the last sample of each patient
-        data = data[~data.index.duplicated(keep='last')]
+    def deduplicate_rows(self, data: pd.DataFrame) -> pd.DataFrame:
+        if not self.config.dataset.exempt_dedup(self.name):
+            # HACK: Keep only the last sample of each patient
+            data = data[~data.index.duplicated(keep='last')]
         return data
 
     def get_data_outer(self) -> pd.DataFrame:
@@ -215,11 +215,9 @@ class Preprocessor(ABC):
             f'[bold green]Processing "{self.name}" data[/] [yellow]{binarized}...',
             extra={'markup': True},
         )
-        group_names = self.get_group_names()
         data = self.get_data_outer()
-        data = data.merge(group_names, left_index=True, right_index=True)
-        # HACK: Just in case there are duplicate IDs in the group file
-        data = self.deduplicate_rows(data)
+        group_names = self.get_group_names()
+        data = data.merge(group_names, how='left', left_index=True, right_index=True)
         data = self.remove_useless_columns(data)
         augmented_vector_name = self.get_augmented_vector_name(data)
         logger.info('Saving data...')
