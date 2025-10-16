@@ -3,14 +3,22 @@ from collections.abc import Generator
 import numpy as np
 import pandas as pd
 from imblearn.combine import SMOTEENN, SMOTETomek
-from imblearn.over_sampling import SVMSMOTE, SMOTEN, SMOTENC, ADASYN, KMeansSMOTE, SMOTE, BorderlineSMOTE
+from imblearn.over_sampling import (
+    ADASYN,
+    SMOTE,
+    SMOTEN,
+    SMOTENC,
+    SVMSMOTE,
+    BorderlineSMOTE,
+    KMeansSMOTE,
+)
 from numpy.typing import NDArray
 from sklearn import preprocessing
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import RepeatedStratifiedKFold
 
 from iatreion.configs import DataName, DatasetConfig, TrainConfig
-from iatreion.utils import logger, encode_string
+from iatreion.utils import encode_string, logger
 
 pd.set_option('future.no_silent_downcasting', True)
 
@@ -23,12 +31,19 @@ def read_info(info_path):
     return f_list
 
 
-def get_group_mapping(groups):
-    group_mapping = {}
-    for group in groups:
-        for name in group:
-            group_mapping[name] = ''.join(group)
-    return group_mapping
+def make_data_labels(D: pd.DataFrame, dataset: DatasetConfig, train: TrainConfig) -> tuple[pd.DataFrame, pd.Series]:
+    group_columns = dataset.group_columns
+    base_pos = train.base_pos
+    label_pos = train.label_pos
+
+    group_mapping = train.get_name_group_mapping()
+    if base_pos:
+        D[label_pos] = D[base_pos].fillna(D[label_pos])
+    D[label_pos] = D[label_pos].map(group_mapping)
+    D = D[D[label_pos].isin(list(group_mapping.values()))]
+    y_df = D[label_pos]
+    X_df = D.drop(columns=group_columns)
+    return X_df, y_df
 
 
 def read_csv(name: DataName, dataset: DatasetConfig, train: TrainConfig):
@@ -36,9 +51,6 @@ def read_csv(name: DataName, dataset: DatasetConfig, train: TrainConfig):
     info_path = dataset.get_info(name)
     group_columns = dataset.group_columns
     index_name = dataset.index_name
-    groups = train.groups
-    base_pos = train.base_pos
-    label_pos = train.label_pos
 
     f_list = read_info(info_path)
     for f in f_list[:-len(group_columns)]:
@@ -46,13 +58,7 @@ def read_csv(name: DataName, dataset: DatasetConfig, train: TrainConfig):
     names = [index_name] + [f[0] for f in f_list]
     dtype = {col: str for col in group_columns}
     D = pd.read_csv(data_path, names=names, index_col=index_name, dtype=dtype)
-    group_mapping = get_group_mapping(groups)
-    if base_pos:
-        D[label_pos] = D[base_pos].fillna(D[label_pos])
-    D[label_pos] = D[label_pos].map(group_mapping)
-    D = D[D[label_pos].isin(list(group_mapping.values()))]
-    y_df = D[label_pos]
-    X_df = D.drop(columns=group_columns)
+    X_df, y_df = make_data_labels(D, dataset, train)
     f_list = f_list[:-len(group_columns)]
     return X_df, y_df, f_list
 

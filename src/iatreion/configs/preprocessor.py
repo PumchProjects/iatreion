@@ -88,6 +88,8 @@ class PreprocessorConfig:
     input_prefix: Annotated[ExistingDirectory, Parameter(name=['--input', '-i'])]
     'Prefix of the input files.'
 
+    group_data_path_: Annotated[Path | None, Parameter(parse=False)] = None
+
     vmri_data_path_: Annotated[Path | None, Parameter(parse=False)] = None
 
     vmri_change_path_: Annotated[Path | None, Parameter(parse=False)] = None
@@ -121,6 +123,8 @@ class PreprocessorConfig:
 
     @property
     def group_data_path(self) -> Path:
+        if self.group_data_path_ is not None:
+            return self.group_data_path_
         return self.input_prefix / '患者及分组加密对应表202510.xlsx'
 
     @property

@@ -61,7 +61,7 @@ class ContinuousItem(Item):
 
     @override
     def __str__(self) -> str:
-        return f'{self.true_name} {self.op} {self.th}'
+        return f'{self.true_name} {self.op} {self.th:.4f}'
 
     @override
     def eval(self, data: pd.DataFrame) -> 'pd.Series[pd.BooleanDtype]':

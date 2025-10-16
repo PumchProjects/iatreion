@@ -18,13 +18,7 @@ class RawModelTrainer(Trainer):
         super().__init__(dataset_config, train_config)
         self.model = model
         self.samples = get_raw_samples(dataset_config, train_config)
-        self.group_mapping = self.get_group_mapping()
-
-    def get_group_mapping(self) -> dict[str, int]:
-        group_mapping = {}
-        for i, group in enumerate(self.train_config.groups):
-            group_mapping[''.join(group)] = i
-        return group_mapping
+        self.group_mapping = train_config.get_group_index_mapping()
 
     @override
     def train_step(self) -> TrainerReturn:

@@ -110,6 +110,19 @@ When evaluating RRL, this parameter is useless.
             self.groups.append(sorted(names))
         self.groups.sort(key=lambda x: x[0])
 
+    def get_name_group_mapping(self) -> dict[str, str]:
+        group_mapping = {}
+        for group in self.groups:
+            for name in group:
+                group_mapping[name] = ''.join(group)
+        return group_mapping
+
+    def get_group_index_mapping(self) -> dict[str, int]:
+        group_mapping = {}
+        for i, group in enumerate(self.groups):
+            group_mapping[''.join(group)] = i
+        return group_mapping
+
     @property
     def group_name_str(self) -> str:
         return ', '.join(''.join(group) for group in self.groups)

@@ -40,15 +40,17 @@ class Preprocessor(ABC):
             self.config.process_info_dict[self.name] = info
 
     def get_group_names(self) -> pd.DataFrame:
-        data = pd.read_excel(self.config.group_data_path, index_col='serial_num')
-        data.rename(
-            columns={
-                'group_encrypted': 'encrypted',
-                'group_Ab': 'Ab',
-            },
-            inplace=True,
-        )
-        return data[self.config.dataset.group_columns]
+        if 'group_names' not in self.config.data:
+            data = pd.read_excel(self.config.group_data_path, index_col='serial_num')
+            data.rename(
+                columns={
+                    'group_encrypted': 'encrypted',
+                    'group_Ab': 'Ab',
+                },
+                inplace=True,
+            )
+            self.config.data['group_names'] = data[self.config.dataset.group_columns]
+        return self.config.data['group_names'].copy()
 
     def get_birth_dates(
         self, data: pd.DataFrame, force_final: bool = False
