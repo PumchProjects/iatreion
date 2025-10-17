@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -29,12 +29,20 @@ type DataName = Literal[
     'cbf',
     'csvd',
     'volume',
+    'volume-v',
+    'volume-pct',
     'volume-nz-v',
     'volume-nz-pct',
     'volume-new-v',
     'volume-new-pct',
     'snp',
     's-all',
+    'test-mmse-sum',
+    'test-moca-sum',
+    'test-adl-sum',
+    'test-s-screen-sum',
+    'test-volume-pct',
+    'test-s-all',
 ]
 
 
@@ -54,10 +62,6 @@ For other models, features are concatenated.
 
     simple: Annotated[bool, Parameter(parse=False)] = False
     'Whether to use the simple (non-binarized) version of the dataset.'
-
-    group_columns: Annotated[list[str], Parameter(parse=False)] = field(
-        default_factory=lambda: ['encrypted', 'Ab', 'AC to 3', 'AC 60']
-    )
 
     @property
     def name_str(self) -> str:

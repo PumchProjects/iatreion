@@ -14,9 +14,25 @@ class Preprocessor(ABC):
         super().__init__()
         self.config = config
         self.name = name
+        self.test = name.startswith('test-')
         self.data_name = config.get_data_name(name)
         self.level_data: pd.Series | None = None
         self.process_info_: ProcessInfo | None = None
+
+    @property
+    def index_name(self) -> str:
+        if self.test:
+            return 'num'
+        if self.config.final and not self.config.debug:
+            return 'ID'
+        return 'serial_num'
+
+    @property
+    def group_columns(self) -> list[str]:
+        if self.test:
+            return ['group']
+        else:
+            return ['encrypted', 'Ab', 'AC to 3', 'AC 60']
 
     @property
     def process_info(self) -> ProcessInfo:
@@ -40,6 +56,8 @@ class Preprocessor(ABC):
             self.config.process_info_dict[self.name] = info
 
     def get_group_names(self) -> pd.DataFrame:
+        if self.test:
+            return self.config.data['test_group_names'].copy()
         if 'group_names' not in self.config.data:
             data = pd.read_excel(self.config.group_data_path, index_col='serial_num')
             data.rename(
@@ -49,7 +67,7 @@ class Preprocessor(ABC):
                 },
                 inplace=True,
             )
-            self.config.data['group_names'] = data[self.config.dataset.group_columns]
+            self.config.data['group_names'] = data[self.group_columns]
         return self.config.data['group_names'].copy()
 
     def get_birth_dates(
@@ -81,7 +99,7 @@ class Preprocessor(ABC):
                 min_value = self.process_info(int, name, 'min')
                 max_value = self.process_info(int, name, 'max')
             else:
-                min_value, max_value = col.min(), col.max()
+                min_value, max_value = int(col.min()), int(col.max())
                 self.process_info[name, 'min'] = min_value
                 self.process_info[name, 'max'] = max_value
             data[f'{name} <= {min_value}'] = (col <= min_value).astype('Int8')
@@ -124,16 +142,20 @@ class Preprocessor(ABC):
 
     def read_data(self) -> pd.DataFrame:
         if self.data_name not in self.config.data:
+            data_path, sheet_name = self.config.get_data_path(self.data_name)
             data = pd.read_excel(
-                self.config.get_data_path(self.data_name),
+                data_path,
+                sheet_name=sheet_name,
                 # HACK: serial_num is needed for merging birth dates
-                index_col=self.config.index_name,
+                index_col=self.index_name,
                 na_values=['/', '#NUM!'],
                 dtype_backend='numpy_nullable',
             )
             self.config.data[self.data_name] = data
             if indices_names := self.config.get_indices_names(self.data_name):
                 self.config.final_indices.append(data[indices_names].astype(str))
+            if self.test:
+                self.config.data['test_group_names'] = data[self.group_columns]
         data = self.config.data[self.data_name].copy()
         if (
             level := self.config.get_level_name(self.data_name)
@@ -177,7 +199,7 @@ class Preprocessor(ABC):
         discrete_th = 4
         augmented_vector_name: list[tuple[str, str]] = []
         start_idx = 1 if self.level_data is not None else 0
-        data = data.iloc[:, start_idx : -len(self.config.dataset.group_columns)]
+        data = data.iloc[:, start_idx : -len(self.group_columns)]
         for name in data.columns:
             nunique = data[name].nunique()
             if nunique <= 2:
@@ -193,11 +215,11 @@ class Preprocessor(ABC):
     ) -> None:
         feature_names = [f'{pair[0]} {pair[1]}\n' for pair in augmented_vector_name]
         with self.config.dataset.get_info(self.name).open('w', encoding='utf-8') as f:
-            f.write(f'{self.config.index_name} index\n')
+            f.write(f'{self.index_name} index\n')
             if self.level_data is not None:
                 f.write(f'{self.level_data.name} level\n')
             f.writelines(feature_names)
-            for col in self.config.dataset.group_columns:
+            for col in self.group_columns:
                 f.write(f'{col} label\n')
         fmap: list[str] = []
         for i, (name_, type_) in enumerate(augmented_vector_name):

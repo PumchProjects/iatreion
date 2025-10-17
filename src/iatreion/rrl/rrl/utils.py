@@ -16,14 +16,15 @@ from imblearn.over_sampling import (
 from numpy.typing import NDArray
 from sklearn import preprocessing
 from sklearn.impute import SimpleImputer
-from sklearn.model_selection import StratifiedGroupKFold, RepeatedStratifiedKFold
+from sklearn.model_selection import RepeatedStratifiedKFold, StratifiedGroupKFold
 
 from iatreion.configs import DataName, DatasetConfig, TrainConfig
 from iatreion.utils import encode_string, logger
 
 pd.set_option('future.no_silent_downcasting', True)
 
-def read_info(info_path):
+
+def read_info(info_path) -> list[list[str]]:
     with open(info_path) as f:
         f_list = []
         for line in f:
@@ -32,10 +33,11 @@ def read_info(info_path):
     return f_list
 
 
-def make_data_labels(D: pd.DataFrame, dataset: DatasetConfig, train: TrainConfig) -> tuple[pd.DataFrame, pd.Series]:
-    group_columns = dataset.group_columns
-    base_pos = train.base_pos
-    label_pos = train.label_pos
+def make_data_labels(
+    D: pd.DataFrame, train: TrainConfig, group_columns: list[str]
+) -> tuple[pd.DataFrame, pd.Series]:
+    base_pos = train.base_pos if len(group_columns) > 1 else ''
+    label_pos = train.label_pos if len(group_columns) > 1 else group_columns[0]
 
     group_mapping = train.get_name_group_mapping()
     if base_pos:
@@ -76,21 +78,25 @@ def read_csv(
     *,
     shuffle: bool = False,
     return_level: bool = False,
-) -> tuple[pd.DataFrame, pd.Series, list[list[str]]] | tuple[pd.DataFrame, pd.Series, pd.Series | None, list[list[str]]]:
+) -> (
+    tuple[pd.DataFrame, pd.Series, list[list[str]]]
+    | tuple[pd.DataFrame, pd.Series, pd.Series | None, list[list[str]]]
+):
     data_path = dataset.get_data(name)
     info_path = dataset.get_info(name)
-    group_columns = dataset.group_columns
 
     f_list = read_info(info_path)
+    group_columns = [name for name, type in f_list if type == 'label']
+
     names = [f[0] for f in f_list]
     dtype = {col: str for col in group_columns}
     D = pd.read_csv(data_path, names=names, index_col=0, dtype=dtype)
-    if train.dedup is not None:
-        D = D[~D.index.duplicated(keep=train.dedup)]
+    if train.keep != 'all':
+        D = D[~D.index.duplicated(keep=train.keep)]
     if shuffle:
         D = D.sample(frac=1, random_state=0)
-    X_df, y_df = make_data_labels(D, dataset, train)
-    f_list = f_list[1:-len(group_columns)]
+    X_df, y_df = make_data_labels(D, train, group_columns)
+    f_list = f_list[1 : -len(group_columns)]
 
     level: pd.Series | None = None
     if f_list[0][1] == 'level':
@@ -108,17 +114,25 @@ def read_csv(
 def read_data(
     dataset: DatasetConfig, train: TrainConfig, *, shuffle: bool = False
 ) -> tuple[pd.DataFrame, pd.Series, pd.Series | None, pd.Series | None, pd.DataFrame]:
-    if train.dedup is None:
+    if train.keep == 'all':
         if train.n_repeats == 1:
             if train.ref_names is None:
                 if len(dataset.names) == 1:
                     X_df, y_df, level, f_list = read_csv(
-                        dataset.names[0], dataset, train, shuffle=shuffle, return_level=True
+                        dataset.names[0],
+                        dataset,
+                        train,
+                        shuffle=shuffle,
+                        return_level=True,
                     )
                     f_df = pd.DataFrame(f_list)
                     return X_df, y_df, None, level, f_df
-                raise ValueError('Datasets must be deduplicated when multiple datasets are used.')
-            raise ValueError('Datasets must be deduplicated when reference datasets are used.')
+                raise ValueError(
+                    'Datasets must be deduplicated when multiple datasets are used.'
+                )
+            raise ValueError(
+                'Datasets must be deduplicated when reference datasets are used.'
+            )
         raise ValueError('Datasets must be deduplicated when repeated CV is used.')
 
     X_df, y_df, f_list = read_csv(dataset.names[0], dataset, train)
@@ -161,7 +175,9 @@ class DBEncoder:
         discrete_data = X_df[self.f_df.loc[self.f_df[1] == 'discrete', 0]]
         continuous_data = X_df[self.f_df.loc[self.f_df[1] == 'continuous', 0]]
         if not continuous_data.empty:
-            continuous_data = continuous_data.replace(to_replace=r'.*\?.*', value=np.nan, regex=True)
+            continuous_data = continuous_data.replace(
+                to_replace=r'.*\?.*', value=np.nan, regex=True
+            )
             continuous_data = continuous_data.astype(float)
         return binary_data, discrete_data, continuous_data
 
@@ -198,8 +214,10 @@ class DBEncoder:
 
         if not continuous_data.empty:
             # Use mean as missing value for continuous columns if we do not discretize them.
-            continuous_data = pd.DataFrame(self.imp.transform(continuous_data.values),
-                                           columns=continuous_data.columns)
+            continuous_data = pd.DataFrame(
+                self.imp.transform(continuous_data.values),
+                columns=continuous_data.columns,
+            )
             if normalized:
                 if keep_stat:
                     self.mean = continuous_data.mean()
@@ -207,7 +225,9 @@ class DBEncoder:
                 continuous_data = (continuous_data - self.mean) / self.std
         if not discrete_data.empty:
             # One-hot encoding
-            discrete_data = pd.DataFrame(self.feature_enc.transform(discrete_data).toarray())
+            discrete_data = pd.DataFrame(
+                self.feature_enc.transform(discrete_data).toarray()
+            )
         dfs = [binary_data, discrete_data, continuous_data]
         X_df = pd.concat([df for df in dfs if not df.empty], axis=1)
         return X_df.values, y
@@ -224,7 +244,11 @@ def try_resample(train: TrainConfig, f_df: pd.DataFrame, X, y):
     if train.min_n_samples <= 0:
         strategy = 'auto'
     else:
-        strategy = {cls: train.min_n_samples for cls in np.unique(y) if sum(y == cls) < train.min_n_samples}
+        strategy = {
+            cls: train.min_n_samples
+            for cls in np.unique(y)
+            if sum(y == cls) < train.min_n_samples
+        }
     if not categorical.any():
         match train.over_sampler:
             case 'adasyn':
@@ -236,9 +260,13 @@ def try_resample(train: TrainConfig, f_df: pd.DataFrame, X, y):
             case 'smoteenn':
                 sm = SMOTEENN(sampling_strategy=strategy, random_state=42, n_jobs=4)
             case 'borderlinesmote-1':
-                sm = BorderlineSMOTE(sampling_strategy=strategy, random_state=42, kind='borderline-1')
+                sm = BorderlineSMOTE(
+                    sampling_strategy=strategy, random_state=42, kind='borderline-1'
+                )
             case 'borderlinesmote-2':
-                sm = BorderlineSMOTE(sampling_strategy=strategy, random_state=42, kind='borderline-2')
+                sm = BorderlineSMOTE(
+                    sampling_strategy=strategy, random_state=42, kind='borderline-2'
+                )
             case 'svmsmote':
                 sm = SVMSMOTE(sampling_strategy=strategy, random_state=42)
             case 'kmeanssmote':
@@ -252,12 +280,14 @@ def try_resample(train: TrainConfig, f_df: pd.DataFrame, X, y):
     except (ValueError, RuntimeError) as e:
         logger.warning(
             f'[bold yellow]Dataset might be too small, disabling SMOTE:[/] {e}',
-            extra={'markup': True}
+            extra={'markup': True},
         )
     return X, y
 
 
-def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Samples, None, None]:
+def get_samples(
+    dataset: DatasetConfig, train: TrainConfig
+) -> Generator[Samples, None, None]:
     X_df, y_df, ref_y_df, level, f_df = read_data(dataset, train, shuffle=True)
 
     db_enc = DBEncoder(f_df)
@@ -269,11 +299,15 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Samples
         X, y = try_resample(train, f_df, X, y)
         yield db_enc, X, y, X, y, X_df.index.to_numpy()
     elif ref_y_df is None:
-        kf = StratifiedGroupKFold(n_splits=train.n_splits, shuffle=True, random_state=36851234)
+        kf = StratifiedGroupKFold(
+            n_splits=train.n_splits, shuffle=True, random_state=36851234
+        )
         for train_, test_index in kf.split(X_df, y_df, groups=X_df.index):
             if level is not None and train.level_type is not None:
                 level_train = level.iloc[train_]
-                train_index = level_train.index[level_train == train.level_type].to_numpy()
+                train_index = level_train.index[
+                    level_train == train.level_type
+                ].to_numpy()
             else:
                 train_index = train_
             X_train = X[train_index]
@@ -282,9 +316,13 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Samples
             y_test = y[test_index]
 
             X_train, y_train = try_resample(train, f_df, X_train, y_train)
-            yield db_enc, X_train, y_train, X_test, y_test, X_df.index[test_index].to_numpy()
+            yield db_enc, X_train, y_train, X_test, y_test, X_df.index[
+                test_index
+            ].to_numpy()
     else:
-        kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
+        kf = RepeatedStratifiedKFold(
+            n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234
+        )
         for train_, test in kf.split(ref_y_df, ref_y_df):
             test_index = ref_y_df.index[test]
             if train.true_ref:
@@ -302,18 +340,24 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Samples
             yield db_enc, X_train, y_train, X_test, y_test, test_index.to_numpy()
 
 
-def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[RawSamples, None, None]:
+def get_raw_samples(
+    dataset: DatasetConfig, train: TrainConfig
+) -> Generator[RawSamples, None, None]:
     X_df, y_df, ref_y_df, level, f_df = read_data(dataset, train, shuffle=True)
 
     if train.final:
         X_df, y_df = try_resample(train, f_df, X_df, y_df)
         yield X_df, y_df, X_df, y_df
     elif ref_y_df is None:
-        kf = StratifiedGroupKFold(n_splits=train.n_splits, shuffle=True, random_state=36851234)
+        kf = StratifiedGroupKFold(
+            n_splits=train.n_splits, shuffle=True, random_state=36851234
+        )
         for train_, test_index in kf.split(X_df, y_df, groups=X_df.index):
             if level is not None and train.level_type is not None:
                 level_train = level.iloc[train_]
-                train_index = level_train.index[level_train == train.level_type].to_numpy()
+                train_index = level_train.index[
+                    level_train == train.level_type
+                ].to_numpy()
             else:
                 train_index = train_
             X_train = X_df.iloc[train_index]
@@ -324,7 +368,9 @@ def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Raw
             X_train, y_train = try_resample(train, f_df, X_train, y_train)
             yield X_train, y_train, X_test, y_test
     else:
-        kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
+        kf = RepeatedStratifiedKFold(
+            n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234
+        )
         for train_, test in kf.split(ref_y_df, ref_y_df):
             test_index = ref_y_df.index[test]
             if train.true_ref:

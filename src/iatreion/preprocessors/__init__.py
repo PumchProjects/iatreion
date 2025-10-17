@@ -25,7 +25,8 @@ from .sequential import SequentialPreprocessor
 
 
 def get_single_preprocessor(config: PreprocessorConfig, name: DataName) -> Preprocessor:
-    match name:
+    stem = config.get_stem(name)
+    match stem:
         case (
             'life'
             | 'diet-medication'

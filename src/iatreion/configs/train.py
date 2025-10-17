@@ -29,11 +29,13 @@ class TrainConfig:
     ]
     'Group names of the data.'
 
-    dedup: Annotated[Literal['first', 'last'] | None, Parameter(name=['--dedup', '-d'])] = None
+    keep: Annotated[
+        Literal['all', 'first', 'last'], Parameter(name=['--keep', '-k'])
+    ] = 'all'
     """Deduplication strategy for duplicated samples.
 'first': keep the first sample of each patient.
 'last': keep the last sample of each patient.
-None (default): do not deduplicate samples.
+'all' (default): do not deduplicate samples.
 """
 
     ref_names: Annotated[
@@ -103,7 +105,7 @@ When evaluating RRL, this parameter is useless.
             names: list[str] = []
             i = 0
             while i < len(group):
-                if group[i].isupper():
+                if group[i].isupper() and i + 1 < len(group):
                     if group[i + 1] in ['<', '>']:
                         self.base_pos = 'AC 60'
                         names.append(group[i : i + 4])
@@ -141,9 +143,9 @@ When evaluating RRL, this parameter is useless.
     def ref_name_str(self) -> str:
         if self.ref_names is not None:
             ref_names = ', '.join(self.ref_names)
-            return f'{"ref" if self.true_ref else "of"} {ref_names}, keep {self.dedup}'
-        elif self.dedup is not None:
-            return f'keep {self.dedup}'
+            return f'{"ref" if self.true_ref else "of"} {ref_names}, keep {self.keep}'
+        elif self.keep is not None:
+            return f'keep {self.keep}'
         else:
             return 'original'
 

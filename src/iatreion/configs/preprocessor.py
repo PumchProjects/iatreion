@@ -21,6 +21,8 @@ data_file_mapping: dict[str, str] = {
     'volume': '核磁_volume.xlsx',
     'volume-new': '核磁_volume202510_历次.xlsx',
     'snp': '基因_snp.csv',
+    'test-screen': '认证报告_20251016.xlsx@sc',
+    'test-volume': '认证报告_20251016.xlsx@mri',
 }
 
 data_indices_mapping: dict[str, list[str]] = {
@@ -34,6 +36,8 @@ data_indices_mapping: dict[str, list[str]] = {
     'volume': ['MRI_time'],
     'volume-new': ['检查日期/Study date'],
     'snp': [],
+    'test-screen': ['测试日期'],
+    'test-volume': ['MRI_time'],
 }
 
 data_level_mapping: dict[str, str] = {
@@ -72,6 +76,12 @@ name_data_mapping: dict[DataName, str] = {
     'volume-new-pct': 'volume-new',
     'snp': 'snp',
     's-all': 's-screen-sum,s-composite-aea,volume-nz-pct,snp',
+    'test-mmse-sum': 'test-screen',
+    'test-moca-sum': 'test-screen',
+    'test-adl-sum': 'test-screen',
+    'test-s-screen-sum': 'test-mmse-sum,test-moca-sum,test-adl-sum',
+    'test-volume-pct': 'test-volume',
+    'test-s-all': 'test-s-screen-sum,test-volume-pct',
 }
 
 
@@ -116,12 +126,6 @@ class PreprocessorConfig:
 
     def __post_init__(self) -> None:
         self.dataset.prefix.mkdir(parents=True, exist_ok=True)
-    
-    @property
-    def index_name(self) -> str:
-        if self.final and not self.debug:
-            return 'ID'
-        return 'serial_num'
 
     @property
     def group_data_path(self) -> Path:
@@ -143,18 +147,23 @@ class PreprocessorConfig:
             return self.vmri_change_path_
         return self.input_prefix / '表头变化202510.xlsx'
 
-    def get_data_name(self, name: DataName) -> str:
+    @staticmethod
+    def get_data_name(name: DataName) -> str:
         return name_data_mapping[name]
 
-    def get_data_path(self, data_name: str) -> Path:
+    def get_data_path(self, data_name: str) -> tuple[Path, int | str]:
         if self.data_paths is not None:
-            return self.data_paths[data_name]
-        return self.input_prefix / data_file_mapping[data_name]
+            return self.data_paths[data_name], 0
+        file_name = data_file_mapping[data_name].rsplit('@', maxsplit=1)
+        sheet_name = file_name[1] if len(file_name) == 2 else 0
+        return self.input_prefix / file_name[0], sheet_name
 
-    def get_indices_names(self, data_name: str) -> list[str]:
+    @staticmethod
+    def get_indices_names(data_name: str) -> list[str]:
         return data_indices_mapping[data_name]
 
-    def get_level_name(self, data_name: str) -> str | None:
+    @staticmethod
+    def get_level_name(data_name: str) -> str | None:
         return data_level_mapping.get(data_name)
 
     @property
@@ -163,8 +172,12 @@ class PreprocessorConfig:
             return self.process_info_path_
         return self.dataset.prefix / 'process_info.toml'
 
+    @staticmethod
+    def get_stem(name: DataName) -> DataName:
+        return cast(DataName, name.removeprefix('test-'))
+
     def children_names(self, name: DataName) -> list[DataName]:
-        if name.startswith('s-'):
+        if name in name_data_mapping:
             return [
                 cast(DataName, child_name)
                 for child_name in name_data_mapping[name].split(',')

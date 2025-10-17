@@ -15,7 +15,7 @@ class SnpPreprocessor(Preprocessor):
     def get_data(self) -> pd.DataFrame:
         # TODO: Use self.read_data()
         data = pd.read_csv(
-            self.config.get_data_path(self.data_name), index_col='Row.names'
+            self.config.get_data_path(self.data_name)[0], index_col='Row.names'
         )
         data = data.drop(columns=['X']).astype('Int8').T
         return data
