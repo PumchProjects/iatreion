@@ -129,7 +129,7 @@ class VolumeAverageNewPreprocessor(Preprocessor):
             vmri['sd'], how='left', on='age_group', suffixes=(None, '_std')
         )
         data = data.loc[:, ~data.columns.str.startswith('Brainstem')]
-        data.set_index(self.config.dataset.index_name, inplace=True)
+        data.set_index(self.config.index_name, inplace=True)
         return data
 
     def extract_stem(self, left_col: str) -> str:

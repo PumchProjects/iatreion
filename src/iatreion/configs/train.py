@@ -29,6 +29,13 @@ class TrainConfig:
     ]
     'Group names of the data.'
 
+    dedup: Annotated[Literal['first', 'last'] | None, Parameter(name=['--dedup', '-d'])] = None
+    """Deduplication strategy for duplicated samples.
+'first': keep the first sample of each patient.
+'last': keep the last sample of each patient.
+None (default): do not deduplicate samples.
+"""
+
     ref_names: Annotated[
         list[DataName] | None, Parameter(name=['--refs', '-r'], consume_multiple=True)
     ] = None
@@ -132,11 +139,13 @@ When evaluating RRL, this parameter is useless.
 
     @property
     def ref_name_str(self) -> str:
-        if self.ref_names is None:
-            return 'original'
-        else:
+        if self.ref_names is not None:
             ref_names = ', '.join(self.ref_names)
-            return f'{"ref" if self.true_ref else "of"} {ref_names}'
+            return f'{"ref" if self.true_ref else "of"} {ref_names}, keep {self.dedup}'
+        elif self.dedup is not None:
+            return f'keep {self.dedup}'
+        else:
+            return 'original'
 
     @property
     def n_folds(self) -> int:

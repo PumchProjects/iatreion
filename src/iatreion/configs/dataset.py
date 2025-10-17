@@ -37,8 +37,6 @@ type DataName = Literal[
     's-all',
 ]
 
-exempt_dedup: list[DataName] = ['volume-new-v', 'volume-new-pct']
-
 
 @Parameter(name='*')
 @dataclass(kw_only=True)
@@ -61,14 +59,9 @@ For other models, features are concatenated.
         default_factory=lambda: ['encrypted', 'Ab', 'AC to 3', 'AC 60']
     )
 
-    index_name: Annotated[str, Parameter(parse=False)] = 'serial_num'
-
     @property
     def name_str(self) -> str:
         return ', '.join(self.names)
-
-    def exempt_dedup(self, name: DataName) -> bool:
-        return name in exempt_dedup
 
     def get_true_name(self, name: DataName) -> str:
         return f'{name}-simple' if self.simple else name

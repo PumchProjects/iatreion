@@ -116,8 +116,12 @@ class PreprocessorConfig:
 
     def __post_init__(self) -> None:
         self.dataset.prefix.mkdir(parents=True, exist_ok=True)
+    
+    @property
+    def index_name(self) -> str:
         if self.final and not self.debug:
-            self.dataset.index_name = 'ID'
+            return 'ID'
+        return 'serial_num'
 
     @property
     def group_data_path(self) -> Path:

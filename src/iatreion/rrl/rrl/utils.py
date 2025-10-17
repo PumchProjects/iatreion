@@ -85,6 +85,8 @@ def read_csv(
     names = [f[0] for f in f_list]
     dtype = {col: str for col in group_columns}
     D = pd.read_csv(data_path, names=names, index_col=0, dtype=dtype)
+    if train.dedup is not None:
+        D = D[~D.index.duplicated(keep=train.dedup)]
     if shuffle:
         D = D.sample(frac=1, random_state=0)
     X_df, y_df = make_data_labels(D, dataset, train)
@@ -106,7 +108,7 @@ def read_csv(
 def read_data(
     dataset: DatasetConfig, train: TrainConfig, *, shuffle: bool = False
 ) -> tuple[pd.DataFrame, pd.Series, pd.Series | None, pd.Series | None, pd.DataFrame]:
-    if any(dataset.exempt_dedup(name) for name in dataset.names):
+    if train.dedup is None:
         if train.n_repeats == 1:
             if train.ref_names is None:
                 if len(dataset.names) == 1:
@@ -118,8 +120,6 @@ def read_data(
                 raise ValueError('Datasets must be deduplicated when multiple datasets are used.')
             raise ValueError('Datasets must be deduplicated when reference datasets are used.')
         raise ValueError('Datasets must be deduplicated when repeated CV is used.')
-    if any(dataset.exempt_dedup(name) for name in (train.ref_names or [])):
-        raise ValueError('Reference datasets must be deduplicated.')
 
     X_df, y_df, f_list = read_csv(dataset.names[0], dataset, train)
     for name in dataset.names[1:]:

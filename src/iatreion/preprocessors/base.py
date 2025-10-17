@@ -127,7 +127,7 @@ class Preprocessor(ABC):
             data = pd.read_excel(
                 self.config.get_data_path(self.data_name),
                 # HACK: serial_num is needed for merging birth dates
-                index_col=self.config.dataset.index_name,
+                index_col=self.config.index_name,
                 na_values=['/', '#NUM!'],
                 dtype_backend='numpy_nullable',
             )
@@ -145,19 +145,19 @@ class Preprocessor(ABC):
     def get_data(self) -> pd.DataFrame: ...
 
     def deduplicate_rows(self, data: pd.DataFrame) -> pd.DataFrame:
-        if not self.config.dataset.exempt_dedup(self.name):
-            # HACK: Keep only the last sample of each patient
-            data = data[~data.index.duplicated(keep='last')]
-        return data
+        # HACK: Keep only the first sample of each patient during sequential processing
+        return data[~data.index.duplicated(keep='first')]
 
-    def get_data_outer(self) -> pd.DataFrame:
+    def get_data_outer(self, *, dedup: bool = False) -> pd.DataFrame:
         data = self.get_data()
         if self.config.final:
             data.rename(columns=encode_string, inplace=True)
         else:
             if self.level_data is not None:
                 data = pd.concat([self.level_data, data], axis=1)
-            data = self.deduplicate_rows(data.dropna())
+            data = data.dropna()
+            if dedup:
+                data = self.deduplicate_rows(data)
             self.save_process_info()
         return data
 
@@ -193,7 +193,7 @@ class Preprocessor(ABC):
     ) -> None:
         feature_names = [f'{pair[0]} {pair[1]}\n' for pair in augmented_vector_name]
         with self.config.dataset.get_info(self.name).open('w', encoding='utf-8') as f:
-            f.write(f'{self.config.dataset.index_name} index\n')
+            f.write(f'{self.config.index_name} index\n')
             if self.level_data is not None:
                 f.write(f'{self.level_data.name} level\n')
             f.writelines(feature_names)
