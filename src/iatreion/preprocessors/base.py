@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 
-import numpy as np
 import pandas as pd
 
 from iatreion.configs import DataName, PreprocessorConfig
@@ -16,6 +15,7 @@ class Preprocessor(ABC):
         self.config = config
         self.name = name
         self.data_name = config.get_data_name(name)
+        self.level_data: pd.Series | None = None
         self.process_info_: ProcessInfo | None = None
 
     @property
@@ -134,7 +134,12 @@ class Preprocessor(ABC):
             self.config.data[self.data_name] = data
             if indices_names := self.config.get_indices_names(self.data_name):
                 self.config.final_indices.append(data[indices_names].astype(str))
-        return self.config.data[self.data_name].copy()
+        data = self.config.data[self.data_name].copy()
+        if (
+            level := self.config.get_level_name(self.data_name)
+        ) and level in data.columns:  # In case that level data is not present
+            self.level_data = data[level]
+        return data
 
     @abstractmethod
     def get_data(self) -> pd.DataFrame: ...
@@ -150,13 +155,15 @@ class Preprocessor(ABC):
         if self.config.final:
             data.rename(columns=encode_string, inplace=True)
         else:
+            if self.level_data is not None:
+                data = pd.concat([self.level_data, data], axis=1)
             data = self.deduplicate_rows(data.dropna())
             self.save_process_info()
         return data
 
     @staticmethod
     def remove_useless_columns(data: pd.DataFrame) -> pd.DataFrame:
-        nunique = data.nunique(dropna=False)
+        nunique = data.nunique()
         columns = nunique[nunique <= 1].index
         if not columns.empty:
             logger.warning(
@@ -169,20 +176,16 @@ class Preprocessor(ABC):
     def get_augmented_vector_name(self, data: pd.DataFrame) -> list[tuple[str, str]]:
         discrete_th = 4
         augmented_vector_name: list[tuple[str, str]] = []
+        start_idx = 1 if self.level_data is not None else 0
+        data = data.iloc[:, start_idx : -len(self.config.dataset.group_columns)]
         for name in data.columns:
-            try:
-                col = data[name].to_numpy()
-                unique_values = np.unique(col[~np.isnan(col)])
-                if len(unique_values) <= 2:
-                    augmented_vector_name.append((name, 'binary'))
-                elif (
-                    len(unique_values) < discrete_th and not self.config.dataset.simple
-                ):
-                    augmented_vector_name.append((name, 'discrete'))
-                else:
-                    augmented_vector_name.append((name, 'continuous'))
-            except TypeError:
+            nunique = data[name].nunique()
+            if nunique <= 2:
+                augmented_vector_name.append((name, 'binary'))
+            elif nunique < discrete_th and not self.config.dataset.simple:
                 augmented_vector_name.append((name, 'discrete'))
+            else:
+                augmented_vector_name.append((name, 'continuous'))
         return augmented_vector_name
 
     def save_data(
@@ -190,11 +193,14 @@ class Preprocessor(ABC):
     ) -> None:
         feature_names = [f'{pair[0]} {pair[1]}\n' for pair in augmented_vector_name]
         with self.config.dataset.get_info(self.name).open('w', encoding='utf-8') as f:
+            f.write(f'{self.config.dataset.index_name} index\n')
+            if self.level_data is not None:
+                f.write(f'{self.level_data.name} level\n')
             f.writelines(feature_names)
+            for col in self.config.dataset.group_columns:
+                f.write(f'{col} label\n')
         fmap: list[str] = []
-        for i, (name_, type_) in enumerate(
-            augmented_vector_name[: -len(self.config.dataset.group_columns)]
-        ):
+        for i, (name_, type_) in enumerate(augmented_vector_name):
             name = encode_string(name_, ' ')
             match type_:
                 case 'binary':

@@ -45,9 +45,7 @@ def calc_score(arr: list[float] | pd.DataFrame) -> 'float | pd.Series[float]':
 
 def get_data_model(
     config: RrlEvalConfig,
-) -> tuple[
-    list[pd.DataFrame], list[pd.DataFrame], DiscreteRrlModel
-]:
+) -> tuple[list[pd.DataFrame], list[pd.DataFrame], DiscreteRrlModel]:
     process_config, rrl_config = config.make_configs()
     preprocessors = get_preprocessors(process_config)
     data = [preprocessor.get_data_outer() for preprocessor in preprocessors]
@@ -95,9 +93,7 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
     return result_list, score_list, bias_list, support_list, oppose_list
 
 
-def get_batched_result(
-    config: RrlEvalConfig
-) -> pd.DataFrame:
+def get_batched_result(config: RrlEvalConfig) -> pd.DataFrame:
     data, additional_data, model = get_data_model(config)
     result, confidence = model.eval(data)
     y_pred = get_max_label(result)

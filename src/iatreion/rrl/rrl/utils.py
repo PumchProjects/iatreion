@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from typing import Literal, overload
 
 import numpy as np
 import pandas as pd
@@ -46,33 +47,74 @@ def make_data_labels(D: pd.DataFrame, dataset: DatasetConfig, train: TrainConfig
     return X_df, y_df
 
 
-def read_csv(name: DataName, dataset: DatasetConfig, train: TrainConfig, shuffle: bool = False):
+@overload
+def read_csv(
+    name: DataName,
+    dataset: DatasetConfig,
+    train: TrainConfig,
+    *,
+    shuffle: bool = ...,
+    return_level: Literal[False] = ...,
+) -> tuple[pd.DataFrame, pd.Series, list[list[str]]]: ...
+
+
+@overload
+def read_csv(
+    name: DataName,
+    dataset: DatasetConfig,
+    train: TrainConfig,
+    *,
+    shuffle: bool = ...,
+    return_level: Literal[True],
+) -> tuple[pd.DataFrame, pd.Series, pd.Series | None, list[list[str]]]: ...
+
+
+def read_csv(
+    name: DataName,
+    dataset: DatasetConfig,
+    train: TrainConfig,
+    *,
+    shuffle: bool = False,
+    return_level: bool = False,
+) -> tuple[pd.DataFrame, pd.Series, list[list[str]]] | tuple[pd.DataFrame, pd.Series, pd.Series | None, list[list[str]]]:
     data_path = dataset.get_data(name)
     info_path = dataset.get_info(name)
     group_columns = dataset.group_columns
-    index_name = dataset.index_name
 
     f_list = read_info(info_path)
-    for f in f_list[:-len(group_columns)]:
-        f[0] = encode_string(f[0])
-    names = [index_name] + [f[0] for f in f_list]
+    names = [f[0] for f in f_list]
     dtype = {col: str for col in group_columns}
-    D = pd.read_csv(data_path, names=names, index_col=index_name, dtype=dtype)
+    D = pd.read_csv(data_path, names=names, index_col=0, dtype=dtype)
     if shuffle:
         D = D.sample(frac=1, random_state=0)
     X_df, y_df = make_data_labels(D, dataset, train)
-    f_list = f_list[:-len(group_columns)]
+    f_list = f_list[1:-len(group_columns)]
+
+    level: pd.Series | None = None
+    if f_list[0][1] == 'level':
+        level = X_df.iloc[:, 0].reset_index(drop=True)
+        X_df = X_df.iloc[:, 1:]
+        f_list = f_list[1:]
+    X_df.rename(columns=encode_string, inplace=True)
+    f_list = [[encode_string(name), type] for name, type in f_list]
+
+    if return_level:
+        return X_df, y_df, level, f_list
     return X_df, y_df, f_list
 
 
-def read_data(dataset: DatasetConfig, train: TrainConfig, shuffle: bool = False):
+def read_data(
+    dataset: DatasetConfig, train: TrainConfig, *, shuffle: bool = False
+) -> tuple[pd.DataFrame, pd.Series, pd.Series | None, pd.Series | None, pd.DataFrame]:
     if any(dataset.exempt_dedup(name) for name in dataset.names):
         if train.n_repeats == 1:
             if train.ref_names is None:
                 if len(dataset.names) == 1:
-                    X_df, y_df, f_list = read_csv(dataset.names[0], dataset, train, shuffle)
+                    X_df, y_df, level, f_list = read_csv(
+                        dataset.names[0], dataset, train, shuffle=shuffle, return_level=True
+                    )
                     f_df = pd.DataFrame(f_list)
-                    return X_df, y_df, None, f_df
+                    return X_df, y_df, None, level, f_df
                 raise ValueError('Datasets must be deduplicated when multiple datasets are used.')
             raise ValueError('Datasets must be deduplicated when reference datasets are used.')
         raise ValueError('Datasets must be deduplicated when repeated CV is used.')
@@ -95,7 +137,7 @@ def read_data(dataset: DatasetConfig, train: TrainConfig, shuffle: bool = False)
         ref_y_df = y_df
     if shuffle:
         ref_y_df = ref_y_df.sample(frac=1, random_state=0)
-    return X_df, y_df, ref_y_df, f_df
+    return X_df, y_df, ref_y_df, None, f_df
 
 
 class DBEncoder:
@@ -216,7 +258,7 @@ def try_resample(train: TrainConfig, f_df: pd.DataFrame, X, y):
 
 
 def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Samples, None, None]:
-    X_df, y_df, ref_y_df, f_df = read_data(dataset, train, shuffle=True)
+    X_df, y_df, ref_y_df, level, f_df = read_data(dataset, train, shuffle=True)
 
     db_enc = DBEncoder(f_df)
     db_enc.fit(X_df, y_df)
@@ -228,7 +270,12 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Samples
         yield db_enc, X, y, X, y
     elif ref_y_df is None:
         kf = StratifiedGroupKFold(n_splits=train.n_splits, shuffle=True, random_state=36851234)
-        for train_index, test_index in kf.split(X_df, y_df, groups=X_df.index):
+        for train_, test_index in kf.split(X_df, y_df, groups=X_df.index):
+            if level is not None and train.level_type is not None:
+                level_train = level.iloc[train_]
+                train_index = np.array(level_train.index[level_train == train.level_type])
+            else:
+                train_index = train_
             X_train = X[train_index]
             y_train = y[train_index]
             X_test = X[test_index]
@@ -256,14 +303,19 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Samples
 
 
 def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[RawSamples, None, None]:
-    X_df, y_df, ref_y_df, f_df = read_data(dataset, train, shuffle=True)
+    X_df, y_df, ref_y_df, level, f_df = read_data(dataset, train, shuffle=True)
 
     if train.final:
         X_df, y_df = try_resample(train, f_df, X_df, y_df)
         yield X_df, y_df, X_df, y_df
     elif ref_y_df is None:
         kf = StratifiedGroupKFold(n_splits=train.n_splits, shuffle=True, random_state=36851234)
-        for train_index, test_index in kf.split(X_df, y_df, groups=X_df.index):
+        for train_, test_index in kf.split(X_df, y_df, groups=X_df.index):
+            if level is not None and train.level_type is not None:
+                level_train = level.iloc[train_]
+                train_index = np.array(level_train.index[level_train == train.level_type])
+            else:
+                train_index = train_
             X_train = X_df.iloc[train_index]
             y_train = y_df.iloc[train_index]
             X_test = X_df.iloc[test_index]

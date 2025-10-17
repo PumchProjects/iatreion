@@ -19,8 +19,7 @@ data_file_mapping: dict[str, str] = {
     'cbf': '核磁_cbf.xlsx',
     'csvd': '核磁_csvd_20251008.xlsx',
     'volume': '核磁_volume.xlsx',
-    'volume-pl': '核磁_volume202510_首次.xlsx',
-    'volume-al': '核磁_volume202510_历次.xlsx',
+    'volume-new': '核磁_volume202510_历次.xlsx',
     'snp': '基因_snp.csv',
 }
 
@@ -33,9 +32,12 @@ data_indices_mapping: dict[str, list[str]] = {
     'cbf': ['date'],
     'csvd': ['检查日期/Study.date'],
     'volume': ['MRI_time'],
-    'volume-pl': ['检查日期/Study date'],
-    'volume-al': ['level_type', '检查日期/Study date'],
+    'volume-new': ['检查日期/Study date'],
     'snp': [],
+}
+
+data_level_mapping: dict[str, str] = {
+    'volume-new': 'level_type',
 }
 
 name_data_mapping: dict[DataName, str] = {
@@ -64,14 +66,12 @@ name_data_mapping: dict[DataName, str] = {
     'volume': 'volume',
     'volume-v': 'volume',
     'volume-pct': 'volume',
-    'volume-v-nz': 'volume',
-    'volume-pct-nz': 'volume',
-    'volume-v-pl': 'volume-pl',
-    'volume-pct-pl': 'volume-pl',
-    'volume-v-al': 'volume-al',
-    'volume-pct-al': 'volume-al',
+    'volume-nz-v': 'volume',
+    'volume-nz-pct': 'volume',
+    'volume-new-v': 'volume-new',
+    'volume-new-pct': 'volume-new',
     'snp': 'snp',
-    's-all': 's-screen-sum,s-composite-aea,volume-pct-nz,snp',
+    's-all': 's-screen-sum,s-composite-aea,volume-nz-pct,snp',
 }
 
 
@@ -121,7 +121,7 @@ class PreprocessorConfig:
 
     @property
     def group_data_path(self) -> Path:
-        return self.input_prefix / '患者及分组加密对应表202510.xlsx'
+        return self.input_prefix / '副本患者及分组加密对应表202510_.xlsx'
 
     @property
     def birth_data_path(self) -> Path:
@@ -149,6 +149,9 @@ class PreprocessorConfig:
 
     def get_indices_names(self, data_name: str) -> list[str]:
         return data_indices_mapping[data_name]
+
+    def get_level_name(self, data_name: str) -> str | None:
+        return data_level_mapping.get(data_name)
 
     @property
     def process_info_path(self) -> Path:

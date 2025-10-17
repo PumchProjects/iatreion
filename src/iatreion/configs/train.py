@@ -44,6 +44,9 @@ When evaluating RRL, this parameter is useless.
     true_ref: Annotated[bool, Parameter(name=['--true-ref', '-tr'])] = False
     'Align not only the test data, but also the training data to the reference data.'
 
+    level_type: Annotated[str | None, Parameter(name=['--level-type', '-lt'])] = None
+    'Level type for training set of duplicated data.'
+
     n_splits: Annotated[int, Parameter(name=['--n-splits', '-ns'])] = 10
     'Number of splits for cross-validation.'
 

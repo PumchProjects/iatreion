@@ -29,19 +29,15 @@ type DataName = Literal[
     'cbf',
     'csvd',
     'volume',
-    'volume-v',
-    'volume-pct',
-    'volume-v-nz',
-    'volume-pct-nz',
-    'volume-v-pl',
-    'volume-pct-pl',
-    'volume-v-al',
-    'volume-pct-al',
+    'volume-nz-v',
+    'volume-nz-pct',
+    'volume-new-v',
+    'volume-new-pct',
     'snp',
     's-all',
 ]
 
-exempt_dedup: list[DataName] = ['volume-v-al', 'volume-pct-al']
+exempt_dedup: list[DataName] = ['volume-new-v', 'volume-new-pct']
 
 
 @Parameter(name='*')
@@ -62,7 +58,7 @@ For other models, features are concatenated.
     'Whether to use the simple (non-binarized) version of the dataset.'
 
     group_columns: Annotated[list[str], Parameter(parse=False)] = field(
-        default_factory=lambda: ['encrypted', 'Ab']
+        default_factory=lambda: ['encrypted', 'Ab', 'AC to 3', 'AC 60']
     )
 
     index_name: Annotated[str, Parameter(parse=False)] = 'serial_num'

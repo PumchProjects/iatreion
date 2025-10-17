@@ -20,7 +20,7 @@ class VolumePreprocessor(Preprocessor):
 
 
 def get_feature(name: DataName) -> Literal['v', 'pct']:
-    feature = name.split('-')[1]
+    feature = name.rsplit('-', maxsplit=1)[-1]
     assert feature in ('v', 'pct')
     return feature
 
