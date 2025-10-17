@@ -29,7 +29,7 @@ class RawModelTrainer(Trainer):
         end = perf_counter_ns()
         training_time = (end - start) / 1e9
         y_score, complexity = self.model.predict(X_test, y_test)
-        return training_time, y_true, y_score, complexity
+        return training_time, y_true, y_score, X_test.index.to_numpy(), complexity
 
     @override
     def train_final(self) -> None:

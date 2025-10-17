@@ -33,7 +33,7 @@ class RrlTrainer(Trainer):
         end = perf_counter_ns()
         training_time = (end - start) / 1e9
         y_score, complexity = test_model(self.config, self.model, samples)
-        return training_time, samples[4], y_score, {'Log#E': complexity}
+        return training_time, samples[4], y_score, samples[5], {'Log#E': complexity}
 
     @override
     def train_final(self) -> None:

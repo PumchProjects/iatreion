@@ -1,8 +1,9 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import cast
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib.axes import Axes
 from numpy.typing import NDArray
 from sklearn.metrics import (
@@ -18,7 +19,7 @@ from sklearn.metrics import (
 from iatreion.configs import TrainConfig
 from iatreion.utils import logger
 
-type TrainerReturn = tuple[float, NDArray, NDArray, dict[str, float]]
+type TrainerReturn = tuple[float, NDArray, NDArray, NDArray, dict[str, float]]
 
 
 @dataclass
@@ -31,7 +32,8 @@ class Record[T]:
     f1: T
     sensitivity: T
     specificity: T
-    complexity: dict[str, T]
+    consistency: T
+    complexity: dict[str, T] = field(default_factory=dict)
     cm: NDArray | None = None
 
 
@@ -98,14 +100,23 @@ class RecordROC:
         return mean_auc
 
 
+def consistency_ratio(y_pred: NDArray, index: NDArray) -> float:
+    pred = pd.Series(y_pred, index=index)
+    valid_pred = pred.groupby(level=0).filter(lambda x: len(x) > 1)
+    if valid_pred.empty:
+        return float('nan')
+    nunique = valid_pred.groupby(level=0).nunique()
+    return nunique[nunique == 1].sum() / len(nunique)
+
+
 class Recorder:
     def __init__(self, config: TrainConfig) -> None:
         self.config = config
-        self.result = Record[list[float]]([], [], [], [], [], [], [], [], {}, None)
+        self.result = Record[list[float]](*([] for _ in range(9)))
         self.roc = RecordROC(config)
 
     def record(self, results: TrainerReturn) -> None:
-        training_time, y_true, y_score, complexity = results
+        training_time, y_true, y_score, index, complexity = results
         self.result.time.append(training_time)
         y_pred = y_score.argmax(axis=1)
         labels = list(range(self.config.num_class))
@@ -143,6 +154,7 @@ class Recorder:
                 y_true, y_pred, labels=labels, pos_label=1, zero_division=np.nan
             )
         )
+        self.result.consistency.append(consistency_ratio(y_pred, index))
         width = 4
         for key, value in complexity.items():
             self.result.complexity.setdefault(key, []).append(value)
@@ -156,6 +168,7 @@ class Recorder:
         if self.config.num_class == 2:
             logger.info(f'{"SEN":{width}} {self.result.sensitivity[-1]:.2%}')
             logger.info(f'{"SPC":{width}} {self.result.specificity[-1]:.2%}')
+        logger.info(f'{"CST":{width}} {self.result.consistency[-1]:.2%}')
         for key, values in self.result.complexity.items():
             logger.info(f'{key:{width}} {values[-1]:.4f}')
         logger.info(f'{"Time":{width}} {training_time:.3f}s')
@@ -175,6 +188,7 @@ class Recorder:
             np.nanmean(self.result.f1).item(),
             np.nanmean(self.result.sensitivity).item(),
             np.nanmean(self.result.specificity).item(),
+            np.nanmean(self.result.consistency).item(),
             complexity,
             self.result.cm,
         )
@@ -189,6 +203,7 @@ class Recorder:
         if self.config.num_class == 2:
             logger.info(f'AVG {"SEN":{width}} {final.sensitivity:.2%}')
             logger.info(f'AVG {"SPC":{width}} {final.specificity:.2%}')
+        logger.info(f'AVG {"CST":{width}} {final.consistency:.2%}')
         for key, value in complexity.items():
             logger.info(f'AVG {key:{width}} {value:.4f}')
         logger.info(f'AVG {"Time":{width}} {final.time:.3f}s')

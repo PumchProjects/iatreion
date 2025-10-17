@@ -213,7 +213,7 @@ class DBEncoder:
         return X_df.values, y
 
 
-type Samples = tuple[DBEncoder, NDArray, NDArray, NDArray, NDArray]
+type Samples = tuple[DBEncoder, NDArray, NDArray, NDArray, NDArray, NDArray]
 type RawSamples = tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
 
 
@@ -267,13 +267,13 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Samples
 
     if train.final:
         X, y = try_resample(train, f_df, X, y)
-        yield db_enc, X, y, X, y
+        yield db_enc, X, y, X, y, X_df.index.to_numpy()
     elif ref_y_df is None:
         kf = StratifiedGroupKFold(n_splits=train.n_splits, shuffle=True, random_state=36851234)
         for train_, test_index in kf.split(X_df, y_df, groups=X_df.index):
             if level is not None and train.level_type is not None:
                 level_train = level.iloc[train_]
-                train_index = np.array(level_train.index[level_train == train.level_type])
+                train_index = level_train.index[level_train == train.level_type].to_numpy()
             else:
                 train_index = train_
             X_train = X[train_index]
@@ -282,7 +282,7 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Samples
             y_test = y[test_index]
 
             X_train, y_train = try_resample(train, f_df, X_train, y_train)
-            yield db_enc, X_train, y_train, X_test, y_test
+            yield db_enc, X_train, y_train, X_test, y_test, X_df.index[test_index].to_numpy()
     else:
         kf = RepeatedStratifiedKFold(n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234)
         for train_, test in kf.split(ref_y_df, ref_y_df):
@@ -299,7 +299,7 @@ def get_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Samples
             y_test = y[test_arr]
 
             X_train, y_train = try_resample(train, f_df, X_train, y_train)
-            yield db_enc, X_train, y_train, X_test, y_test
+            yield db_enc, X_train, y_train, X_test, y_test, test_index.to_numpy()
 
 
 def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[RawSamples, None, None]:
@@ -313,7 +313,7 @@ def get_raw_samples(dataset: DatasetConfig, train: TrainConfig) -> Generator[Raw
         for train_, test_index in kf.split(X_df, y_df, groups=X_df.index):
             if level is not None and train.level_type is not None:
                 level_train = level.iloc[train_]
-                train_index = np.array(level_train.index[level_train == train.level_type])
+                train_index = level_train.index[level_train == train.level_type].to_numpy()
             else:
                 train_index = train_
             X_train = X_df.iloc[train_index]

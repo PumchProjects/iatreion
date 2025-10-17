@@ -21,15 +21,15 @@ class ModelTrainer(Trainer):
 
     @override
     def train_step(self) -> TrainerReturn:
-        _, X_train, y_train, X_test, y_test = next(self.samples)
+        _, X_train, y_train, X_test, y_test, test_index = next(self.samples)
         start = perf_counter_ns()
         self.model.fit(X_train, y_train)
         end = perf_counter_ns()
         training_time = (end - start) / 1e9
         y_score, complexity = self.model.predict(X_test, y_test)
-        return training_time, y_test, y_score, complexity
+        return training_time, y_test, y_score, test_index, complexity
 
     @override
     def train_final(self) -> None:
-        _, X_train, y_train, _, _ = next(self.samples)
+        _, X_train, y_train, _, _, _ = next(self.samples)
         self.model.fit(X_train, y_train)
