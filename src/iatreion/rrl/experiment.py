@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from sklearn.utils.class_weight import compute_class_weight
 from torch.utils.data.dataset import random_split
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
@@ -53,6 +54,14 @@ def train_model(args: RrlConfig, save_model_callback: Callable[[RRL | None], tup
               beta=args.beta,
               gamma=args.gamma,
               temperature=args.temp)
+    
+    y_true = samples[2]
+    class_weights_array = compute_class_weight(
+        'balanced',
+        classes=np.unique(y_true),
+        y=y_true
+    )
+    class_weights = torch.tensor(class_weights_array, dtype=torch.float)
 
     rrl.train_model(
         data_loader=train_loader,
@@ -62,6 +71,7 @@ def train_model(args: RrlConfig, save_model_callback: Callable[[RRL | None], tup
         lr_decay_rate=args.lr_decay_rate,
         lr_decay_epoch=args.lr_decay_epoch,
         weight_decay=args.weight_decay,
+        class_weights=class_weights,
         log_iter=args.log_iter,
         save_interval=args.save_interval)
     
