@@ -46,19 +46,18 @@ def calc_score(arr: list[float] | pd.DataFrame) -> 'float | pd.Series[float]':
 def get_data_model(
     config: RrlEvalConfig,
 ) -> tuple[
-    list[pd.DataFrame], list[pd.DataFrame], pd.DataFrame | None, DiscreteRrlModel
+    list[pd.DataFrame], list[pd.DataFrame], DiscreteRrlModel
 ]:
     process_config, rrl_config = config.make_configs()
     preprocessors = get_preprocessors(process_config)
     data = [preprocessor.get_data_outer() for preprocessor in preprocessors]
     additional_data = process_config.final_indices
-    group_names = preprocessors[0].get_group_names() if config.debug else None
     model = DiscreteRrlModel(rrl_config)
-    return data, additional_data, group_names, model
+    return data, additional_data, model
 
 
 def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
-    data, _, _, model = get_data_model(config)
+    data, _, model = get_data_model(config)
     names, models, predictions, active_lines, result, confidence = model.interpret(data)
     max_label = get_max_label(result).item()
     result_list = [
@@ -97,9 +96,9 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
 
 
 def get_batched_result(
-    config: RrlEvalConfig,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame | None, DiscreteRrlModel]:
-    data, additional_data, group_names, model = get_data_model(config)
+    config: RrlEvalConfig
+) -> pd.DataFrame:
+    data, additional_data, model = get_data_model(config)
     result, confidence = model.eval(data)
     y_pred = get_max_label(result)
     y_pred.name = 'Label'
@@ -107,4 +106,4 @@ def get_batched_result(
     y_score.name = 'Score'
     confidence.name = 'Confidence'
     df = pd.concat(additional_data + [y_pred, y_score, confidence], axis=1)
-    return df, result, group_names, model
+    return df

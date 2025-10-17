@@ -34,9 +34,6 @@ class RrlEvalConfig:
     )
     'Path to the data file.'
 
-    group_data: Annotated[str, Parameter(name=['--group-data', '-gd'])] = ''
-    'Path to the group data file, only used when debug=True.'
-
     vmri: Annotated[str, Parameter(name=['--vmri', '-v'])] = ''
     'Path to the Vmri_mean_sd data file.'
 
@@ -59,7 +56,6 @@ class RrlEvalConfig:
         process_config = PreprocessorConfig(
             dataset=dataset,
             input_prefix=Path(),
-            group_data_path_=Path(self.group_data),
             vmri_data_path_=Path(self.vmri),
             vmri_change_path_=Path(self.vmri_change),
             data_paths={name: Path(path) for name, path in self.data.items()},
