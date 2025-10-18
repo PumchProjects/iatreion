@@ -144,8 +144,10 @@ When evaluating RRL, this parameter is useless.
         if self.ref_names is not None:
             ref_names = ', '.join(self.ref_names)
             return f'{"ref" if self.true_ref else "of"} {ref_names}, keep {self.keep}'
-        elif self.keep is not None:
+        elif self.keep != 'all':
             return f'keep {self.keep}'
+        elif self.level_type is not None:
+            return f'at {self.level_type}'
         else:
             return 'original'
 
