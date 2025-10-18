@@ -8,11 +8,8 @@ from .base import Preprocessor
 
 
 class AdlPreprocessor(Preprocessor):
-    def __init__(
-        self, config: PreprocessorConfig, name: DataName, is_sum: bool = False
-    ) -> None:
+    def __init__(self, config: PreprocessorConfig, name: DataName) -> None:
         super().__init__(config, name)
-        self.is_sum = is_sum
 
     @override
     def get_data(self) -> pd.DataFrame:

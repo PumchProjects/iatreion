@@ -14,6 +14,7 @@ class Preprocessor(ABC):
         super().__init__()
         self.config = config
         self.name = name
+        self.is_sum = name.endswith('-sum')
         self.test = name.startswith('test-')
         self.data_name = config.get_data_name(name)
         self.level_data: pd.Series | None = None

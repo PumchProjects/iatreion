@@ -8,6 +8,7 @@ from .cog_avlt import AvltPreprocessor
 from .cog_cdr import CdrPreprocessor
 from .cog_composite import CompositePreprocessor
 from .cog_episodic import EpisodicMemoryPreprocessor
+from .cog_had import HadPreprocessor
 from .cog_mmse import MmsePreprocessor
 from .cog_mmse_sum import MmseSumPreprocessor
 from .cog_moca import MocaPreprocessor
@@ -45,10 +46,10 @@ def get_single_preprocessor(config: PreprocessorConfig, name: DataName) -> Prepr
             return MocaPreprocessor(config, name)
         case 'moca-sum':
             return MocaSumPreprocessor(config, name)
-        case 'adl':
+        case 'adl' | 'adl-sum':
             return AdlPreprocessor(config, name)
-        case 'adl-sum':
-            return AdlPreprocessor(config, name, is_sum=True)
+        case 'had' | 'had-sum':
+            return HadPreprocessor(config, name)
         case 'associative-learning':
             return AssociativeLearningPreprocessor(config, name)
         case 'episodic-memory':
