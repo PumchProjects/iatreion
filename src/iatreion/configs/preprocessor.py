@@ -73,19 +73,20 @@ name_data_mapping: dict[DataName, str] = {
     'volume': 'volume',
     'volume-v': 'volume',
     'volume-pct': 'volume',
+    'volume-z-v': 'volume',
+    'volume-z-pct': 'volume',
     'volume-nz-v': 'volume',
     'volume-nz-pct': 'volume',
     'volume-new-v': 'volume-new',
     'volume-new-pct': 'volume-new',
     'snp': 'snp',
-    's-all': 's-screen-sum,s-composite-aea,volume-nz-pct,snp',
     'test-mmse-sum': 'test-screen',
     'test-moca-sum': 'test-screen',
     'test-adl-sum': 'test-screen',
     'test-had-sum': 'test-screen',
     'test-s-screen-sum': 'test-mmse-sum,test-moca-sum,test-adl-sum,test-had-sum',
-    'test-volume-pct': 'test-volume',
-    'test-s-all': 'test-s-screen-sum,test-volume-pct',
+    'test-volume-z-pct': 'test-volume',
+    'test-s-all': 'test-s-screen-sum,test-volume-z-pct',
 }
 
 

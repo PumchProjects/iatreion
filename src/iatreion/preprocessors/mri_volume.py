@@ -26,33 +26,37 @@ def get_feature(name: DataName) -> Literal['v', 'pct']:
 
 
 class VolumeAveragePreprocessor(Preprocessor):
-    def __init__(self, config: PreprocessorConfig, name: DataName) -> None:
+    def __init__(
+        self, config: PreprocessorConfig, name: DataName, *, use_z: bool = False
+    ) -> None:
         super().__init__(config, name)
-        self.feature = get_feature(name)
+        feature = get_feature(name)
+        self.feature = f'{feature}_Z' if use_z else feature
 
     @override
     def get_data(self) -> pd.DataFrame:
         data = self.read_data()
+        data = data.loc[:, ~data.columns.str.startswith('Brainstem')]
         ai_columns = [col for col in data.columns if col.endswith('_Asymmetry_index')]
-        columns = [col for col in data.columns if col.endswith(f'_{self.feature}_Z')]
+        columns = [col for col in data.columns if col.endswith(f'_{self.feature}')]
         c_columns = [
             col
             for col in columns
-            if not col.endswith(f'_L_{self.feature}_Z')
-            and not col.endswith(f'_R_{self.feature}_Z')
+            if not col.endswith(f'_L_{self.feature}')
+            and not col.endswith(f'_R_{self.feature}')
         ]
         lr_columns = [
-            col.removesuffix(f'_L_{self.feature}_Z')
+            col.removesuffix(f'_L_{self.feature}')
             for col in columns
-            if col.endswith(f'_L_{self.feature}_Z')
+            if col.endswith(f'_L_{self.feature}')
         ]
         a_columns = []
         for col in lr_columns:
-            a_columns.append(f'{col}_A_{self.feature}_Z')
-            data[f'{col}_A_{self.feature}_Z'] = (
-                data[f'{col}_L_{self.feature}_Z'] + data[f'{col}_R_{self.feature}_Z']
+            a_columns.append(f'{col}_A_{self.feature}')
+            data[f'{col}_A_{self.feature}'] = (
+                data[f'{col}_L_{self.feature}'] + data[f'{col}_R_{self.feature}']
             ) * 0.5
-        data = data[c_columns + a_columns + ai_columns].dropna(axis=1, how='all')
+        data = data[c_columns + a_columns + ai_columns]
         return data
 
 
