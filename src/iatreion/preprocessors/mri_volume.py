@@ -58,7 +58,7 @@ class VolumeAveragePreprocessor(Preprocessor):
 
 class VolumeAverageNewPreprocessor(Preprocessor):
     def __init__(
-        self, config: PreprocessorConfig, name: DataName, new: bool = False
+        self, config: PreprocessorConfig, name: DataName, *, new: bool = False
     ) -> None:
         super().__init__(config, name)
         feature = get_feature(name)
@@ -100,9 +100,7 @@ class VolumeAverageNewPreprocessor(Preprocessor):
     def calc_age_groups(self, data: pd.DataFrame) -> pd.DataFrame:
         if not self.new:
             data = data.loc[:, :'CC_Posterior_pct']  # type: ignore
-        data, birth_dates = self.get_birth_dates(data, force_final=self.new)
-        MRI_time = pd.to_datetime(data[self.mri_time_col], utc=True)
-        real_ages = (MRI_time - birth_dates).dt.days // 365.2422
+        data, real_ages = self.calc_ages(data, self.mri_time_col, force_final=self.new)
         data['age_group'] = real_ages.apply(self.match_group).astype('string')
         return data
 

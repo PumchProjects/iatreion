@@ -1,6 +1,7 @@
 from iatreion.configs import DataName, PreprocessorConfig
 
 from .base import Preprocessor
+from .basic import BasicPreprocessor
 from .blood_biomarker import BiomarkerPreprocessor
 from .cog_adl import AdlPreprocessor
 from .cog_associative import AssociativeLearningPreprocessor
@@ -28,6 +29,8 @@ from .sequential import SequentialPreprocessor
 def get_single_preprocessor(config: PreprocessorConfig, name: DataName) -> Preprocessor:
     stem = config.get_stem(name)
     match stem:
+        case 'basic':
+            return BasicPreprocessor(config, name)
         case (
             'life'
             | 'diet-medication'

@@ -59,7 +59,7 @@ class HistoryPreprocessor(Preprocessor):
             data[col] = pd.to_numeric(data[col], errors='coerce').astype('Int64')
         return data
 
-    def parse_column_name(self, column: str, return_index: bool = False) -> str:
+    def parse_column_name(self, column: str, *, return_index: bool = False) -> str:
         if col_match := self.col_pattern.match(column):
             index = col_match.group('index')
             name = col_match.group('name')
@@ -112,7 +112,7 @@ class HistoryPreprocessor(Preprocessor):
         return codes, code_list
 
     def binarize_single_choice(
-        self, data: pd.DataFrame, column: str, ordered: bool = True
+        self, data: pd.DataFrame, column: str, *, ordered: bool = True
     ) -> pd.DataFrame:
         values, val_list = self.parse_column_values(data, column)
         data = data.drop(columns=[column])

@@ -45,6 +45,7 @@ data_level_mapping: dict[str, str] = {
 }
 
 name_data_mapping: dict[DataName, str] = {
+    'basic': 'screen',
     'life': 'history',
     'diet-medication': 'history',
     'family-history': 'history',
@@ -60,7 +61,7 @@ name_data_mapping: dict[DataName, str] = {
     'adl-sum': 'screen',
     'had': 'screen',
     'had-sum': 'screen',
-    's-screen-sum': 'mmse-sum,moca-sum,adl-sum,had-sum',
+    's-screen-sum': 'basic,mmse-sum,moca-sum,adl-sum,had-sum',
     'associative-learning': 'composite',
     'episodic-memory': 'composite',
     'avlt': 'composite',
@@ -135,7 +136,7 @@ class PreprocessorConfig:
         return self.input_prefix / '副本患者及分组加密对应表202510_.xlsx'
 
     @property
-    def birth_data_path(self) -> Path:
+    def basic_data_path(self) -> Path:
         return self.input_prefix / '基本信息202510.xlsx'
 
     @property

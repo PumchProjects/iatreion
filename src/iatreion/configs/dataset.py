@@ -6,6 +6,7 @@ from cyclopts import Parameter
 from cyclopts.types import Directory
 
 type DataName = Literal[
+    'basic',
     'life',
     'diet-medication',
     'family-history',

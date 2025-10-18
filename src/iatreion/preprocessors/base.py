@@ -71,21 +71,36 @@ class Preprocessor(ABC):
             self.config.data['group_names'] = data[self.group_columns]
         return self.config.data['group_names'].copy()
 
-    def get_birth_dates(
-        self, data: pd.DataFrame, force_final: bool = False
-    ) -> tuple[pd.DataFrame, pd.Series]:
-        if self.config.final or force_final:
-            birth_dates = pd.to_datetime(data['date of birth'], utc=True)
-            return data, birth_dates
-        else:
-            birth_data = pd.read_excel(
-                self.config.birth_data_path, index_col='serial_num'
-            )
-            birth_dates = pd.to_datetime(birth_data['实际出生日期'], utc=True)
+    def get_basic_data(self) -> pd.DataFrame:
+        if 'basic_data' not in self.config.data:
+            data = pd.read_excel(self.config.basic_data_path, index_col='serial_num')
+            data.rename(columns={'实际出生日期': 'date of birth'}, inplace=True)
+            self.config.data['basic_data'] = data
+        return self.config.data['basic_data'].copy()
+
+    def get_basic_info(
+        self, data: pd.DataFrame, columns: list[str], *, force_final: bool = False
+    ) -> pd.DataFrame:
+        # HACK: Use the information included in the data when in final mode
+        if not (self.config.final or force_final):
+            basic_data = self.get_basic_data()
             data = data.merge(
-                birth_dates, how='left', left_index=True, right_index=True
+                basic_data[columns],
+                how='left',
+                left_index=True,
+                right_index=True,
+                suffixes=('_unused', None),
             )
-            return data, data['实际出生日期']
+        return data
+
+    def calc_ages(
+        self, data: pd.DataFrame, date_col: str, *, force_final: bool = False
+    ) -> tuple[pd.DataFrame, pd.Series]:
+        data = self.get_basic_info(data, ['date of birth'], force_final=force_final)
+        test_dates = pd.to_datetime(data[date_col], utc=True)
+        birth_dates = pd.to_datetime(data['date of birth'], utc=True)
+        real_ages = (test_dates - birth_dates).dt.days // 365.2422
+        return data, real_ages
 
     def sum_columns(
         self, data: pd.DataFrame, columns: list[str], name: str
@@ -117,6 +132,7 @@ class Preprocessor(ABC):
         threshold: int,
         ge_name: str,
         lt_name: str,
+        *,
         ge_main: bool = True,
     ) -> pd.DataFrame:
         col: pd.Series = (data[column] >= threshold).astype('Int8')
