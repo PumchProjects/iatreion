@@ -78,15 +78,16 @@ class RrlConfig:
 
     def __post_init__(self) -> None:
         self.dataset.simple = False
+        over_sampler = str(self.train.over_sampler).upper()
         folder_name = (
-            f'e{self.epoch}_os{self.train.over_sampler.upper()}_mns{self.train.min_n_samples}_bs{self.batch_size}'
+            f'e{self.epoch}_os{over_sampler}_mns{self.train.min_n_samples}_bs{self.batch_size}'
             f'_lr{self.learning_rate}_lrdr{self.lr_decay_rate}_lrde{self.lr_decay_epoch}_wd{self.weight_decay}'
             f'_si{self.save_interval}_useNOT{self.use_not}_saveBest{self.save_best}_useSkip{self.skip}'
             f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
         )
         register_log_dir(self.dataset, self.train, 'rrl', folder_name)
 
-    def get_best_exp_root(self) -> tuple[Path, float]:
+    def get_best_exp_root(self) -> tuple[Path, float | None]:
         return get_best_exp_root(self.dataset.name_str, self.train, final=False)
 
     @property

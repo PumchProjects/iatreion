@@ -9,15 +9,40 @@ from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
 from typing import Self, cast
 
 from iatreion.api import get_batched_result, get_result
-from iatreion.configs import DataName, RrlEvalConfig
+from iatreion.configs import DataName, RrlEvalConfig, name_data_mapping
 from iatreion.exceptions import IatreionException
 from iatreion.utils import get_config_path, load_dict, save_dict
 
 names_mapping: dict[DataName, str] = {
+    'life': '生活',
+    'diet-medication': '饮食和药物',
+    'family-history': '家族史',
+    'medical-history': '患病史',
+    'symptom': '病史',
+    's-screen-sum': '认知筛查',
+    's-composite-aea': '认知综合',
+    'csvd': '核磁CSVD',
     'volume-new-pct': '核磁体积',
+    'snp': '基因',
 }
 
-groups_list = [
+data_mapping: dict[str, str] = {
+    'history': '病史',
+    'screen': '认知筛查',
+    'composite': '认知综合',
+    'csvd': '核磁CSVD',
+    'volume-new': '核磁体积',
+    'snp': '基因',
+}
+
+names_list: list[list[str]] = [
+    ['life', 'diet-medication', 'family-history', 'medical-history', 'symptom'],
+    ['s-screen-sum', 's-composite-aea'],
+    ['csvd', 'volume-new-pct'],
+    ['snp'],
+]
+
+groups_list: list[list[str]] = [
     ['a', 'ac', 'l', 'gdn', 'o'],
     ['1', '2', 'f'],
     ['A<60', 'A<60C<60', 'F<60', 'A>60', 'A>60C>60', 'F>60'],
@@ -27,7 +52,10 @@ groups_list = [
 
 def load_config(path: Path) -> RrlEvalConfig:
     config_dict = load_dict(path)
-    return RrlEvalConfig(**config_dict.get('rrl-eval', {}))
+    try:
+        return RrlEvalConfig(**config_dict.get('rrl-eval', {}))
+    except Exception:
+        return RrlEvalConfig()
 
 
 def save_config(config: RrlEvalConfig, path: Path) -> None:
@@ -46,7 +74,7 @@ class ConfigBundle:
         default_factory=lambda: defaultdict(tk.StringVar)
     )
     vmri: tk.StringVar = field(default_factory=tk.StringVar)
-    vmri_change: tk.StringVar = field(default_factory=tk.StringVar)
+    change: tk.StringVar = field(default_factory=tk.StringVar)
     batched: tk.BooleanVar = field(default_factory=tk.BooleanVar)
     debug: tk.BooleanVar = field(default_factory=tk.BooleanVar)
 
@@ -67,7 +95,7 @@ class ConfigBundle:
         self.process.set(os.path.basename(path))
 
     def set_data(self, data: dict[str, str]) -> None:
-        self.config.data = data
+        self.config.data |= data
         for key, value in data.items():
             self.data[key].set(os.path.basename(value))
 
@@ -77,7 +105,7 @@ class ConfigBundle:
 
     def set_vmri_change(self, path: str) -> None:
         self.config.vmri_change = path
-        self.vmri_change.set(os.path.basename(path))
+        self.change.set(os.path.basename(path))
 
     def set_batched(self, batched: bool, *, init: bool = False) -> None:
         self.config.batched = batched
@@ -102,19 +130,6 @@ class ConfigBundle:
         bundle.set_batched(config.batched, init=True)
         bundle.set_debug(config.debug, init=True)
         return bundle
-
-
-def make_menu_row(
-    master: tk.Misc,
-    row: int,
-    label_text: str,
-    variable: tk.StringVar,
-    *values: str,
-) -> None:
-    label = ttk.Label(master, text=label_text)
-    label.grid(row=row, column=0, sticky=tk.EW)
-    menu = ttk.OptionMenu(master, variable, variable.get(), *values)
-    menu.grid(row=row, column=1, sticky=tk.EW)
 
 
 def make_row(
@@ -143,17 +158,24 @@ def create_dialog(master: tk.Tk, title: str) -> tk.Toplevel:
     return dialog
 
 
-def select_groups(master: tk.Tk, init_groups: list[str]) -> list[str]:
-    dialog = create_dialog(master, '选择分组')
+def select_items(
+    master: tk.Tk,
+    items_list: list[list[str]],
+    init_items: list[str],
+    title: str,
+    item_name_mapping: dict[str, str] | None = None,
+) -> list[str]:
+    dialog = create_dialog(master, title)
     frm = ttk.Frame(dialog, padding=(10, 10, 10, 5))
     frm.pack()
     vars: dict[str, tk.BooleanVar] = {}
-    for column, groups in enumerate(groups_list):
-        for row, group in enumerate(groups):
-            var = tk.BooleanVar(value=group in init_groups)
-            chk = ttk.Checkbutton(frm, text=group, variable=var)
+    for column, items in enumerate(items_list):
+        for row, item in enumerate(items):
+            var = tk.BooleanVar(value=item in init_items)
+            text = item_name_mapping[item] if item_name_mapping else item
+            chk = ttk.Checkbutton(frm, text=text, variable=var)
             chk.grid(row=row, column=column, sticky=tk.W, padx=10)
-            vars[group] = var
+            vars[item] = var
 
     def clear() -> None:
         for var in vars.values():
@@ -166,7 +188,7 @@ def select_groups(master: tk.Tk, init_groups: list[str]) -> list[str]:
     ok_button = ttk.Button(bottom_frm, text='确定', command=dialog.destroy)
     ok_button.pack(side=tk.LEFT, padx=5)
     master.wait_window(dialog)
-    return [group for group, var in vars.items() if var.get()]
+    return [item for item, var in vars.items() if var.get()]
 
 
 def save_batched_result(config: RrlEvalConfig) -> None:
@@ -219,16 +241,7 @@ def show_result(master: tk.Tk, config: RrlEvalConfig) -> None:
         frm, 0, 0, result_list, '最终结果', '分组', '分数', '置信度', module=False
     )
     make_table(
-        frm,
-        0,
-        1,
-        score_list,
-        '各模块预测结果',
-        '模块',
-        '分组',
-        '分数',
-        '置信度',
-        '权重',
+        frm, 0, 1, score_list, '各模块结果', '模块', '分组', '分数', '置信度', '权重'
     )
     make_table(frm, 1, 0, bias_list, '初始偏差', '模块', '分组', '分数')
     make_table(
@@ -259,8 +272,42 @@ def main() -> None:
 
     bundle = ConfigBundle.from_config(config)
 
+    def set_data_path(data_name: str) -> Callable[[], None]:
+        def set_data_path_inner() -> None:
+            path = askopenfilename(
+                defaultextension='.xlsx',
+                filetypes=[('Excel 表格', '*.xlsx')],
+                initialfile=config.data.get(data_name),
+            )
+            if path:
+                bundle.set_data({data_name: path})
+
+        return set_data_path_inner
+
+    def make_data_rows() -> None:
+        start = 6
+        for widget in frm.grid_slaves():
+            if int(widget.grid_info()['row']) >= start:
+                widget.destroy()
+        for i, name in enumerate(config.names, start):
+            data_name = name_data_mapping[name]
+            label = f'{data_mapping[data_name]}数据:'
+            command = set_data_path(data_name)
+            make_row(frm, i, label, bundle.data[data_name], '选择文件', command)
+
+    def set_names() -> None:
+        selected_names = select_items(
+            root,
+            names_list,
+            cast(list[str], config.names),
+            '选择模块',
+            item_name_mapping=cast(dict[str, str], names_mapping),
+        )
+        bundle.set_names([cast(DataName, name) for name in selected_names])
+        make_data_rows()
+
     def set_groups() -> None:
-        selected_groups = select_groups(root, config.groups)
+        selected_groups = select_items(root, groups_list, config.groups, '选择分组')
         bundle.set_groups(selected_groups)
 
     def set_thesaurus_path() -> None:
@@ -276,15 +323,6 @@ def main() -> None:
         if path:
             bundle.set_process(path)
 
-    def set_data_path() -> None:
-        path = askopenfilename(
-            defaultextension='.xlsx',
-            filetypes=[('Excel 表格', '*.xlsx')],
-            initialfile=config.data['volume-new'],
-        )
-        if path:
-            bundle.set_data({'volume-new': path})
-
     def set_vmri_path() -> None:
         path = askopenfilename(
             defaultextension='.xlsx',
@@ -294,7 +332,7 @@ def main() -> None:
         if path:
             bundle.set_vmri(path)
 
-    def set_vmri_change_path() -> None:
+    def set_change_path() -> None:
         path = askopenfilename(
             defaultextension='.xlsx',
             filetypes=[('Excel 表格', '*.xlsx')],
@@ -309,20 +347,13 @@ def main() -> None:
     def set_debug() -> None:
         bundle.set_debug(bundle.debug.get())
 
-    make_menu_row(frm, 0, '模块:', bundle.names, *names_mapping.values())
+    make_row(frm, 0, '模块:', bundle.names, '选择模块', set_names)
     make_row(frm, 1, '分组:', bundle.groups, '选择分组', set_groups)
     make_row(frm, 2, '模型:', bundle.thesaurus, '选择文件夹', set_thesaurus_path)
     make_row(frm, 3, '预处理信息:', bundle.process, '选择文件', set_process_path)
-    make_row(frm, 4, '数据:', bundle.data['volume-new'], '选择文件', set_data_path)
-    make_row(frm, 5, '核磁体积均值标准差:', bundle.vmri, '选择文件', set_vmri_path)
-    make_row(
-        frm,
-        6,
-        '核磁体积表头变化:',
-        bundle.vmri_change,
-        '选择文件',
-        set_vmri_change_path,
-    )
+    make_row(frm, 4, '核磁体积均值标准差:', bundle.vmri, '选择文件', set_vmri_path)
+    make_row(frm, 5, '核磁体积表头变化:', bundle.change, '选择文件', set_change_path)
+    make_data_rows()
 
     def run_inference() -> None:
         save_config(config, config_path)
@@ -332,10 +363,18 @@ def main() -> None:
             else:
                 show_result(root, config)
         except IatreionException as e:
-            e.update(dataset=bundle.names.get(), groups=bundle.groups.get())
+            e.update(
+                dataset=names_mapping.get(cast(DataName, e.mapping['dataset'])),
+                data_name=data_mapping.get(e.mapping['data_name']),
+                vmri='核磁体积均值标准差',
+                vmri_change='核磁体积表头变化',
+                process_info='预处理信息',
+            )
             show_error_message(str(e))
         except Exception as e:
             show_error_message(str(e))
+            if config.debug:
+                raise e
 
     bottom_frm = ttk.Frame(root, padding=(10, 5, 10, 10))
     bottom_frm.pack()

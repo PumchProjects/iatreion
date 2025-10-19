@@ -112,7 +112,7 @@ def consistency_ratio(y_pred: NDArray, index: NDArray) -> float:
 class Recorder:
     def __init__(self, config: TrainConfig) -> None:
         self.config = config
-        self.result = Record[list[float]](*([] for _ in range(9)))
+        self.result = Record[list[float]](*([] for _ in range(9)))  # type: ignore
         self.roc = RecordROC(config)
 
     def record(self, results: TrainerReturn) -> None:

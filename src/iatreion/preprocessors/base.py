@@ -82,7 +82,15 @@ class Preprocessor(ABC):
         self, data: pd.DataFrame, columns: list[str], *, force_final: bool = False
     ) -> pd.DataFrame:
         # HACK: Use the information included in the data when in final mode
-        if not (self.config.final or force_final):
+        if self.config.final or force_final:
+            for col in columns:
+                if col not in data.columns:
+                    raise IatreionException(
+                        'Column "$column" not found in "$dataset".',
+                        column=col,
+                        dataset=self.name,
+                    )
+        else:
             basic_data = self.get_basic_data()
             data = data.merge(
                 basic_data[columns],

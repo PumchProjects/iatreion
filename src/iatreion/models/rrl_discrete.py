@@ -2,12 +2,13 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Self, override
+from typing import Self, cast, override
 
 import pandas as pd
 from scipy.special import expit, softmax
 
 from iatreion.configs import DataName, DiscreteRrlConfig
+from iatreion.exceptions import IatreionException
 from iatreion.utils import decode_string, logger
 
 from .base import ModelReturn, RawModel
@@ -25,7 +26,7 @@ class Item(ABC):
     def __str__(self) -> str: ...
 
     @abstractmethod
-    def eval(self, data: pd.DataFrame) -> 'pd.Series[pd.BooleanDtype]': ...
+    def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]': ...
 
 
 @dataclass
@@ -35,7 +36,7 @@ class BinaryItem(Item):
         return self.true_name
 
     @override
-    def eval(self, data: pd.DataFrame) -> 'pd.Series[pd.BooleanDtype]':
+    def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]':
         value = data[self.name]
         return value == 1
 
@@ -49,7 +50,7 @@ class DiscreteItem(Item):
         return f'{self.true_name} = {self.value}'
 
     @override
-    def eval(self, data: pd.DataFrame) -> 'pd.Series[pd.BooleanDtype]':
+    def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]':
         value = data[self.name]
         return value == self.value
 
@@ -64,7 +65,7 @@ class ContinuousItem(Item):
         return f'{self.true_name} {self.op} {self.th:.4f}'
 
     @override
-    def eval(self, data: pd.DataFrame) -> 'pd.Series[pd.BooleanDtype]':
+    def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]':
         value = data[self.name]
         match self.op:
             case '<':
@@ -148,7 +149,7 @@ class Rule:
         inner = f' {self.op} '.join([str(item) for item in self.items])
         return f'{"~" if self.is_not else ""}({inner})'
 
-    def eval(self, data: pd.DataFrame) -> 'pd.Series[pd.BooleanDtype]':
+    def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]':
         result = self.items[0].eval(data)
         for item in self.items[1:]:
             other = item.eval(data)
@@ -218,7 +219,7 @@ class Rrl:
         self.lines = [Line(line, self.labels) for line in texts[1:]]
 
     def eval(
-        self, data: pd.DataFrame, active_lines: list[Self] | None = None
+        self, data: pd.DataFrame, active_lines: list[Line] | None = None
     ) -> tuple[pd.DataFrame, pd.Series]:
         result = pd.DataFrame(
             {
@@ -258,9 +259,14 @@ class DiscreteRrlModel(RawModel):
     def aggregate(
         self, models: list[Rrl], predictions: list[tuple[pd.DataFrame, pd.Series]]
     ) -> tuple[pd.DataFrame, pd.Series]:
-        results = sum(
-            pred.mul(confidence, axis=0) * model.weight
-            for (pred, confidence), model in zip(predictions, models, strict=False)
+        if not predictions:
+            raise IatreionException('No predictions to aggregate!')
+        results = cast(
+            pd.DataFrame,
+            sum(
+                pred.mul(confidence, axis=0) * model.weight
+                for (pred, confidence), model in zip(predictions, models, strict=False)
+            ),
         )
         confidence = pd.concat([c for _, c in predictions], axis=1).max(axis=1)
         results.loc[confidence < 0.5] = pd.NA

@@ -173,6 +173,9 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
+# Mac stuff:
+.DS_Store
+
 # RRL log files
 logs/
 

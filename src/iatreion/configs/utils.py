@@ -1,6 +1,5 @@
 import re
 from pathlib import Path
-from typing import Literal, overload
 
 from iatreion.exceptions import IatreionException
 from iatreion.utils import add_file_handler
@@ -22,18 +21,6 @@ def get_avg_f1(exp_root: Path) -> float:
     return 0.0
 
 
-@overload
-def try_get_best_exp_root(
-    groups_root: Path, final: Literal[False]
-) -> tuple[Path, float] | None: ...
-
-
-@overload
-def try_get_best_exp_root(
-    groups_root: Path, final: Literal[True]
-) -> tuple[Path, None] | None: ...
-
-
 def try_get_best_exp_root(
     groups_root: Path, final: bool
 ) -> None | tuple[Path, None] | tuple[Path, float]:
@@ -51,18 +38,6 @@ def try_get_best_exp_root(
     if best_exp_root is not None:
         return best_exp_root, best_f1
     return None
-
-
-@overload
-def get_best_exp_root(
-    name: str, train: TrainConfig, final: Literal[False]
-) -> tuple[Path, float]: ...
-
-
-@overload
-def get_best_exp_root(
-    name: str, train: TrainConfig, final: Literal[True]
-) -> tuple[Path, None]: ...
 
 
 def get_best_exp_root(

@@ -6,6 +6,7 @@ import pandas as pd
 from cyclopts import Parameter
 from cyclopts.types import ExistingDirectory
 
+from iatreion.exceptions import IatreionException
 from iatreion.utils import load_dict, logger, save_dict
 
 from .dataset import DataName, DatasetConfig
@@ -51,7 +52,7 @@ name_data_mapping: dict[DataName, str] = {
     'family-history': 'history',
     'medical-history': 'history',
     'symptom': 'history',
-    's-history': 'life,diet-medication,family-history,medical-history,symptom',
+    's-history': 'history',
     'cdr': 'cdr',
     'mmse': 'screen',
     'mmse-sum': 'screen',
@@ -61,11 +62,11 @@ name_data_mapping: dict[DataName, str] = {
     'adl-sum': 'screen',
     'had': 'screen',
     'had-sum': 'screen',
-    's-screen-sum': 'basic,mmse-sum,moca-sum,adl-sum,had-sum',
+    's-screen-sum': 'screen',
     'associative-learning': 'composite',
     'episodic-memory': 'composite',
     'avlt': 'composite',
-    's-composite-aea': 'associative-learning,episodic-memory,avlt',
+    's-composite-aea': 'composite',
     'composite-bin': 'composite',
     'biomarker': 'biomarker',
     'cbf': 'cbf',
@@ -84,9 +85,27 @@ name_data_mapping: dict[DataName, str] = {
     'test-moca-sum': 'test-screen',
     'test-adl-sum': 'test-screen',
     'test-had-sum': 'test-screen',
-    'test-s-screen-sum': 'test-mmse-sum,test-moca-sum,test-adl-sum,test-had-sum',
+    'test-s-screen-sum': 'test-screen',
     'test-volume-z-pct': 'test-volume',
-    'test-s-all': 'test-s-screen-sum,test-volume-z-pct',
+}
+
+sequence_mapping: dict[DataName, list[DataName]] = {
+    's-history': [
+        'life',
+        'diet-medication',
+        'family-history',
+        'medical-history',
+        'symptom',
+    ],
+    's-screen-sum': ['basic', 'mmse-sum', 'moca-sum', 'adl-sum', 'had-sum'],
+    's-composite-aea': ['associative-learning', 'episodic-memory', 'avlt'],
+    'test-s-screen-sum': [
+        'test-mmse-sum',
+        'test-moca-sum',
+        'test-adl-sum',
+        'test-had-sum',
+    ],
+    'test-s-all': ['test-s-screen-sum', 'test-volume-z-pct'],
 }
 
 
@@ -143,12 +162,18 @@ class PreprocessorConfig:
     @property
     def vmri_data_path(self) -> Path:
         if self.vmri_data_path_ is not None:
+            if not self.vmri_data_path_.is_file():
+                raise IatreionException('$vmri file is not found', vmri='VMRI')
             return self.vmri_data_path_
         return self.input_prefix / 'Vmri_mean_sd.xlsx'
 
     @property
     def vmri_change_path(self) -> Path:
         if self.vmri_change_path_ is not None:
+            if not self.vmri_change_path_.is_file():
+                raise IatreionException(
+                    '$vmri_change file is not found', vmri_change='VMRI change'
+                )
             return self.vmri_change_path_
         return self.input_prefix / '表头变化202510.xlsx'
 
@@ -158,6 +183,11 @@ class PreprocessorConfig:
 
     def get_data_path(self, data_name: str) -> tuple[Path, int | str]:
         if self.data_paths is not None:
+            if data_name not in self.data_paths:
+                raise IatreionException(
+                    'Data name "$data_name" not found in data paths.',
+                    data_name=data_name,
+                )
             return self.data_paths[data_name], 0
         file_name = data_file_mapping[data_name].rsplit('@', maxsplit=1)
         sheet_name = file_name[1] if len(file_name) == 2 else 0
@@ -174,6 +204,10 @@ class PreprocessorConfig:
     @property
     def process_info_path(self) -> Path:
         if self.process_info_path_ is not None:
+            if not self.process_info_path_.is_file():
+                raise IatreionException(
+                    '$process_info file is not found', process_info='Processing info'
+                )
             return self.process_info_path_
         return self.dataset.prefix / 'process_info.toml'
 
@@ -182,12 +216,7 @@ class PreprocessorConfig:
         return cast(DataName, name.removeprefix('test-'))
 
     def children_names(self, name: DataName) -> list[DataName]:
-        if name in name_data_mapping:
-            return [
-                cast(DataName, child_name)
-                for child_name in name_data_mapping[name].split(',')
-            ]
-        return []
+        return sequence_mapping.get(name, [])
 
     @property
     def process_info_dict(self) -> dict[str, dict[str, Any]]:
