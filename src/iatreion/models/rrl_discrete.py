@@ -263,10 +263,7 @@ class DiscreteRrlModel(RawModel):
             raise IatreionException('No predictions to aggregate!')
         results = cast(
             pd.DataFrame,
-            sum(
-                pred.mul(confidence, axis=0) * model.weight
-                for (pred, confidence), model in zip(predictions, models, strict=False)
-            ),
+            sum(pred.mul(confidence, axis=0) for (pred, confidence) in predictions),
         )
         confidence = pd.concat([c for _, c in predictions], axis=1).max(axis=1)
         results.loc[confidence < 0.5] = pd.NA
