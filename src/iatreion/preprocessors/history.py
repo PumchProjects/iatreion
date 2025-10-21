@@ -242,6 +242,16 @@ class HistoryPreprocessor(Preprocessor):
         # Fit the val_pattern
         data.replace('4(5>3人)', '4(5=超过3人)', inplace=True)
 
+        # Rename conflicted columns
+        data.rename(
+            columns={
+                'V190_抑郁（须有明确诊断）': 'V190_抑郁家族史',
+                'V194_高血压': 'V194_高血压家族史',
+                'V198_糖尿病': 'V198_糖尿病家族史',
+            },
+            inplace=True,
+        )
+
         threshold = 0.86
         unordered_columns = [
             'V173_痴呆家族史',
