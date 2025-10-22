@@ -278,7 +278,7 @@ class DiscreteRrlModel(RawModel):
         models = self.get_models()
         predictions = [model.eval(X) for model in models]
         results, _ = self.aggregate(models, predictions)
-        return softmax(results.astype(float).values, axis=1), {}
+        return softmax(results.to_numpy('float32'), axis=1), {}
 
     def eval(self, data: list[pd.DataFrame]) -> tuple[pd.DataFrame, pd.Series]:
         models = self.get_models()

@@ -94,7 +94,7 @@ class BinarizeLayer(nn.Module):
                     for j in ci:
                         if mean is not None and std is not None:
                             j = j * std[fi_name] + mean[fi_name]
-                        bound_name.append('{} {} {:.4f}'.format(fi_name, op, j))
+                        bound_name.append('{} {} {:.6f}'.format(fi_name, op, j))
         self.rule_name = bound_name
 
 

@@ -16,7 +16,7 @@ from imblearn.over_sampling import (
 from numpy.typing import NDArray
 from sklearn import preprocessing
 from sklearn.impute import SimpleImputer
-from sklearn.model_selection import RepeatedStratifiedKFold, StratifiedGroupKFold
+from sklearn.model_selection import RepeatedStratifiedKFold
 
 from iatreion.configs import DataName, DatasetConfig, TrainConfig
 from iatreion.utils import encode_string, logger
@@ -113,27 +113,26 @@ def read_csv(
 
 def read_data(
     dataset: DatasetConfig, train: TrainConfig, *, shuffle: bool = False
-) -> tuple[pd.DataFrame, pd.Series, pd.Series | None, pd.Series | None, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.Series | None, pd.DataFrame]:
     if train.keep == 'all':
-        if train.n_repeats == 1:
-            if train.ref_names is None:
-                if len(dataset.names) == 1:
-                    X_df, y_df, level, f_list = read_csv(
-                        dataset.names[0],
-                        dataset,
-                        train,
-                        shuffle=shuffle,
-                        return_level=True,
-                    )
-                    f_df = pd.DataFrame(f_list)
-                    return X_df, y_df, None, level, f_df
-                raise ValueError(
-                    'Datasets must be deduplicated when multiple datasets are used.'
-                )
+        if train.ref_names is not None:
             raise ValueError(
                 'Datasets must be deduplicated when reference datasets are used.'
             )
-        raise ValueError('Datasets must be deduplicated when repeated CV is used.')
+        if len(dataset.names) > 1:
+            raise ValueError(
+                'Datasets must be deduplicated when multiple datasets are used.'
+            )
+        X_df, y_df, level, f_list = read_csv(
+            dataset.names[0], dataset, train, shuffle=shuffle, return_level=True
+        )
+        f_df = pd.DataFrame(f_list)
+        ref_y_df = y_df.groupby(level=0).first()
+        return X_df, y_df, ref_y_df, level, f_df
+    if train.level_type is not None:
+        raise ValueError(
+            'Datasets must NOT be deduplicated when using level type filtering.'
+        )
 
     X_df, y_df, f_list = read_csv(dataset.names[0], dataset, train)
     for name in dataset.names[1:]:
@@ -285,6 +284,27 @@ def try_resample(train: TrainConfig, f_df: pd.DataFrame, X, y):
     return X, y
 
 
+def get_train_test(
+    train: TrainConfig, X_df: pd.DataFrame, ref_y: pd.Series, level: pd.Series | None
+) -> Generator[tuple[NDArray, NDArray], None, None]:
+    kf = RepeatedStratifiedKFold(
+        n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234
+    )
+    for train_, test in kf.split(ref_y, ref_y):
+        test_index = ref_y.index[test]
+        if train.true_ref:
+            train_index = ref_y.index[train_]
+        else:
+            train_index = X_df.index.difference(test_index)
+        X_index = X_df.reset_index().iloc[:, 0]
+        train_arr = X_index.index[X_index.isin(train_index)].to_numpy()
+        test_arr = X_index.index[X_index.isin(test_index)].to_numpy()
+        if level is not None and train.level_type is not None:
+            level_train = level.iloc[train_arr]
+            train_arr = level_train.index[level_train == train.level_type].to_numpy()
+        yield train_arr, test_arr
+
+
 def get_samples(
     dataset: DatasetConfig, train: TrainConfig
 ) -> Generator[Samples, None, None]:
@@ -298,46 +318,15 @@ def get_samples(
     if train.final:
         X, y = try_resample(train, f_df, X, y)
         yield db_enc, X, y, X, y, X_df.index.to_numpy()
-    elif ref_y_df is None:
-        kf = StratifiedGroupKFold(
-            n_splits=train.n_splits, shuffle=True, random_state=36851234
-        )
-        for train_, test_index in kf.split(X_df, y_df, groups=X_df.index):
-            if level is not None and train.level_type is not None:
-                level_train = level.iloc[train_]
-                train_index = level_train.index[
-                    level_train == train.level_type
-                ].to_numpy()
-            else:
-                train_index = train_
-            X_train = X[train_index]
-            y_train = y[train_index]
-            X_test = X[test_index]
-            y_test = y[test_index]
 
-            X_train, y_train = try_resample(train, f_df, X_train, y_train)
-            yield db_enc, X_train, y_train, X_test, y_test, X_df.index[
-                test_index
-            ].to_numpy()
-    else:
-        kf = RepeatedStratifiedKFold(
-            n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234
-        )
-        for train_, test in kf.split(ref_y_df, ref_y_df):
-            test_index = ref_y_df.index[test]
-            if train.true_ref:
-                train_index = ref_y_df.index[train_]
-            else:
-                train_index = X_df.index.difference(test_index)
-            train_arr = np.array([X_df.index.get_loc(i) for i in train_index])
-            test_arr = np.array([X_df.index.get_loc(i) for i in test_index])
-            X_train = X[train_arr]
-            y_train = y[train_arr]
-            X_test = X[test_arr]
-            y_test = y[test_arr]
+    for train_arr, test_arr in get_train_test(train, X_df, ref_y_df, level):
+        X_train = X[train_arr]
+        y_train = y[train_arr]
+        X_test = X[test_arr]
+        y_test = y[test_arr]
 
-            X_train, y_train = try_resample(train, f_df, X_train, y_train)
-            yield db_enc, X_train, y_train, X_test, y_test, test_index.to_numpy()
+        X_train, y_train = try_resample(train, f_df, X_train, y_train)
+        yield db_enc, X_train, y_train, X_test, y_test, X_df.index[test_arr].to_numpy()
 
 
 def get_raw_samples(
@@ -348,39 +337,12 @@ def get_raw_samples(
     if train.final:
         X_df, y_df = try_resample(train, f_df, X_df, y_df)
         yield X_df, y_df, X_df, y_df
-    elif ref_y_df is None:
-        kf = StratifiedGroupKFold(
-            n_splits=train.n_splits, shuffle=True, random_state=36851234
-        )
-        for train_, test_index in kf.split(X_df, y_df, groups=X_df.index):
-            if level is not None and train.level_type is not None:
-                level_train = level.iloc[train_]
-                train_index = level_train.index[
-                    level_train == train.level_type
-                ].to_numpy()
-            else:
-                train_index = train_
-            X_train = X_df.iloc[train_index]
-            y_train = y_df.iloc[train_index]
-            X_test = X_df.iloc[test_index]
-            y_test = y_df.iloc[test_index]
 
-            X_train, y_train = try_resample(train, f_df, X_train, y_train)
-            yield X_train, y_train, X_test, y_test
-    else:
-        kf = RepeatedStratifiedKFold(
-            n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234
-        )
-        for train_, test in kf.split(ref_y_df, ref_y_df):
-            test_index = ref_y_df.index[test]
-            if train.true_ref:
-                train_index = ref_y_df.index[train_]
-            else:
-                train_index = X_df.index.difference(test_index)
-            X_train = X_df.loc[train_index]
-            y_train = y_df.loc[train_index]
-            X_test = X_df.loc[test_index]
-            y_test = y_df.loc[test_index]
+    for train_arr, test_arr in get_train_test(train, X_df, ref_y_df, level):
+        X_train = X_df.iloc[train_arr]
+        y_train = y_df.iloc[train_arr]
+        X_test = X_df.iloc[test_arr]
+        y_test = y_df.iloc[test_arr]
 
-            X_train, y_train = try_resample(train, f_df, X_train, y_train)
-            yield X_train, y_train, X_test, y_test
+        X_train, y_train = try_resample(train, f_df, X_train, y_train)
+        yield X_train, y_train, X_test, y_test
