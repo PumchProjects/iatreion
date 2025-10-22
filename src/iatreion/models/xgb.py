@@ -63,8 +63,9 @@ class XgboostModel(Model):
         )
         if len(self.config.dataset.names) > 1:
             logger.warning(
-                'Multiple datasets found, '
-                'feature importance will use indices instead of names.'
+                '[bold yellow]Multiple datasets found,'
+                ' feature importance will use indices instead of names.',
+                extra={'markup': True},
             )
             score = self.bst.get_fscore()
         else:

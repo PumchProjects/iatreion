@@ -62,7 +62,7 @@ class ContinuousItem(Item):
 
     @override
     def __str__(self) -> str:
-        return f'{self.true_name} {self.op} {self.th:.4f}'
+        return f'{self.true_name} {self.op} {self.th:.3f}'
 
     @override
     def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]':
@@ -196,26 +196,36 @@ class Rrl:
         with file.open('r', encoding='utf-8') as f:
             texts = f.readlines()
         headers = texts[0].split('\t')
-        self.labels: list[str] = []
-        self.biases: list[float] = []
+
         match_obj = self.rid_template.match(headers[0])
         if match_obj is not None:
             self.temp = float(match_obj.group('temp'))
             self.weight = (
                 weight if weight is not None else float(match_obj.group('weight'))
             )
+            if self.weight == 1.0:
+                logger.warning(
+                    f'[bold yellow]The weight {self.weight} is unlikely,'
+                    f' please set it manually if needed: "{file}".',
+                    extra={'markup': True},
+                )
         else:
             self.temp = 0.01
             self.weight = weight if weight is not None else 1.0
             logger.warning(
-                f'[bold yellow]Using default temperature {self.temp} for old versions',
+                f'[bold yellow]Using default temperature {self.temp}'
+                f' and weight {self.weight} for old versions',
                 extra={'markup': True},
             )
+
+        self.labels: list[str] = []
+        self.biases: list[float] = []
         for header in headers[1:-2]:
             match_obj = self.label_template.match(header)
             assert match_obj is not None, f'Invalid header: {header}!'
             self.labels.append(match_obj.group('label').split('_')[-1])
             self.biases.append(float(match_obj.group('bias')))
+
         self.lines = [Line(line, self.labels) for line in texts[1:]]
 
     def eval(
@@ -261,10 +271,14 @@ class DiscreteRrlModel(RawModel):
     ) -> tuple[pd.DataFrame, pd.Series]:
         if not predictions:
             raise IatreionException('No predictions to aggregate!')
-        results = cast(
-            pd.DataFrame,
-            sum(pred.mul(confidence, axis=0) for (pred, confidence) in predictions),
-        )
+        dividends: list[pd.DataFrame] = []
+        divisors: list[pd.Series] = []
+        for pred, confidence in predictions:
+            dividends.append(pred.mul(confidence, axis=0))
+            divisors.append(confidence)
+        dividend = cast(pd.DataFrame, sum(dividends))
+        divisor = cast(pd.Series, sum(divisors))
+        results = dividend.div(divisor + 1e-8, axis=0)
         confidence = pd.concat([c for _, c in predictions], axis=1).max(axis=1)
         results.loc[confidence < 0.5] = pd.NA
         return results, confidence

@@ -2,9 +2,10 @@ from time import perf_counter_ns
 from typing import Any, override
 
 from iatreion.configs import RrlConfig
+from iatreion.exceptions import IatreionException
 from iatreion.rrl import get_samples
 from iatreion.rrl.experiment import test_model, train_model
-from iatreion.utils import set_seed_torch
+from iatreion.utils import logger, set_seed_torch
 
 from .base import Trainer, TrainerReturn
 
@@ -17,7 +18,16 @@ class RrlTrainer(Trainer):
         self.model: Any = None
         self.weight: float | None = None
         if config.train.final:
-            _, self.weight = config.get_best_exp_root()
+            try:
+                _, self.weight = config.get_best_exp_root()
+            except IatreionException:
+                self.weight = 1.0
+                logger.warning(
+                    '[bold yellow]No previous best model found,'
+                    f' the weight will be set to {self.weight}.'
+                    ' Please set it manually later if needed.',
+                    extra={'markup': True},
+                )
         set_seed_torch(self.train_config.seed)
 
     def save_model_callback(self, model: Any | None) -> tuple[Any, float | None]:

@@ -87,6 +87,8 @@ name_data_mapping: dict[DataName, str] = {
     'test-had-sum': 'test-screen',
     'test-s-screen-sum': 'test-screen',
     'test-volume-z-pct': 'test-volume',
+    # HACK: Placeholder for test-s-all
+    'test-s-all': '',
 }
 
 sequence_mapping: dict[DataName, list[DataName]] = {
