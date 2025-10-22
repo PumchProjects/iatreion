@@ -36,7 +36,7 @@ data_mapping: dict[str, str] = {
 }
 
 names_list: list[list[str]] = [
-    ['life', 'diet-medication', 'family-history', 'medical-history', 'symptom'],
+    ['symptom', 'life', 'diet-medication', 'family-history', 'medical-history'],
     ['s-screen-sum', 's-composite-aea'],
     ['csvd', 'volume-new-pct'],
     ['snp'],
@@ -289,8 +289,8 @@ def main() -> None:
         for widget in frm.grid_slaves():
             if int(widget.grid_info()['row']) >= start:
                 widget.destroy()
-        for i, name in enumerate(config.names, start):
-            data_name = name_data_mapping[name]
+        data_names = set(name_data_mapping[name] for name in config.names)
+        for i, data_name in enumerate(data_names, start):
             label = f'{data_mapping[data_name]}数据:'
             command = set_data_path(data_name)
             make_row(frm, i, label, bundle.data[data_name], '选择文件', command)
