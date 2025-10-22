@@ -179,7 +179,7 @@ class HistoryPreprocessor(Preprocessor):
         self, data: pd.DataFrame, threshold: float, unordered_columns: list[str]
     ) -> pd.DataFrame:
         # Process each column
-        columns = data.columns.tolist()
+        columns = data.columns.to_list()
         multiple_choice_keywords = ['可多选', '娱乐时间', '失眠形式']
         for col, prev in zip(columns, [columns[-1]] + columns[:-1], strict=False):
             if col == 'V14_发病时间':
@@ -229,7 +229,7 @@ class HistoryPreprocessor(Preprocessor):
         data = data.loc[:, 'V125_是否吸烟':'V170_溶剂']  # type: ignore
 
         threshold = 0.89
-        unordered_columns = data.loc[:, 'V136_避孕药':'V170_溶剂'].columns.tolist()  # type: ignore
+        unordered_columns = data.loc[:, 'V136_避孕药':'V170_溶剂'].columns.to_list()  # type: ignore
         data = self.process_data(data, threshold, unordered_columns)
 
         return data

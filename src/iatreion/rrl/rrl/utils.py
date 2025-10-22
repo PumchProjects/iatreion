@@ -239,7 +239,7 @@ type RawSamples = tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
 def try_resample(train: TrainConfig, f_df: pd.DataFrame, X, y):
     if train.over_sampler is None:
         return X, y
-    categorical = (f_df[1] != 'continuous').values
+    categorical = f_df[1] != 'continuous'
     if train.min_n_samples <= 0:
         strategy = 'auto'
     else:
@@ -273,7 +273,7 @@ def try_resample(train: TrainConfig, f_df: pd.DataFrame, X, y):
     elif categorical.all():
         sm = SMOTEN(sampling_strategy=strategy, random_state=42)
     else:
-        sm = SMOTENC(categorical, sampling_strategy=strategy, random_state=42)
+        sm = SMOTENC(categorical.to_list(), sampling_strategy=strategy, random_state=42)
     try:
         X, y = sm.fit_resample(X, y)
     except (ValueError, RuntimeError) as e:
