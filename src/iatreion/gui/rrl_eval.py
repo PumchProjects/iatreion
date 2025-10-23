@@ -8,7 +8,7 @@ from tkinter import messagebox, ttk
 from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
 from typing import Self, cast
 
-from iatreion.api import get_batched_result, get_result
+from iatreion.api import get_batched_result, get_models, get_result
 from iatreion.configs import DataName, RrlEvalConfig, name_data_mapping
 from iatreion.exceptions import IatreionException
 from iatreion.utils import get_config_path, load_dict, save_dict
@@ -241,7 +241,7 @@ def show_result(master: tk.Tk, config: RrlEvalConfig) -> None:
         frm, 0, 0, result_list, '最终结果', '分组', '分数', '置信度', module=False
     )
     make_table(
-        frm, 0, 1, score_list, '各模块结果', '模块', '分组', '分数', '置信度', '权重'
+        frm, 0, 1, score_list, '各模块结果', '模块', '分组', '分数', '置信度', 'F1 分数'
     )
     make_table(frm, 1, 0, bias_list, '初始偏差', '模块', '分组', '分数')
     make_table(
@@ -250,6 +250,21 @@ def show_result(master: tk.Tk, config: RrlEvalConfig) -> None:
     make_table(
         frm, 2, 1, oppose_list, '反对规则', '模块', '分组', '分数', '规则', rule=True
     )
+    close_button = ttk.Button(dialog, text='关闭', command=dialog.destroy)
+    close_button.pack(pady=5)
+    master.wait_window(dialog)
+
+
+def show_models(master: tk.Tk, config: RrlEvalConfig) -> None:
+    rule_list = get_models(config)
+    dialog = create_dialog(master, '查看模型')
+    frm = ttk.Frame(dialog)
+    frm.grid_columnconfigure(0, weight=1)
+    frm.pack(fill=tk.X)
+    for i, (name, labels, rules) in enumerate(rule_list):
+        name = names_mapping[cast(DataName, name)]
+        rules[0].append('#初始偏差#')
+        make_table(frm, i, 0, rules, name, *labels, '规则', module=False, rule=True)
     close_button = ttk.Button(dialog, text='关闭', command=dialog.destroy)
     close_button.pack(pady=5)
     master.wait_window(dialog)
@@ -355,6 +370,24 @@ def main() -> None:
     make_row(frm, 5, '核磁体积表头变化:', bundle.change, '选择文件', set_change_path)
     make_data_rows()
 
+    def run_models() -> None:
+        save_config(config, config_path)
+        try:
+            show_models(root, config)
+        except IatreionException as e:
+            e.update(
+                dataset=names_mapping.get(cast(DataName, e.mapping['dataset'])),
+                data_name=data_mapping.get(e.mapping['data_name']),
+                vmri='核磁体积均值标准差',
+                vmri_change='核磁体积表头变化',
+                process_info='预处理信息',
+            )
+            show_error_message(str(e))
+        except Exception as e:
+            show_error_message(str(e))
+            if config.debug:
+                raise e
+
     def run_inference() -> None:
         save_config(config, config_path)
         try:
@@ -378,6 +411,9 @@ def main() -> None:
 
     bottom_frm = ttk.Frame(root, padding=(10, 5, 10, 10))
     bottom_frm.pack()
+
+    model_btn = ttk.Button(bottom_frm, text='查看模型', command=run_models)
+    model_btn.pack(side=tk.LEFT, padx=5)
 
     debug_chk = ttk.Checkbutton(
         bottom_frm, text='调试模式', variable=bundle.debug, command=set_debug
