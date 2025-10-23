@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from cyclopts import Parameter
 from cyclopts.types import Directory
 
-from iatreion.utils import set_device, set_seed
+from iatreion.utils import expand_range, set_device, set_seed
 
 from .dataset import DataName
 
@@ -102,6 +102,7 @@ When evaluating RRL, this parameter is useless.
         if not self.group_names:
             raise ValueError('No valid groups found.')
         for group in self.group_names:
+            group = expand_range(group)
             names: list[str] = []
             i = 0
             while i < len(group):

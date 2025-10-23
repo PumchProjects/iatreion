@@ -43,7 +43,7 @@ names_list: list[list[str]] = [
 ]
 
 groups_list: list[list[str]] = [
-    ['a', 'ac', 'l', 'gdn', 'o'],
+    ['abc', 'a', 'ac', 'l', 'gdn', 'o', 'deg-o', 'd-q'],
     ['1', '2', 'f'],
     ['A<60', 'A<60C<60', 'F<60', 'A>60', 'A>60C>60', 'F>60'],
     ['A1', 'A1C1', 'F1', 'A2', 'A2C2', 'F2', 'A3', 'A3C3', 'F3'],

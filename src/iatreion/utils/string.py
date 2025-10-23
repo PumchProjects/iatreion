@@ -2,6 +2,7 @@ import re
 
 rule_symbols = ' _~&|()'
 code_pattern = re.compile(r'<u(?P<code>\d+)>')
+range_pattern = re.compile(r'(?P<start>.)-(?P<end>.)')
 
 
 def encode_string(s: str, /, to_replace: str | None = None) -> str:
@@ -18,3 +19,12 @@ def decode_string(s: str, /) -> str:
         return chr(code)
 
     return code_pattern.sub(replace, s)
+
+
+def expand_range(s: str, /) -> str:
+    def replace(match: re.Match) -> str:
+        start = match.group('start')
+        end = match.group('end')
+        return ''.join(chr(c) for c in range(ord(start), ord(end) + 1))
+
+    return range_pattern.sub(replace, s)
