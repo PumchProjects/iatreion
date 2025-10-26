@@ -63,10 +63,10 @@ class RecordROC:
         return viz.roc_auc
 
     def finish(self) -> float:
-        mean_tpr = np.mean(self.tprs, axis=0)
+        mean_tpr = np.nanmean(self.tprs, axis=0)
         mean_tpr[-1] = 1.0
         mean_auc = auc(self.mean_fpr, mean_tpr)
-        std_auc = np.std(self.aucs)
+        std_auc = np.nanstd(self.aucs)
         self.ax.plot(
             self.mean_fpr,
             mean_tpr,
@@ -76,7 +76,7 @@ class RecordROC:
             alpha=0.8,
         )
 
-        std_tpr = np.std(self.tprs, axis=0)
+        std_tpr = np.nanstd(self.tprs, axis=0)
         tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
         tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
         self.ax.fill_between(
@@ -114,6 +114,8 @@ class Recorder:
         self.config = config
         self.result = Record[list[float]](*([] for _ in range(9)))  # type: ignore
         self.roc = RecordROC(config)
+        self.calc_sen_and_spc = config.num_class == 2
+        self.calc_consistency = config.keep == 'all'
 
     def record(self, results: TrainerReturn) -> None:
         training_time, y_true, y_score, index, complexity = results
@@ -144,17 +146,19 @@ class Recorder:
         self.result.precision.append(precision)
         self.result.recall.append(recall)
         self.result.f1.append(f1)
-        self.result.sensitivity.append(
-            recall_score(
-                y_true, y_pred, labels=labels, pos_label=0, zero_division=np.nan
+        if self.calc_sen_and_spc:
+            self.result.sensitivity.append(
+                recall_score(
+                    y_true, y_pred, labels=labels, pos_label=0, zero_division=np.nan
+                )
             )
-        )
-        self.result.specificity.append(
-            recall_score(
-                y_true, y_pred, labels=labels, pos_label=1, zero_division=np.nan
+            self.result.specificity.append(
+                recall_score(
+                    y_true, y_pred, labels=labels, pos_label=1, zero_division=np.nan
+                )
             )
-        )
-        self.result.consistency.append(consistency_ratio(y_pred, index))
+        if self.calc_consistency:
+            self.result.consistency.append(consistency_ratio(y_pred, index))
         width = 4
         for key, value in complexity.items():
             self.result.complexity.setdefault(key, []).append(value)
@@ -165,10 +169,11 @@ class Recorder:
         logger.info(f'{"P":{width}} {self.result.precision[-1]:.2%}')
         logger.info(f'{"R":{width}} {self.result.recall[-1]:.2%}')
         logger.info(f'{"F1":{width}} {self.result.f1[-1]:.2%}')
-        if self.config.num_class == 2:
+        if self.calc_sen_and_spc:
             logger.info(f'{"SEN":{width}} {self.result.sensitivity[-1]:.2%}')
             logger.info(f'{"SPC":{width}} {self.result.specificity[-1]:.2%}')
-        logger.info(f'{"CST":{width}} {self.result.consistency[-1]:.2%}')
+        if self.calc_consistency:
+            logger.info(f'{"CST":{width}} {self.result.consistency[-1]:.2%}')
         for key, values in self.result.complexity.items():
             logger.info(f'{key:{width}} {values[-1]:.4f}')
         logger.info(f'{"Time":{width}} {training_time:.3f}s')
@@ -200,10 +205,11 @@ class Recorder:
         logger.info(f'AVG {"P":{width}} {final.precision:.2%}')
         logger.info(f'AVG {"R":{width}} {final.recall:.2%}')
         logger.info(f'AVG {"F1":{width}} {final.f1:.2%}')
-        if self.config.num_class == 2:
+        if self.calc_sen_and_spc:
             logger.info(f'AVG {"SEN":{width}} {final.sensitivity:.2%}')
             logger.info(f'AVG {"SPC":{width}} {final.specificity:.2%}')
-        logger.info(f'AVG {"CST":{width}} {final.consistency:.2%}')
+        if self.calc_consistency:
+            logger.info(f'AVG {"CST":{width}} {final.consistency:.2%}')
         for key, value in complexity.items():
             logger.info(f'AVG {key:{width}} {value:.4f}')
         logger.info(f'AVG {"Time":{width}} {final.time:.3f}s')
