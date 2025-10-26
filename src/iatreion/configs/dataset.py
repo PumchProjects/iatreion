@@ -6,6 +6,7 @@ from cyclopts import Parameter
 from cyclopts.types import Directory
 
 type DataName = Literal[
+    'basic-noage',
     'basic',
     'life',
     'diet-medication',
@@ -22,6 +23,7 @@ type DataName = Literal[
     'adl-sum',
     'had',
     'had-sum',
+    's-screen-noage-sum',
     's-screen-sum',
     'associative-learning',
     'episodic-memory',

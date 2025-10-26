@@ -46,6 +46,7 @@ data_level_mapping: dict[str, str] = {
 }
 
 name_data_mapping: dict[DataName, str] = {
+    'basic-noage': 'screen',
     'basic': 'screen',
     'life': 'history',
     'diet-medication': 'history',
@@ -62,6 +63,7 @@ name_data_mapping: dict[DataName, str] = {
     'adl-sum': 'screen',
     'had': 'screen',
     'had-sum': 'screen',
+    's-screen-noage-sum': 'screen',
     's-screen-sum': 'screen',
     'associative-learning': 'composite',
     'episodic-memory': 'composite',
@@ -99,6 +101,7 @@ sequence_mapping: dict[DataName, list[DataName]] = {
         'medical-history',
         'symptom',
     ],
+    's-screen-noage-sum': ['basic-noage', 'mmse-sum', 'moca-sum', 'adl-sum', 'had-sum'],
     's-screen-sum': ['basic', 'mmse-sum', 'moca-sum', 'adl-sum', 'had-sum'],
     's-composite-aea': ['associative-learning', 'episodic-memory', 'avlt'],
     'test-s-screen-sum': [
