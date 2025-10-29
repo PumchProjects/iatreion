@@ -19,7 +19,9 @@ from sklearn.metrics import (
 from iatreion.configs import TrainConfig
 from iatreion.utils import logger
 
-type TrainerReturn = tuple[float, NDArray, NDArray, NDArray, dict[str, float]]
+type TrainerReturn = tuple[
+    float, NDArray, NDArray, NDArray, dict[str, float | tuple[float, str]]
+]
 
 
 @dataclass
@@ -33,7 +35,7 @@ class Record[T]:
     sensitivity: T
     specificity: T
     consistency: T
-    complexity: dict[str, T] = field(default_factory=dict)
+    complexity: dict[str, tuple[T, str]] = field(default_factory=dict)
     cm: NDArray | None = None
 
 
@@ -161,7 +163,11 @@ class Recorder:
             self.result.consistency.append(consistency_ratio(y_pred, index))
         width = 4
         for key, value in complexity.items():
-            self.result.complexity.setdefault(key, []).append(value)
+            if isinstance(value, tuple):
+                value, fmt = value
+            else:
+                fmt = '.4f'
+            self.result.complexity.setdefault(key, ([], fmt))[0].append(value)
             width = max(width, len(key))
         logger.info(f'Confusion matrix:\n{cm}')
         logger.info(f'{"AUC":{width}} {self.result.auc[-1]:.2%}')
@@ -174,15 +180,15 @@ class Recorder:
             logger.info(f'{"SPC":{width}} {self.result.specificity[-1]:.2%}')
         if self.calc_consistency:
             logger.info(f'{"CST":{width}} {self.result.consistency[-1]:.2%}')
-        for key, values in self.result.complexity.items():
-            logger.info(f'{key:{width}} {values[-1]:.4f}')
+        for key, (values, fmt) in self.result.complexity.items():
+            logger.info(f'{key:{width}} {values[-1]:{fmt}}')
         logger.info(f'{"Time":{width}} {training_time:.3f}s')
 
     def finish(self) -> Record[float]:
-        complexity = {}
+        complexity: dict[str, tuple[float, str]] = {}
         width = 4
-        for key, values in self.result.complexity.items():
-            complexity[key] = np.nanmean(values).item()
+        for key, (values, fmt) in self.result.complexity.items():
+            complexity[key] = (np.nanmean(values).item(), fmt)
             width = max(width, len(key))
         final = Record(
             np.mean(self.result.time).item(),
@@ -210,7 +216,7 @@ class Recorder:
             logger.info(f'AVG {"SPC":{width}} {final.specificity:.2%}')
         if self.calc_consistency:
             logger.info(f'AVG {"CST":{width}} {final.consistency:.2%}')
-        for key, value in complexity.items():
-            logger.info(f'AVG {key:{width}} {value:.4f}')
+        for key, (value, fmt) in complexity.items():
+            logger.info(f'AVG {key:{width}} {value:{fmt}}')
         logger.info(f'AVG {"Time":{width}} {final.time:.3f}s')
         return final

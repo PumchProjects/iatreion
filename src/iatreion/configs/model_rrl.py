@@ -1,12 +1,11 @@
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Annotated
 
 from cyclopts import Parameter
 
 from .dataset import DatasetConfig
 from .train import TrainConfig
-from .utils import get_best_exp_root, get_rrl_file, register_log_dir
+from .utils import get_rrl_file, register_log_dir
 
 
 @Parameter(name='*')
@@ -38,7 +37,7 @@ class RrlConfig:
     'The number of iterations (batches) to log once.'
 
     save_interval: Annotated[int, Parameter(name=['--save_interval', '-si'])] = 100
-    'The number of epochs to save the model based on training loss (when save_best=False), or the number of iterations (batches) to save the model based on validation F1 (when save_best=True).'
+    'The number of epochs to save the model based on training loss (when val_size=None), or the number of iterations (batches) to save the model based on validation F1 (when val_size is set).'
 
     nlaf: Annotated[bool, Parameter(negative='')] = False
     'Use novel logical activation functions to take less time and GPU memory usage. We recommend trying (alpha, beta, gamma) in {(0.999, 8, 1), (0.999, 8, 3), (0.9, 3, 3)}'
@@ -57,9 +56,6 @@ class RrlConfig:
 
     use_not: Annotated[bool, Parameter(negative='')] = False
     'Use the NOT (~) operator in logical rules. It will enhance model capability but make the RRL more complex.'
-
-    save_best: Annotated[bool, Parameter(negative='')] = False
-    'Save the model with best performance on the validation set.'
 
     skip: Annotated[bool, Parameter(negative='')] = False
     'Use skip connections when the number of logical layers is greater than 2.'
@@ -82,13 +78,10 @@ class RrlConfig:
         folder_name = (
             f'e{self.epoch}_os{over_sampler}_mns{self.train.min_n_samples}_bs{self.batch_size}'
             f'_lr{self.learning_rate}_lrdr{self.lr_decay_rate}_lrde{self.lr_decay_epoch}_wd{self.weight_decay}'
-            f'_si{self.save_interval}_useNOT{self.use_not}_saveBest{self.save_best}_useSkip{self.skip}'
+            f'_si{self.save_interval}_useNOT{self.use_not}_valSize{self.train.val_size}_useSkip{self.skip}'
             f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
         )
         register_log_dir(self.dataset, self.train, 'rrl', folder_name)
-
-    def get_best_exp_root(self) -> tuple[Path, float | None]:
-        return get_best_exp_root(self.dataset.name_str, self.train, final=False)
 
     @property
     def folder_path(self) -> str:

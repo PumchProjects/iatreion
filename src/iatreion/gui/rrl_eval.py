@@ -241,7 +241,7 @@ def show_result(master: tk.Tk, config: RrlEvalConfig) -> None:
         frm, 0, 0, result_list, '最终结果', '分组', '分数', '置信度', module=False
     )
     make_table(
-        frm, 0, 1, score_list, '各模块结果', '模块', '分组', '分数', '置信度', 'F1 分数'
+        frm, 0, 1, score_list, '各模块结果', '模块', '分组', '分数', '置信度', '权重'
     )
     make_table(frm, 1, 0, bias_list, '初始偏差', '模块', '分组', '分数')
     make_table(

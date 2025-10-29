@@ -16,7 +16,7 @@ from imblearn.over_sampling import (
 from numpy.typing import NDArray
 from sklearn import preprocessing
 from sklearn.impute import SimpleImputer
-from sklearn.model_selection import RepeatedStratifiedKFold
+from sklearn.model_selection import RepeatedStratifiedKFold, train_test_split
 
 from iatreion.configs import DataName, DatasetConfig, TrainConfig
 from iatreion.utils import encode_string, logger
@@ -232,8 +232,24 @@ class DBEncoder:
         return X_df.values, y
 
 
-type Samples = tuple[DBEncoder, NDArray, NDArray, NDArray, NDArray, NDArray]
-type RawSamples = tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]
+type Samples = tuple[
+    DBEncoder,
+    NDArray,
+    NDArray,
+    NDArray | None,
+    NDArray | None,
+    NDArray,
+    NDArray,
+    NDArray,
+]
+type RawSamples = tuple[
+    pd.DataFrame,
+    pd.Series,
+    pd.DataFrame | None,
+    pd.Series | None,
+    pd.DataFrame,
+    pd.Series,
+]
 
 
 def try_resample(train: TrainConfig, f_df: pd.DataFrame, X, y):
@@ -285,24 +301,58 @@ def try_resample(train: TrainConfig, f_df: pd.DataFrame, X, y):
 
 
 def get_train_test(
-    train: TrainConfig, X_df: pd.DataFrame, ref_y: pd.Series, level: pd.Series | None
-) -> Generator[tuple[NDArray, NDArray], None, None]:
-    kf = RepeatedStratifiedKFold(
-        n_splits=train.n_splits, n_repeats=train.n_repeats, random_state=36851234
-    )
-    for train_, test in kf.split(ref_y, ref_y):
-        test_index = ref_y.index[test]
-        if train.true_ref:
-            train_index = ref_y.index[train_]
-        else:
-            train_index = X_df.index.difference(test_index)
-        X_index = X_df.reset_index().iloc[:, 0]
-        train_arr = X_index.index[X_index.isin(train_index)].to_numpy()
-        test_arr = X_index.index[X_index.isin(test_index)].to_numpy()
-        if level is not None and train.level_type is not None:
-            level_train = level.iloc[train_arr]
-            train_arr = level_train.index[level_train == train.level_type].to_numpy()
-        yield train_arr, test_arr
+    config: TrainConfig, X_df: pd.DataFrame, ref_y: pd.Series, level: pd.Series | None
+) -> Generator[tuple[NDArray, NDArray | None, NDArray], None, None]:
+    if config.final:
+        train_arr = np.arange(len(X_df))
+        val_arr: NDArray | None = None
+        if config.val_size is not None:
+            train_arr, val_arr = train_test_split(
+                train_arr, test_size=config.val_size, random_state=42
+            )
+        yield train_arr, val_arr, train_arr
+
+    else:
+        kf = RepeatedStratifiedKFold(
+            n_splits=config.n_splits, n_repeats=config.n_repeats, random_state=36851234
+        )
+        for train, test in kf.split(ref_y, ref_y):
+            test_index = ref_y.index[test]
+            val_index: pd.Index | None = None
+            val_test_index = test_index
+            if config.val_size is not None:
+                train, val = train_test_split(
+                    train,
+                    test_size=config.val_size,
+                    random_state=42,
+                    stratify=ref_y.iloc[train],
+                )
+                val_index = ref_y.index[val]
+                val_test_index = val_index.union(test_index)
+            if config.true_ref:
+                train_index = ref_y.index[train]
+            else:
+                train_index = X_df.index.difference(val_test_index)
+
+            X_index = X_df.reset_index().iloc[:, 0]
+            train_arr = X_index.index[X_index.isin(train_index)].to_numpy()
+            val_arr = (
+                None
+                if val_index is None
+                else X_index.index[X_index.isin(val_index)].to_numpy()
+            )
+            test_arr = X_index.index[X_index.isin(test_index)].to_numpy()
+
+            if level is not None and config.level_type is not None:
+                level_train = level.iloc[train_arr]
+                train_arr = level_train.index[
+                    level_train == config.level_type
+                ].to_numpy()
+                if val_arr is not None:
+                    level_val = level.iloc[val_arr]
+                    val_arr = level_val.index[level_val == config.level_type].to_numpy()
+
+            yield train_arr, val_arr, test_arr
 
 
 def get_samples(
@@ -315,18 +365,25 @@ def get_samples(
 
     X, y = db_enc.transform(X_df, y_df, normalized=True, keep_stat=True)
 
-    if train.final:
-        X, y = try_resample(train, f_df, X, y)
-        yield db_enc, X, y, X, y, X_df.index.to_numpy()
-
-    for train_arr, test_arr in get_train_test(train, X_df, ref_y_df, level):
+    for train_arr, val_arr, test_arr in get_train_test(train, X_df, ref_y_df, level):
         X_train = X[train_arr]
         y_train = y[train_arr]
+        X_val = None if val_arr is None else X[val_arr]
+        y_val = None if val_arr is None else y[val_arr]
         X_test = X[test_arr]
         y_test = y[test_arr]
 
         X_train, y_train = try_resample(train, f_df, X_train, y_train)
-        yield db_enc, X_train, y_train, X_test, y_test, X_df.index[test_arr].to_numpy()
+        yield (
+            db_enc,
+            X_train,
+            y_train,
+            X_val,
+            y_val,
+            X_test,
+            y_test,
+            X_df.index[test_arr].to_numpy(),
+        )
 
 
 def get_raw_samples(
@@ -334,15 +391,13 @@ def get_raw_samples(
 ) -> Generator[RawSamples, None, None]:
     X_df, y_df, ref_y_df, level, f_df = read_data(dataset, train, shuffle=True)
 
-    if train.final:
-        X_df, y_df = try_resample(train, f_df, X_df, y_df)
-        yield X_df, y_df, X_df, y_df
-
-    for train_arr, test_arr in get_train_test(train, X_df, ref_y_df, level):
+    for train_arr, val_arr, test_arr in get_train_test(train, X_df, ref_y_df, level):
         X_train = X_df.iloc[train_arr]
         y_train = y_df.iloc[train_arr]
+        X_val = None if val_arr is None else X_df.iloc[val_arr]
+        y_val = None if val_arr is None else y_df.iloc[val_arr]
         X_test = X_df.iloc[test_arr]
         y_test = y_df.iloc[test_arr]
 
         X_train, y_train = try_resample(train, f_df, X_train, y_train)
-        yield X_train, y_train, X_test, y_test
+        yield X_train, y_train, X_val, y_val, X_test, y_test

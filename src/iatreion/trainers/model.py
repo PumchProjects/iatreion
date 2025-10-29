@@ -21,7 +21,8 @@ class ModelTrainer(Trainer):
 
     @override
     def train_step(self) -> TrainerReturn:
-        _, X_train, y_train, X_test, y_test, test_index = next(self.samples)
+        # HACK: Validation set is not used for other models
+        _, X_train, y_train, _, _, X_test, y_test, test_index = next(self.samples)
         start = perf_counter_ns()
         self.model.fit(X_train, y_train)
         end = perf_counter_ns()
@@ -31,5 +32,6 @@ class ModelTrainer(Trainer):
 
     @override
     def train_final(self) -> None:
-        _, X_train, y_train, _, _, _ = next(self.samples)
+        # HACK: Validation set is not used for other models
+        _, X_train, y_train, *_ = next(self.samples)
         self.model.fit(X_train, y_train)

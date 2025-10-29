@@ -22,16 +22,22 @@ class RawModelTrainer(Trainer):
 
     @override
     def train_step(self) -> TrainerReturn:
-        X_train, y_train, X_test, y_test = next(self.samples)
-        y_true = y_test.map(self.group_mapping).to_numpy()
+        X_train, y_train, X_val, y_val, X_test, y_test = next(self.samples)
         start = perf_counter_ns()
         self.model.fit(X_train, y_train)
         end = perf_counter_ns()
         training_time = (end - start) / 1e9
-        y_score, complexity = self.model.predict(X_test, y_test)
+        if X_val is not None and y_val is not None:
+            # HACK: Use validation set for prediction when val_size is set
+            y_true = y_val.map(self.group_mapping).to_numpy()
+            y_score, complexity = self.model.predict(X_val, y_val)
+        else:
+            y_true = y_test.map(self.group_mapping).to_numpy()
+            y_score, complexity = self.model.predict(X_test, y_test)
         return training_time, y_true, y_score, X_test.index.to_numpy(), complexity
 
     @override
     def train_final(self) -> None:
-        X_train, y_train, _, _ = next(self.samples)
+        # HACK: This method is currently useless
+        X_train, y_train, *_ = next(self.samples)
         self.model.fit(X_train, y_train)

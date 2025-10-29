@@ -18,14 +18,15 @@ class DiscreteRrlConfig:
     def __post_init__(self) -> None:
         self.dataset.simple = False
         if not self.train.final:
+            file_name = 'val.log' if self.train.val_size is not None else 'test.log'
             register_log_dir(
-                self.dataset, self.train, 'rrl-discrete', file_name='eval.log'
+                self.dataset, self.train, 'rrl-discrete', file_name=file_name
             )
 
-    def get_best_exp_roots(self) -> list[tuple[Path, float | None]]:
-        exp_roots: list[tuple[Path, float | None]] = []
+    def get_best_exp_roots(self) -> list[Path]:
+        exp_roots: list[Path] = []
         for name in self.dataset.names:
-            exp_roots.append(get_best_exp_root(name, self.train, self.train.final))
+            exp_roots.append(get_best_exp_root(name, self.train))
         return exp_roots
 
     def get_rrl_file(self, exp_root: Path) -> Path:

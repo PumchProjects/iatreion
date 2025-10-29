@@ -21,13 +21,11 @@ def get_avg_f1(exp_root: Path) -> float:
     return 0.0
 
 
-def try_get_best_exp_root(
-    groups_root: Path, final: bool
-) -> None | tuple[Path, None] | tuple[Path, float]:
+def try_get_best_exp_root(groups_root: Path, final: bool) -> Path | None:
     if not groups_root.is_dir():
         return None
     if final:
-        return groups_root, None
+        return groups_root
     best_f1 = 0.0
     best_exp_root: Path | None = None
     for exp_root in groups_root.iterdir():
@@ -35,22 +33,18 @@ def try_get_best_exp_root(
         if f1 > best_f1:
             best_f1 = f1
             best_exp_root = exp_root
-    if best_exp_root is not None:
-        return best_exp_root, best_f1
-    return None
+    return best_exp_root
 
 
-def get_best_exp_root(
-    name: str, train: TrainConfig, final: bool
-) -> tuple[Path, None] | tuple[Path, float]:
+def get_best_exp_root(name: str, train: TrainConfig) -> Path:
     groups_root = (
         train.log_root
         / name
         / train.group_name_str
         / 'rrl'
-        / ('final' if final else train.ref_name_str)
+        / ('final' if train.final else train.ref_name_str)
     )
-    if (root := try_get_best_exp_root(groups_root, final)) is not None:
+    if (root := try_get_best_exp_root(groups_root, train.final)) is not None:
         return root
     else:
         raise IatreionException(

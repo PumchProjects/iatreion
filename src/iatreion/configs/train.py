@@ -76,6 +76,15 @@ When evaluating RRL, this parameter is useless.
     min_n_samples: Annotated[int, Parameter(name=['--min-n-samples', '-mns'])] = 0
     'Minimum number of samples for each class after resampling.'
 
+    val_size: Annotated[float | int | None, Parameter(name=['--val-size', '-vs'])] = (
+        None
+    )
+    """If float, should be between 0.0 and 1.0 and represent the proportion of the dataset to include in the validation split.
+If int, represents the absolute number of validation samples.
+If None (default), no validation set is used.
+For discrete RRL, validation set is used for optimization when val_size is set.
+"""
+
     seed: int = 42
     'Random seed for reproducibility.'
 

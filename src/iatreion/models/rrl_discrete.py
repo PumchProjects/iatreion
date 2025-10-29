@@ -192,7 +192,7 @@ class Rrl:
     rid_template = re.compile(r'RID\(w=(?P<weight>.*),t=(?P<temp>.*)\)')
     label_template = re.compile(r'(?P<label>.*)\(b=(?P<bias>.*)\)')
 
-    def __init__(self, file: Path, weight: float | None = None) -> None:
+    def __init__(self, file: Path) -> None:
         with file.open('r', encoding='utf-8') as f:
             texts = f.readlines()
         headers = texts[0].split('\t')
@@ -200,18 +200,10 @@ class Rrl:
         match_obj = self.rid_template.match(headers[0])
         if match_obj is not None:
             self.temp = float(match_obj.group('temp'))
-            self.weight = (
-                weight if weight is not None else float(match_obj.group('weight'))
-            )
-            if self.weight == 1.0:
-                logger.warning(
-                    f'[bold yellow]The weight {self.weight} is unlikely,'
-                    f' please set it manually if needed: "{file}".',
-                    extra={'markup': True},
-                )
+            self.weight = float(match_obj.group('weight'))
         else:
             self.temp = 0.01
-            self.weight = weight if weight is not None else 1.0
+            self.weight = 1.0
             logger.warning(
                 f'[bold yellow]Using default temperature {self.temp}'
                 f' and weight {self.weight} for old versions',
@@ -251,7 +243,7 @@ class Rrl:
         max_lower = result[[f'{label}_lower' for label in self.labels]].max(axis=1)
         min_upper = result[[f'{label}_upper' for label in self.labels]].min(axis=1)
         confidence = (max_lower - min_upper).apply(expit)
-        return mean_result, confidence
+        return mean_result.apply(softmax, axis=1, result_type='expand'), confidence
 
 
 class DiscreteRrlModel(RawModel):
@@ -261,10 +253,7 @@ class DiscreteRrlModel(RawModel):
         self.exp_roots = config.get_best_exp_roots()
 
     def get_models(self) -> list[Rrl]:
-        return [
-            Rrl(self.config.get_rrl_file(exp_root), weight)
-            for exp_root, weight in self.exp_roots
-        ]
+        return [Rrl(self.config.get_rrl_file(exp_root)) for exp_root in self.exp_roots]
 
     def aggregate(
         self, models: list[Rrl], predictions: list[tuple[pd.DataFrame, pd.Series]]
@@ -273,9 +262,10 @@ class DiscreteRrlModel(RawModel):
             raise IatreionException('No predictions to aggregate!')
         dividends: list[pd.DataFrame] = []
         divisors: list[pd.Series] = []
-        for pred, confidence in predictions:
-            dividends.append(pred.mul(confidence, axis=0))
-            divisors.append(confidence)
+        for (pred, confidence), model in zip(predictions, models, strict=False):
+            composite_weight = confidence * model.weight
+            dividends.append(pred.mul(composite_weight, axis=0))
+            divisors.append(composite_weight)
         dividend = cast(pd.DataFrame, sum(dividends))
         divisor = cast(pd.Series, sum(divisors))
         results = dividend.div(divisor + 1e-8, axis=0)
@@ -292,7 +282,7 @@ class DiscreteRrlModel(RawModel):
         models = self.get_models()
         predictions = [model.eval(X) for model in models]
         results, _ = self.aggregate(models, predictions)
-        return softmax(results.to_numpy('float32'), axis=1), {}
+        return results.to_numpy('float32'), {}
 
     def eval(self, data: list[pd.DataFrame]) -> tuple[pd.DataFrame, pd.Series]:
         models = self.get_models()

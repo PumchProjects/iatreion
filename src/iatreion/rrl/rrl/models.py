@@ -81,7 +81,7 @@ class Net(nn.Module):
 
 class RRL:
     def __init__(self, dim_list, use_not=False, writer=None, left=None,
-                 right=None, save_best=False, estimated_grad=False, save_model_callback=None, use_skip=False,
+                 right=None, estimated_grad=False, save_model_callback=None, use_skip=False,
                  use_nlaf=False, alpha=0.999, beta=8, gamma=1, temperature=0.01):
         super(RRL, self).__init__()
         self.dim_list = dim_list
@@ -95,7 +95,6 @@ class RRL:
         self.best_loss = 1e20
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.save_best = save_best
         self.estimated_grad = estimated_grad
         self.save_model_callback = save_model_callback
         
@@ -196,7 +195,7 @@ class RRL:
 
                 optimizer.step()
                 
-                for i, param in enumerate(self.net.parameters()):
+                for param in self.net.parameters():
                     abs_gradient_max = max(abs_gradient_max, abs(torch.max(param.grad)))
                     abs_gradient_avg += torch.sum(torch.abs(param.grad)) / (param.grad.numel())
                 self.clip()
@@ -205,18 +204,18 @@ class RRL:
             if epo % save_interval == 0:
                 if valid_loader is not None:
                     _, acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation')
+                    if f1_b > self.best_f1 or (np.abs(f1_b - self.best_f1) < 1e-10 and self.best_loss > epoch_loss_rrl):
+                        logger.info(f'[bold yellow]New best model found! {self.best_f1:.2%} -> {f1_b:.2%}', extra={'markup': True})
+                        self.best_f1 = f1_b
+                        self.best_loss = epoch_loss_rrl
+                        self.save_model(f1_b)
+
                 else: # use the data_loader as the valid loader
                     _, acc_b, f1_b = self.test(test_loader=data_loader, set_name='Training')
-                
-                if self.save_best and (f1_b > self.best_f1 or (np.abs(f1_b - self.best_f1) < 1e-10 and self.best_loss > epoch_loss_rrl)):
-                    logger.info('[bold yellow]New best model found!', extra={'markup': True})
-                    self.best_f1 = f1_b
-                    self.best_loss = epoch_loss_rrl
-                    self.save_model()
-                elif not self.save_best and epoch_loss_rrl < best_loss:
-                    logger.info('[bold green]New best model found!', extra={'markup': True})
-                    best_loss = epoch_loss_rrl
-                    self.save_model()
+                    if epoch_loss_rrl < best_loss:
+                        logger.info('[bold green]New best model found!', extra={'markup': True})
+                        best_loss = epoch_loss_rrl
+                        self.save_model(f1_b)
                 
                 accuracy_b.append(acc_b)
                 f1_score_b.append(f1_b)
@@ -273,8 +272,8 @@ class RRL:
 
         return y_pred_b, accuracy_b, f1_score_b
 
-    def save_model(self):
-        self.save_model_callback(self)
+    def save_model(self, weight):
+        self.save_model_callback(self, weight)
 
     def detect_dead_node(self, data_loader=None):
         with torch.no_grad():
