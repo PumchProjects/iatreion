@@ -72,16 +72,22 @@ class RrlConfig:
     structure: Annotated[str, Parameter(name=['--structure', '-s'])] = '5@64'
     'Set the number of nodes in the binarization layer and logical layers. E.g., 10@64, 10@64@32@16.'
 
+    debug: Annotated[bool, Parameter(name=['--debug', '-D'], negative='')] = False
+    'Whether to enable debug mode.'
+
+    folder_name: Annotated[str | None, Parameter(parse=False)] = None
+
     def __post_init__(self) -> None:
         self.dataset.simple = False
-        over_sampler = str(self.train.over_sampler).upper()
-        folder_name = (
-            f'e{self.epoch}_os{over_sampler}_mns{self.train.min_n_samples}_bs{self.batch_size}'
-            f'_lr{self.learning_rate}_lrdr{self.lr_decay_rate}_lrde{self.lr_decay_epoch}_wd{self.weight_decay}'
-            f'_si{self.save_interval}_useNOT{self.use_not}_valSize{self.train.val_size}_useSkip{self.skip}'
-            f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
-        )
-        register_log_dir(self.dataset, self.train, 'rrl', folder_name)
+        if self.debug:
+            over_sampler = str(self.train.over_sampler).upper()
+            self.folder_name = (
+                f'e{self.epoch}_os{over_sampler}_mns{self.train.min_n_samples}_bs{self.batch_size}'
+                f'_lr{self.learning_rate}_lrdr{self.lr_decay_rate}_lrde{self.lr_decay_epoch}_wd{self.weight_decay}'
+                f'_si{self.save_interval}_useNOT{self.use_not}_valSize{self.train.val_size}_useSkip{self.skip}'
+                f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
+            )
+        register_log_dir(self.dataset, self.train, 'rrl', self.folder_name)
 
     @property
     def folder_path(self) -> str:
@@ -90,3 +96,6 @@ class RrlConfig:
     @property
     def rrl_file(self) -> str:
         return str(get_rrl_file(self.train.log_dir, self.train))
+
+    def epilog_callback(self) -> None:
+        register_log_dir(self.dataset, self.train, 'rrl', self.folder_name, 'short.log')

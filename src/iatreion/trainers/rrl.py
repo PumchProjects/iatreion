@@ -11,7 +11,9 @@ from .base import Trainer, TrainerReturn
 
 class RrlTrainer(Trainer):
     def __init__(self, config: RrlConfig) -> None:
-        super().__init__(config.dataset, config.train)
+        super().__init__(
+            config.dataset, config.train, epilog_callback=config.epilog_callback
+        )
         self.config = config
         self.samples = get_samples(config.dataset, config.train)
         self.model: Any = None

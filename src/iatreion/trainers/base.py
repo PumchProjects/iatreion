@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 
 from iatreion.configs import DatasetConfig, TrainConfig
 from iatreion.utils import logger, progress
@@ -8,10 +9,15 @@ from .recorder import Recorder, TrainerReturn
 
 class Trainer(ABC):
     def __init__(
-        self, dataset_config: DatasetConfig, train_config: TrainConfig
+        self,
+        dataset_config: DatasetConfig,
+        train_config: TrainConfig,
+        *,
+        epilog_callback: Callable[..., None] | None = None,
     ) -> None:
         self.dataset_config = dataset_config
         self.train_config = train_config
+        self.epilog_callback = epilog_callback
 
     @abstractmethod
     def train_step(self) -> TrainerReturn: ...
@@ -36,4 +42,6 @@ class Trainer(ABC):
                 logger.info(recorder.record(results))
                 progress.update(fold_task, advance=1)
                 logger.info('')
+        if self.epilog_callback is not None:
+            self.epilog_callback()
         logger.info(recorder.finish())

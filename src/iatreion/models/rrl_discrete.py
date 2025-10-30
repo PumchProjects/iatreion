@@ -250,19 +250,19 @@ class DiscreteRrlModel(RawModel):
     def __init__(self, config: DiscreteRrlConfig) -> None:
         super().__init__()
         self.config = config
-        self.exp_roots = config.get_best_exp_roots()
-
-    def get_models(self) -> list[Rrl]:
-        return [Rrl(self.config.get_rrl_file(exp_root)) for exp_root in self.exp_roots]
+        self.models = [
+            Rrl(self.config.get_rrl_file(exp_root))
+            for exp_root in config.get_exp_roots()
+        ]
 
     def aggregate(
-        self, models: list[Rrl], predictions: list[tuple[pd.DataFrame, pd.Series]]
+        self, predictions: list[tuple[pd.DataFrame, pd.Series]]
     ) -> tuple[pd.DataFrame, pd.Series]:
         if not predictions:
             raise IatreionException('No predictions to aggregate!')
         dividends: list[pd.DataFrame] = []
         divisors: list[pd.Series] = []
-        for (pred, confidence), model in zip(predictions, models, strict=False):
+        for (pred, confidence), model in zip(predictions, self.models, strict=False):
             composite_weight = confidence * model.weight
             dividends.append(pred.mul(composite_weight, axis=0))
             divisors.append(composite_weight)
@@ -279,15 +279,15 @@ class DiscreteRrlModel(RawModel):
 
     @override
     def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
-        models = self.get_models()
-        predictions = [model.eval(X) for model in models]
-        results, _ = self.aggregate(models, predictions)
+        predictions = [model.eval(X) for model in self.models]
+        results, _ = self.aggregate(predictions)
         return results.to_numpy('float32'), {}
 
     def eval(self, data: list[pd.DataFrame]) -> tuple[pd.DataFrame, pd.Series]:
-        models = self.get_models()
-        predictions = [model.eval(X) for X, model in zip(data, models, strict=False)]
-        results, confidence = self.aggregate(models, predictions)
+        predictions = [
+            model.eval(X) for X, model in zip(data, self.models, strict=False)
+        ]
+        results, confidence = self.aggregate(predictions)
         return results, confidence
 
     def interpret(
@@ -301,12 +301,11 @@ class DiscreteRrlModel(RawModel):
         pd.Series,
     ]:
         names = self.config.dataset.names
-        models = self.get_models()
         predictions: list[tuple[pd.DataFrame, pd.Series]] = []
         active_lines: list[tuple[DataName, Line]] = []
-        for name, X, model in zip(names, data, models, strict=False):
+        for name, X, model in zip(names, data, self.models, strict=False):
             lines: list[Line] = []
             predictions.append(model.eval(X.head(1), lines))
             active_lines += [(name, line) for line in lines]
-        result, confidence = self.aggregate(models, predictions)
-        return names, models, predictions, active_lines, result, confidence
+        result, confidence = self.aggregate(predictions)
+        return names, self.models, predictions, active_lines, result, confidence

@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 
 from iatreion.exceptions import IatreionException
@@ -7,36 +6,8 @@ from iatreion.utils import add_file_handler
 from .dataset import DatasetConfig
 from .train import TrainConfig
 
-avg_f1_pattern = re.compile(r'AVG F1\s+(?P<value>.+?)%')
 
-
-def get_avg_f1(exp_root: Path) -> float:
-    file = exp_root / 'train.log'
-    if not file.exists():
-        return 0.0
-    data = file.read_text(encoding='utf-8')
-    match = avg_f1_pattern.search(data)
-    if match:
-        return float(match.group('value')) / 100.0
-    return 0.0
-
-
-def try_get_best_exp_root(groups_root: Path, final: bool) -> Path | None:
-    if not groups_root.is_dir():
-        return None
-    if final:
-        return groups_root
-    best_f1 = 0.0
-    best_exp_root: Path | None = None
-    for exp_root in groups_root.iterdir():
-        f1 = get_avg_f1(exp_root)
-        if f1 > best_f1:
-            best_f1 = f1
-            best_exp_root = exp_root
-    return best_exp_root
-
-
-def get_best_exp_root(name: str, train: TrainConfig) -> Path:
+def get_exp_root(name: str, train: TrainConfig) -> Path:
     groups_root = (
         train.log_root
         / name
@@ -44,14 +15,13 @@ def get_best_exp_root(name: str, train: TrainConfig) -> Path:
         / 'rrl'
         / ('final' if train.final else train.ref_name_str)
     )
-    if (root := try_get_best_exp_root(groups_root, train.final)) is not None:
-        return root
-    else:
+    if not groups_root.is_dir():
         raise IatreionException(
             'No experiment root found for $dataset and groups "$groups".',
             dataset=name,
             groups=train.group_name_str,
         )
+    return groups_root
 
 
 def get_rrl_file(exp_root: Path, train: TrainConfig) -> Path:
