@@ -1,8 +1,9 @@
 from rich import box
 from rich.table import Table
 
-from iatreion.api import get_batched_result, get_result
-from iatreion.configs import RrlEvalConfig
+from iatreion.api import get_batched_result, get_eval_result, get_result
+from iatreion.configs import RrlEvalConfig, register_log_dir
+from iatreion.utils import logger
 
 from .common import app, console
 
@@ -56,10 +57,22 @@ def display_batched_result(config: RrlEvalConfig) -> None:
     console.print(result_table)
 
 
+def display_eval_result(config: RrlEvalConfig) -> None:
+    result, fig, model_config = get_eval_result(config)
+    dataset, train = model_config.dataset, model_config.train
+    register_log_dir(dataset, train, 'rrl-eval', file_name='eval.log')
+    logger.info(result)
+    if fig is not None:
+        fig.savefig(train.roc_file, dpi=300)
+
+
 @app.command(sort_key=2)
 def rrl_eval(*, config: RrlEvalConfig) -> None:
     """Evaluate an RRL model."""
-    if config.batched:
-        display_batched_result(config)
-    else:
-        display_result(config)
+    match config.mode:
+        case 'single':
+            display_result(config)
+        case 'batch':
+            display_batched_result(config)
+        case 'eval':
+            display_eval_result(config)

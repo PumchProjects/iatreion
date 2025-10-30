@@ -101,7 +101,7 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     base_pos: Annotated[str, Parameter(parse=False)] = ''
 
-    label_pos: Annotated[str, Parameter(parse=False)] = 'encrypted'
+    label_pos: Annotated[str, Parameter(parse=False)] = 'group_encrypted'
 
     groups: Annotated[list[list[str]], Parameter(parse=False)] = field(
         default_factory=list
@@ -126,7 +126,7 @@ For discrete RRL, validation set is used for optimization when val_size is set.
                         i += 2
                 else:
                     if group[i] in '12':
-                        self.label_pos = 'Ab'
+                        self.label_pos = 'group_Ab'
                     names.append(group[i])
                     i += 1
             self.groups.append(sorted(names))

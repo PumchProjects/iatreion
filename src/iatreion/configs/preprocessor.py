@@ -137,6 +137,8 @@ class PreprocessorConfig:
 
     final: Annotated[bool, Parameter(parse=False)] = False
 
+    eval: Annotated[bool, Parameter(parse=False)] = False
+
     debug: Annotated[bool, Parameter(parse=False)] = False
 
     data: Annotated[dict[str, pd.DataFrame], Parameter(parse=False)] = field(

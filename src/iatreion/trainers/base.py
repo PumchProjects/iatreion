@@ -33,7 +33,7 @@ class Trainer(ABC):
                 )
                 self.train_config.ith_kfold = fold
                 results = self.train_step()
-                recorder.record(results)
+                logger.info(recorder.record(results))
                 progress.update(fold_task, advance=1)
                 logger.info('')
-        recorder.finish()
+        logger.info(recorder.finish())

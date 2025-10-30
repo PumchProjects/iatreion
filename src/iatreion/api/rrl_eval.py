@@ -2,10 +2,13 @@ from typing import overload
 
 import numpy as np
 import pandas as pd
+from matplotlib.figure import Figure
 
-from iatreion.configs import RrlEvalConfig
+from iatreion.configs import DiscreteRrlConfig, RrlEvalConfig
 from iatreion.models import DiscreteRrlModel
 from iatreion.preprocessors import get_preprocessors
+from iatreion.rrl import make_data_labels
+from iatreion.trainers import Recorder
 
 
 @overload
@@ -60,17 +63,20 @@ def get_models(config: RrlEvalConfig) -> list[tuple[str, list[str], list[list[st
 
 def get_data_model(
     config: RrlEvalConfig,
-) -> tuple[list[pd.DataFrame], list[pd.DataFrame], DiscreteRrlModel]:
+) -> tuple[
+    list[pd.DataFrame], list[pd.DataFrame], pd.DataFrame | None, DiscreteRrlModel
+]:
     process_config, rrl_config = config.make_configs()
     preprocessors = get_preprocessors(process_config)
     data = [preprocessor.get_data_outer() for preprocessor in preprocessors]
     additional_data = process_config.final_indices
+    group_names = preprocessors[0].get_group_names() if process_config.eval else None
     model = DiscreteRrlModel(rrl_config)
-    return data, additional_data, model
+    return data, additional_data, group_names, model
 
 
 def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
-    data, _, model = get_data_model(config)
+    data, _, _, model = get_data_model(config)
     names, models, predictions, active_lines, result, confidence = model.interpret(data)
     max_label = get_max_label(result).item()
     result_list = [
@@ -109,7 +115,7 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
 
 
 def get_batched_result(config: RrlEvalConfig) -> pd.DataFrame:
-    data, additional_data, model = get_data_model(config)
+    data, additional_data, _, model = get_data_model(config)
     result, confidence = model.eval(data)
     y_pred = get_max_label(result)
     y_pred.name = 'Label'
@@ -118,3 +124,25 @@ def get_batched_result(config: RrlEvalConfig) -> pd.DataFrame:
     confidence.name = 'Confidence'
     df = pd.concat(additional_data + [y_pred, y_score, confidence], axis=1)
     return df
+
+
+def get_eval_result(
+    config: RrlEvalConfig,
+) -> tuple[str, Figure | None, DiscreteRrlConfig]:
+    data, _, group_names, model = get_data_model(config)
+    assert group_names is not None
+    result, _ = model.eval(data)
+    result = pd.concat([result, group_names], axis=1)
+    train_config = model.config.train
+    # Only select data in the target groups
+    X_df, y_df = make_data_labels(result, train_config, group_names.columns.to_list())
+    # Drop predictions that are failed
+    y_df = y_df[~X_df.isna().all(axis=1)]
+    X_df = X_df.dropna(how='all')
+    y_true = y_df.map(train_config.get_group_index_mapping()).to_numpy()
+    y_score = X_df.to_numpy('float32')
+    index = X_df.index.to_numpy()
+    recorder = Recorder(train_config)
+    eval_result = recorder.record((0.0, y_true, y_score, index, {}))
+    fig = recorder.roc.fig if train_config.plot_roc else None
+    return eval_result, fig, model.config

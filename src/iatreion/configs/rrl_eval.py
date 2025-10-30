@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from cyclopts import Parameter
 
@@ -40,8 +40,10 @@ class RrlEvalConfig:
     vmri_change: Annotated[str, Parameter(name=['--vmri-change', '-vc'])] = ''
     'Path to the Vmri_mean_sd column name change file.'
 
-    batched: Annotated[bool, Parameter(name=['--batched', '-b'], negative='')] = False
-    'Whether to use batched inference.'
+    mode: Annotated[
+        Literal['single', 'batch', 'eval'], Parameter(name=['--mode', '-m'])
+    ] = 'single'
+    'Mode of RRL evaluation.'
 
     debug: Annotated[bool, Parameter(name=['--debug', '-D'], negative='')] = False
     'Whether to enable debug mode.'
@@ -61,6 +63,7 @@ class RrlEvalConfig:
             data_paths={name: Path(path) for name, path in self.data.items()},
             process_info_path_=Path(self.process),
             final=True,
+            eval=self.mode == 'eval',
             debug=self.debug,
         )
         rrl_config = DiscreteRrlConfig(dataset=dataset, train=train)

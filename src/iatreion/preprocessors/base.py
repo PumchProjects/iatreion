@@ -30,10 +30,11 @@ class Preprocessor(ABC):
 
     @property
     def group_columns(self) -> list[str]:
+        if self.config.eval:
+            return ['group_encrypted', 'group_Ab']
         if self.test:
             return ['group']
-        else:
-            return ['encrypted', 'Ab', 'AC to 3', 'AC 60']
+        return ['group_encrypted', 'group_Ab', 'AC to 3', 'AC 60']
 
     @property
     def process_info(self) -> ProcessInfo:
@@ -57,17 +58,12 @@ class Preprocessor(ABC):
             self.config.process_info_dict[self.name] = info
 
     def get_group_names(self) -> pd.DataFrame:
+        if self.config.eval:
+            return self.config.data['eval_group_names'].copy()
         if self.test:
             return self.config.data['test_group_names'].copy()
         if 'group_names' not in self.config.data:
             data = pd.read_excel(self.config.group_data_path, index_col='serial_num')
-            data.rename(
-                columns={
-                    'group_encrypted': 'encrypted',
-                    'group_Ab': 'Ab',
-                },
-                inplace=True,
-            )
             self.config.data['group_names'] = data[self.group_columns]
         return self.config.data['group_names'].copy()
 
@@ -179,6 +175,8 @@ class Preprocessor(ABC):
             self.config.data[self.data_name] = data
             if indices_names := self.config.get_indices_names(self.data_name):
                 self.config.final_indices.append(data[indices_names].astype(str))
+            if self.config.eval:
+                self.config.data['eval_group_names'] = data[self.group_columns]
             if self.test:
                 self.config.data['test_group_names'] = data[self.group_columns]
         data = self.config.data[self.data_name].copy()
