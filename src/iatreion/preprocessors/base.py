@@ -15,26 +15,11 @@ class Preprocessor(ABC):
         self.config = config
         self.name = name
         self.is_sum = name.endswith('-sum')
-        self.test = name.startswith('test-')
         self.data_name = config.get_data_name(name)
+        self.group_columns = config.get_group_columns(self.data_name)
+        self.contains_group_columns = config.contains_group_columns(self.data_name)
         self.level_data: pd.Series | None = None
         self.process_info_: ProcessInfo | None = None
-
-    @property
-    def index_name(self) -> str:
-        if self.test:
-            return 'num'
-        if self.config.final and not self.config.debug:
-            return 'ID'
-        return 'serial_num'
-
-    @property
-    def group_columns(self) -> list[str]:
-        if self.config.eval:
-            return ['group_encrypted', 'group_Ab']
-        if self.test:
-            return ['group']
-        return ['group_encrypted', 'group_Ab', 'AC to 3', 'AC 60']
 
     @property
     def process_info(self) -> ProcessInfo:
@@ -60,16 +45,34 @@ class Preprocessor(ABC):
     def get_group_names(self) -> pd.DataFrame:
         if self.config.eval:
             return self.config.data['eval_group_names'].copy()
-        if self.test:
-            return self.config.data['test_group_names'].copy()
+        if self.contains_group_columns:
+            return self.config.data[self.data_name][self.group_columns].copy()
         if 'group_names' not in self.config.data:
-            data = pd.read_excel(self.config.group_data_path, index_col='serial_num')
+            data = pd.read_excel(
+                self.config.group_data_path,
+                index_col='serial_num',
+                dtype_backend='numpy_nullable',
+            )
             self.config.data['group_names'] = data[self.group_columns]
         return self.config.data['group_names'].copy()
 
+    def merge_group_names(self, data: pd.DataFrame) -> pd.DataFrame:
+        group_names = self.get_group_names()
+        if self.contains_group_columns:
+            data = pd.concat([data, group_names], axis=1)
+        else:
+            data = data.merge(
+                group_names, how='left', left_index=True, right_index=True
+            )
+        return data
+
     def get_basic_data(self) -> pd.DataFrame:
         if 'basic_data' not in self.config.data:
-            data = pd.read_excel(self.config.basic_data_path, index_col='serial_num')
+            data = pd.read_excel(
+                self.config.basic_data_path,
+                index_col='serial_num',
+                dtype_backend='numpy_nullable',
+            )
             data.rename(columns={'实际出生日期': 'date of birth'}, inplace=True)
             self.config.data['basic_data'] = data
         return self.config.data['basic_data'].copy()
@@ -168,7 +171,7 @@ class Preprocessor(ABC):
                 data_path,
                 sheet_name=sheet_name,
                 # HACK: serial_num is needed for merging birth dates
-                index_col=self.index_name,
+                index_col=self.config.index_name,
                 na_values=['/', '#NUM!'],
                 dtype_backend='numpy_nullable',
             )
@@ -176,9 +179,9 @@ class Preprocessor(ABC):
             if indices_names := self.config.get_indices_names(self.data_name):
                 self.config.final_indices.append(data[indices_names].astype(str))
             if self.config.eval:
-                self.config.data['eval_group_names'] = data[self.group_columns]
-            if self.test:
-                self.config.data['test_group_names'] = data[self.group_columns]
+                # HACK: For evaluation, only keep the intersecting group columns
+                columns = data.columns.intersection(self.group_columns)
+                self.config.data['eval_group_names'] = data[columns]
         data = self.config.data[self.data_name].copy()
         if (
             level := self.config.get_level_name(self.data_name)
@@ -189,20 +192,13 @@ class Preprocessor(ABC):
     @abstractmethod
     def get_data(self) -> pd.DataFrame: ...
 
-    def deduplicate_rows(self, data: pd.DataFrame) -> pd.DataFrame:
-        # HACK: Keep only the first sample of each patient during sequential processing
-        return data[~data.index.duplicated(keep='first')]
-
-    def get_data_outer(self, *, dedup: bool = False) -> pd.DataFrame:
+    def get_data_outer(self) -> pd.DataFrame:
         data = self.get_data()
         if self.config.final:
             data.rename(columns=encode_string, inplace=True)
         else:
             if self.level_data is not None:
                 data = pd.concat([self.level_data, data], axis=1)
-            data = data.dropna()
-            if dedup:
-                data = self.deduplicate_rows(data)
             self.save_process_info()
         return data
 
@@ -219,7 +215,8 @@ class Preprocessor(ABC):
         return data
 
     def get_augmented_vector_name(self, data: pd.DataFrame) -> list[tuple[str, str]]:
-        discrete_th = 4
+        # HACK: This threshold is currently useless
+        discrete_th = 3
         augmented_vector_name: list[tuple[str, str]] = []
         start_idx = 1 if self.level_data is not None else 0
         data = data.iloc[:, start_idx : -len(self.group_columns)]
@@ -238,7 +235,7 @@ class Preprocessor(ABC):
     ) -> None:
         feature_names = [f'{pair[0]} {pair[1]}\n' for pair in augmented_vector_name]
         with self.config.dataset.get_info(self.name).open('w', encoding='utf-8') as f:
-            f.write(f'{self.index_name} index\n')
+            f.write(f'{self.config.index_name} index\n')
             if self.level_data is not None:
                 f.write(f'{self.level_data.name} level\n')
             f.writelines(feature_names)
@@ -267,8 +264,8 @@ class Preprocessor(ABC):
             extra={'markup': True},
         )
         data = self.get_data_outer()
-        group_names = self.get_group_names()
-        data = data.merge(group_names, how='left', left_index=True, right_index=True)
+        data = self.merge_group_names(data)
+        data = data.dropna()
         data = self.remove_useless_columns(data)
         augmented_vector_name = self.get_augmented_vector_name(data)
         logger.info('Saving data...')

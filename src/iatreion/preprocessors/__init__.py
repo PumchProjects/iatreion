@@ -77,7 +77,7 @@ def get_single_preprocessor(config: PreprocessorConfig, name: DataName) -> Prepr
             return VolumeAveragePreprocessor(config, name, use_z=True)
         case 'volume-nz-v' | 'volume-nz-pct':
             return VolumeAverageNewPreprocessor(config, name)
-        case 'volume-new-v' | 'volume-new-pct':
+        case 'volume-new-v' | 'volume-new-pct' | 'volume-adni-v' | 'volume-adni-pct':
             return VolumeAverageNewPreprocessor(config, name, new=True)
         case 'snp':
             return SnpPreprocessor(config, name)

@@ -42,8 +42,8 @@ def make_data_labels(
     group_mapping = train.get_name_group_mapping()
     if base_pos:
         D[label_pos] = D[base_pos].fillna(D[label_pos])
-    D[label_pos] = D[label_pos].map(group_mapping)
-    D = D[D[label_pos].isin(list(group_mapping.values()))]
+    D[label_pos] = D[label_pos].map(group_mapping, na_action='ignore').astype('string')
+    D = D[~D[label_pos].isna()]
     y_df = D[label_pos]
     X_df = D.drop(columns=group_columns)
     return X_df, y_df

@@ -42,6 +42,8 @@ type DataName = Literal[
     'volume-nz-pct',
     'volume-new-v',
     'volume-new-pct',
+    'volume-adni-v',
+    'volume-adni-pct',
     'snp',
     'test-mmse-sum',
     'test-moca-sum',

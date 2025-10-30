@@ -21,6 +21,7 @@ data_file_mapping: dict[str, str] = {
     'csvd': '核磁_csvd_20251008.xlsx',
     'volume': '核磁_volume.xlsx',
     'volume-new': '核磁_volume202510_历次.xlsx',
+    'volume-adni': 'ADNI.xlsx',
     'snp': '基因_snp.csv',
     'test-screen': '认证报告_20251016.xlsx@sc',
     'test-volume': '认证报告_20251016.xlsx@mri',
@@ -36,9 +37,17 @@ data_indices_mapping: dict[str, list[str]] = {
     'csvd': ['检查日期/Study.date'],
     'volume': ['MRI_time'],
     'volume-new': ['检查日期/Study date'],
+    'volume-adni': ['检查日期/Study date'],
     'snp': [],
     'test-screen': ['测试日期'],
     'test-volume': ['MRI_time'],
+}
+
+data_groups_mapping: dict[str, list[str]] = {
+    'volume-adni': ['group_encrypted', 'group_Ab'],
+    'test-screen': ['group'],
+    'test-volume': ['group'],
+    'test-s-all': ['group'],
 }
 
 data_level_mapping: dict[str, str] = {
@@ -82,6 +91,8 @@ name_data_mapping: dict[DataName, str] = {
     'volume-nz-pct': 'volume',
     'volume-new-v': 'volume-new',
     'volume-new-pct': 'volume-new',
+    'volume-adni-v': 'volume-adni',
+    'volume-adni-pct': 'volume-adni',
     'snp': 'snp',
     'test-mmse-sum': 'test-screen',
     'test-moca-sum': 'test-screen',
@@ -89,8 +100,7 @@ name_data_mapping: dict[DataName, str] = {
     'test-had-sum': 'test-screen',
     'test-s-screen-sum': 'test-screen',
     'test-volume-z-pct': 'test-volume',
-    # HACK: Placeholder for test-s-all
-    'test-s-all': '',
+    'test-s-all': 'test-s-all',
 }
 
 sequence_mapping: dict[DataName, list[DataName]] = {
@@ -159,6 +169,12 @@ class PreprocessorConfig:
         self.dataset.prefix.mkdir(parents=True, exist_ok=True)
 
     @property
+    def index_name(self) -> str:
+        if self.final and not self.debug:
+            return 'ID'
+        return 'serial_num'
+
+    @property
     def group_data_path(self) -> Path:
         return self.input_prefix / '副本患者及分组加密对应表202510_.xlsx'
 
@@ -203,6 +219,17 @@ class PreprocessorConfig:
     @staticmethod
     def get_indices_names(data_name: str) -> list[str]:
         return data_indices_mapping[data_name]
+
+    @staticmethod
+    def contains_group_columns(data_name: str) -> bool:
+        return data_name in data_groups_mapping
+
+    @staticmethod
+    def get_group_columns(data_name: str) -> list[str]:
+        return data_groups_mapping.get(
+            data_name,
+            ['group_encrypted', 'group_Ab', 'AC to 3', 'AC 60'],
+        )
 
     @staticmethod
     def get_level_name(data_name: str) -> str | None:

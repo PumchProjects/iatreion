@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal
@@ -132,18 +133,13 @@ For discrete RRL, validation set is used for optimization when val_size is set.
             self.groups.append(sorted(names))
         self.groups.sort(key=lambda x: x[0])
 
-    def get_name_group_mapping(self) -> dict[str, str]:
-        group_mapping = {}
-        for group in self.groups:
-            for name in group:
-                group_mapping[name] = ''.join(group)
-        return group_mapping
+    def get_name_group_mapping(self) -> Callable[[str], str | None]:
+        # HACK: the group order inside "name" must be consistent with that in "groups"
+        joined_groups = [''.join(group) for group in self.groups]
+        return lambda name: next((g for g in joined_groups if name in g), None)
 
     def get_group_index_mapping(self) -> dict[str, int]:
-        group_mapping = {}
-        for i, group in enumerate(self.groups):
-            group_mapping[''.join(group)] = i
-        return group_mapping
+        return {''.join(group): i for i, group in enumerate(self.groups)}
 
     @property
     def group_name_str(self) -> str:

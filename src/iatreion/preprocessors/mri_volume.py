@@ -105,7 +105,7 @@ class VolumeAverageNewPreprocessor(Preprocessor):
         if not self.new:
             data = data.loc[:, :'CC_Posterior_pct']  # type: ignore
         data, real_ages = self.calc_ages(data, self.mri_time_col, force_final=self.new)
-        data['age_group'] = real_ages.apply(self.match_group).astype('string')
+        data['age_group'] = real_ages.map(self.match_group).astype('string')
         return data
 
     def rename_vmri(self, vmri: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
@@ -123,15 +123,21 @@ class VolumeAverageNewPreprocessor(Preprocessor):
         )
         if self.new:
             vmri = self.rename_vmri(vmri)
-        data.reset_index(inplace=True)
         data = data.merge(
-            vmri['mean'], how='left', on='age_group', suffixes=(None, '_mean')
+            vmri['mean'].set_index('age_group'),
+            how='left',
+            left_on='age_group',
+            right_index=True,
+            suffixes=(None, '_mean'),
         )
         data = data.merge(
-            vmri['sd'], how='left', on='age_group', suffixes=(None, '_std')
+            vmri['sd'].set_index('age_group'),
+            how='left',
+            left_on='age_group',
+            right_index=True,
+            suffixes=(None, '_std'),
         )
         data = data.loc[:, ~data.columns.str.startswith('Brainstem')]
-        data.set_index(self.index_name, inplace=True)
         return data
 
     def extract_stem(self, left_col: str) -> str:
