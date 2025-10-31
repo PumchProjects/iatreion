@@ -45,6 +45,15 @@ class RrlEvalConfig:
     ] = 'single'
     'Mode of RRL evaluation.'
 
+    keep: Annotated[
+        Literal['all', 'first', 'last'], Parameter(name=['--keep', '-k'])
+    ] = 'all'
+    """Deduplication strategy for duplicated samples when in eval mode.
+'first': keep the first sample of each patient.
+'last': keep the last sample of each patient.
+'all' (default): do not deduplicate samples.
+"""
+
     debug: Annotated[bool, Parameter(name=['--debug', '-D'], negative='')] = False
     'Whether to enable debug mode.'
 
@@ -52,7 +61,10 @@ class RrlEvalConfig:
         # HACK: Empty prefix, set simple to False implicitly
         dataset = DatasetConfig(prefix=Path(), names=self.names)
         train = TrainConfig(
-            group_names=self.groups, final=True, log_root=Path(self.thesaurus)
+            group_names=self.groups,
+            keep=self.keep,
+            final=True,
+            log_root=Path(self.thesaurus),
         )
         # HACK: Empty input prefix
         process_config = PreprocessorConfig(

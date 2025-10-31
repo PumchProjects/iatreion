@@ -34,15 +34,25 @@ def read_info(info_path) -> list[list[str]]:
 
 
 def make_data_labels(
-    D: pd.DataFrame, train: TrainConfig, group_columns: list[str]
+    D: pd.DataFrame,
+    train: TrainConfig,
+    group_columns: list[str],
+    *,
+    shuffle: bool = False,
 ) -> tuple[pd.DataFrame, pd.Series]:
     base_pos = train.base_pos if len(group_columns) > 1 else ''
     label_pos = train.label_pos if len(group_columns) > 1 else group_columns[0]
 
+    if train.keep != 'all':
+        D = D[~D.index.duplicated(keep=train.keep)]
+    if shuffle:
+        D = D.sample(frac=1, random_state=0)
     group_mapping = train.get_name_group_mapping()
     if base_pos:
         D[label_pos] = D[base_pos].fillna(D[label_pos])
-    D[label_pos] = D[label_pos].map(group_mapping, na_action='ignore').astype('string')
+    D.loc[:, label_pos] = (
+        D[label_pos].map(group_mapping, na_action='ignore').astype('string')
+    )
     D = D[~D[label_pos].isna()]
     y_df = D[label_pos]
     X_df = D.drop(columns=group_columns)
@@ -91,11 +101,7 @@ def read_csv(
     names = [f[0] for f in f_list]
     dtype = {col: str for col in group_columns}
     D = pd.read_csv(data_path, names=names, index_col=0, dtype=dtype)
-    if train.keep != 'all':
-        D = D[~D.index.duplicated(keep=train.keep)]
-    if shuffle:
-        D = D.sample(frac=1, random_state=0)
-    X_df, y_df = make_data_labels(D, train, group_columns)
+    X_df, y_df = make_data_labels(D, train, group_columns, shuffle=shuffle)
     f_list = f_list[1 : -len(group_columns)]
 
     level: pd.Series | None = None
