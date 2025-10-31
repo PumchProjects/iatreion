@@ -43,16 +43,15 @@ def calc_score(arr: list[float] | pd.DataFrame) -> 'float | pd.Series[float]':
     if isinstance(arr, list):
         return max(arr) - min(arr)
     else:
-        return (arr.max(axis=1) - arr.min(axis=1)).astype(float)
+        return arr.max(axis=1) - arr.min(axis=1)
 
 
 def get_models(config: RrlEvalConfig) -> list[tuple[str, list[str], list[list[str]]]]:
     _, rrl_config = config.make_configs()
     model = DiscreteRrlModel(rrl_config)
     names = rrl_config.dataset.names
-    models = model.get_models()
     rule_list: list[tuple[str, list[str], list[list[str]]]] = []
-    for name, rrl in zip(names, models, strict=False):
+    for name, rrl in zip(names, model.models, strict=False):
         rules: list[list[str]] = [[f'{bias:.2f}' for bias in rrl.biases]]
         for line in rrl.lines:
             weights = [f'{weight:.2f}' for weight in line.weights]
@@ -140,7 +139,7 @@ def get_eval_result(
     y_df = y_df[~X_df.isna().all(axis=1)]
     X_df = X_df.dropna(how='all')
     y_true = y_df.map(train_config.get_group_index_mapping()).to_numpy()
-    y_score = X_df.to_numpy('float32')
+    y_score = X_df.to_numpy()
     index = X_df.index.to_numpy()
     recorder = Recorder(train_config)
     eval_result = recorder.record((0.0, y_true, y_score, index, {}))

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Self, cast, override
 
+import numpy as np
 import pandas as pd
 from scipy.special import expit, softmax
 
@@ -18,10 +19,6 @@ from .base import ModelReturn, RawModel
 class Item(ABC):
     name: str
 
-    @property
-    def true_name(self) -> str:
-        return decode_string(self.name)
-
     @abstractmethod
     def __str__(self) -> str: ...
 
@@ -33,7 +30,7 @@ class Item(ABC):
 class BinaryItem(Item):
     @override
     def __str__(self) -> str:
-        return self.true_name
+        return self.name
 
     @override
     def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]':
@@ -47,7 +44,7 @@ class DiscreteItem(Item):
 
     @override
     def __str__(self) -> str:
-        return f'{self.true_name} = {self.value}'
+        return f'{self.name} = {self.value}'
 
     @override
     def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]':
@@ -62,7 +59,7 @@ class ContinuousItem(Item):
 
     @override
     def __str__(self) -> str:
-        return f'{self.true_name} {self.op} {self.th:.3f}'
+        return f'{self.name} {self.op} {self.th:.3f}'
 
     @override
     def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]':
@@ -172,7 +169,7 @@ class Line:
         self.labels = labels
 
     def print_rule(self) -> str:
-        return str(self.rule)[1:-1]
+        return decode_string(str(self.rule)[1:-1])
 
     def eval(
         self, data: pd.DataFrame, active_lines: list[Self] | None = None
@@ -238,12 +235,17 @@ class Rrl:
             {
                 label: (result[f'{label}_upper'] + result[f'{label}_lower']) / 2
                 for label in self.labels
-            }
+            },
+            dtype=float,
+        )
+        softmax_result = mean_result.apply(
+            softmax, axis=1, raw=True, result_type='expand'
         )
         max_lower = result[[f'{label}_lower' for label in self.labels]].max(axis=1)
         min_upper = result[[f'{label}_upper' for label in self.labels]].min(axis=1)
-        confidence = (max_lower - min_upper).apply(expit)
-        return mean_result.apply(softmax, axis=1, result_type='expand'), confidence
+        confidence = (max_lower - min_upper).map(expit)
+        # Returned results all have "float64" dtype
+        return softmax_result, confidence
 
 
 class DiscreteRrlModel(RawModel):
@@ -270,7 +272,7 @@ class DiscreteRrlModel(RawModel):
         divisor = cast(pd.Series, sum(divisors))
         results = dividend.div(divisor + 1e-8, axis=0)
         confidence = pd.concat([c for _, c in predictions], axis=1).max(axis=1)
-        results.loc[confidence < 0.5] = pd.NA
+        results.loc[confidence < 0.5] = np.nan
         return results, confidence
 
     @override
@@ -281,7 +283,7 @@ class DiscreteRrlModel(RawModel):
     def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
         predictions = [model.eval(X) for model in self.models]
         results, _ = self.aggregate(predictions)
-        return results.to_numpy('float32'), {}
+        return results.to_numpy(), {}
 
     def eval(self, data: list[pd.DataFrame]) -> tuple[pd.DataFrame, pd.Series]:
         predictions = [
