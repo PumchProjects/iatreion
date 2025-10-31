@@ -264,8 +264,9 @@ class Preprocessor(ABC):
             extra={'markup': True},
         )
         data = self.get_data_outer()
+        subset = data.columns
         data = self.merge_group_names(data)
-        data = data.dropna()
+        data = data.dropna(subset=subset)
         data = self.remove_useless_columns(data)
         augmented_vector_name = self.get_augmented_vector_name(data)
         logger.info('Saving data...')
