@@ -1,7 +1,7 @@
 from rich import box
-from rich.table import Table
+from rich.table import Column, Table
 
-from iatreion.api import get_batched_result, get_eval_result, get_result
+from iatreion.api import get_batched_result, get_eval_result, get_models, get_result
 from iatreion.configs import RrlEvalConfig, register_log_dir
 from iatreion.utils import logger
 
@@ -10,7 +10,15 @@ from .common import app, console
 
 def get_table(title: str, *headers: str) -> Table:
     return Table(
-        *headers,
+        *(
+            Column(
+                header=header,
+                justify='right'
+                if header in ['Score', 'Prob', 'Confidence', 'Weight']
+                else 'left',
+            )
+            for header in headers
+        ),
         title=title,
         box=box.ROUNDED,
         title_style='italic yellow',
@@ -18,18 +26,18 @@ def get_table(title: str, *headers: str) -> Table:
 
 
 def display_result(config: RrlEvalConfig) -> None:
-    result_list, score_list, bias_list, support_list, oppose_list = get_result(config)
+    result_list, pred_list, bias_list, support_list, oppose_list = get_result(config)
 
-    result_table = get_table('Result', 'Label', 'Score', 'Confidence')
+    result_table = get_table('Result', 'Label', 'Prob', 'Confidence')
     result_table.add_row(*result_list[0], style='bold green')
     console.print(result_table)
 
-    score_table = get_table(
-        'Scores', 'Module', 'Label', 'Score', 'Confidence', 'Weight'
+    pred_table = get_table(
+        'Predictions', 'Module', 'Label', 'Prob', 'Confidence', 'Weight'
     )
-    for line in score_list:
-        score_table.add_row(*line)
-    console.print(score_table)
+    for line in pred_list:
+        pred_table.add_row(*line)
+    console.print(pred_table)
 
     bias_table = get_table('Initial Biases', 'Module', 'Label', 'Score')
     for line in bias_list:
@@ -52,7 +60,7 @@ def display_batched_result(config: RrlEvalConfig) -> None:
     result_table = get_table('Result', 'ID', *result.columns)
     for row in result.itertuples():
         result_table.add_row(
-            str(row.Index), *row[1:-2], f'{row.Score:.2f}', f'{row.Confidence:.2%}'
+            str(row.Index), *row[1:-2], f'{row.Prob:.2f}', f'{row.Confidence:.2%}'
         )
     console.print(result_table)
 
@@ -66,6 +74,16 @@ def display_eval_result(config: RrlEvalConfig) -> None:
         fig.savefig(train.roc_file, dpi=300)
 
 
+def display_models(config: RrlEvalConfig) -> None:
+    rule_list = get_models(config)
+    for name, rules in rule_list:
+        table = get_table(name, 'Label', 'Score', 'Rule')
+        table.add_row(*rules[0], 'Initial Bias', style='yellow')
+        for line in rules[1:]:
+            table.add_row(*line)
+        console.print(table)
+
+
 @app.command(sort_key=2)
 def rrl_eval(*, config: RrlEvalConfig) -> None:
     """Evaluate an RRL model."""
@@ -76,3 +94,5 @@ def rrl_eval(*, config: RrlEvalConfig) -> None:
             display_batched_result(config)
         case 'eval':
             display_eval_result(config)
+        case 'show':
+            display_models(config)

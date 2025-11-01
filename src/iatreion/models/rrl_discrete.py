@@ -1,5 +1,6 @@
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Self, cast, override
@@ -96,7 +97,7 @@ def get_item(item: str) -> Item:
 
 
 class Rule:
-    def __init__(self, rule: str, is_not: bool = False) -> None:
+    def __init__(self, rule: str, *, is_not: bool = False) -> None:
         self.is_not = is_not
         self.op: str = '&'
         self.items: list[Rule | Item] = []
@@ -123,27 +124,29 @@ class Rule:
                         if not right_updated:
                             right = i
                             self.items.append(
-                                Rule(rule[left:right], True)
+                                Rule(rule[left:right], is_not=True)
                                 if left_updated
                                 else get_item(rule[left:right])
                             )
                         else:
                             right_updated = False
-                            self.items.append(Rule(rule[left:right], left_updated))
+                            self.items.append(
+                                Rule(rule[left:right], is_not=left_updated)
+                            )
                         left_updated = False
                         left = i + 1
         if not right_updated:
             right = len(rule)
             self.items.append(
-                Rule(rule[left:right], True)
+                Rule(rule[left:right], is_not=True)
                 if left_updated
                 else get_item(rule[left:right])
             )
         else:
-            self.items.append(Rule(rule[left:right], left_updated))
+            self.items.append(Rule(rule[left:right], is_not=left_updated))
 
     def __str__(self) -> str:
-        inner = f' {self.op} '.join([str(item) for item in self.items])
+        inner = f' {self.op} '.join(str(item) for item in self.items)
         return f'{"~" if self.is_not else ""}({inner})'
 
     def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]':
@@ -161,15 +164,21 @@ class Rule:
 
 
 class Line:
-    def __init__(self, line: str, labels: list[str]) -> None:
+    def __init__(
+        self, line: str, labels: list[str], callback: Callable[[str], str] | None
+    ) -> None:
         units = line.split('\t')
         self.weights = list(map(float, units[1:-2]))
         self.support = float(units[-2])
         self.rule = Rule(units[-1])
         self.labels = labels
+        self.callback = callback
 
     def print_rule(self) -> str:
-        return decode_string(str(self.rule)[1:-1])
+        rule = decode_string(str(self.rule)[1:-1])
+        if self.callback is not None:
+            rule = self.callback(rule)
+        return rule
 
     def eval(
         self, data: pd.DataFrame, active_lines: list[Self] | None = None
@@ -178,7 +187,7 @@ class Line:
         if active_lines is not None and not pd.isna(r := result.item()) and r:
             active_lines.append(self)
         table: dict[str, pd.Series] = {}
-        for label, weight in zip(self.labels, self.weights, strict=False):
+        for label, weight in zip(self.labels, self.weights, strict=True):
             col = result * weight
             table[f'{label}_upper'] = col.fillna(max(0, weight))
             table[f'{label}_lower'] = col.fillna(min(0, weight))
@@ -189,7 +198,7 @@ class Rrl:
     rid_template = re.compile(r'RID\(w=(?P<weight>.*),t=(?P<temp>.*)\)')
     label_template = re.compile(r'(?P<label>.*)\(b=(?P<bias>.*)\)')
 
-    def __init__(self, file: Path) -> None:
+    def __init__(self, file: Path, callback: Callable[[str], str] | None) -> None:
         with file.open('r', encoding='utf-8') as f:
             texts = f.readlines()
         headers = texts[0].split('\t')
@@ -215,7 +224,7 @@ class Rrl:
             self.labels.append(match_obj.group('label').split('_')[-1])
             self.biases.append(float(match_obj.group('bias')))
 
-        self.lines = [Line(line, self.labels) for line in texts[1:]]
+        self.lines = [Line(line, self.labels, callback) for line in texts[1:]]
 
     def eval(
         self, data: pd.DataFrame, active_lines: list[Line] | None = None
@@ -223,7 +232,7 @@ class Rrl:
         result = pd.DataFrame(
             {
                 name: [bias] * len(data)
-                for label, bias in zip(self.labels, self.biases, strict=False)
+                for label, bias in zip(self.labels, self.biases, strict=True)
                 for name in (f'{label}_upper', f'{label}_lower')
             },
             dtype='Float64',
@@ -249,22 +258,35 @@ class Rrl:
 
 
 class DiscreteRrlModel(RawModel):
-    def __init__(self, config: DiscreteRrlConfig) -> None:
+    def __init__(
+        self,
+        config: DiscreteRrlConfig,
+        callbacks: list[Callable[[str], str] | None] | None = None,
+    ) -> None:
         super().__init__()
         self.config = config
-        self.models = [
-            Rrl(self.config.get_rrl_file(exp_root))
-            for exp_root in config.get_exp_roots()
+        self.callbacks: list[Callable[[str], str] | None] = (
+            callbacks
+            if callbacks is not None
+            else [None for _ in range(len(config.dataset.names))]
+        )
+        self.exp_roots = config.get_exp_roots()
+
+    # HACK: Cannot bind models in __init__ because models change between folds
+    def get_models(self) -> list[Rrl]:
+        return [
+            Rrl(self.config.get_rrl_file(exp_root), callback)
+            for exp_root, callback in zip(self.exp_roots, self.callbacks, strict=True)
         ]
 
     def aggregate(
-        self, predictions: list[tuple[pd.DataFrame, pd.Series]]
+        self, models: list[Rrl], predictions: list[tuple[pd.DataFrame, pd.Series]]
     ) -> tuple[pd.DataFrame, pd.Series]:
         if not predictions:
             raise IatreionException('No predictions to aggregate!')
         dividends: list[pd.DataFrame] = []
         divisors: list[pd.Series] = []
-        for (pred, confidence), model in zip(predictions, self.models, strict=False):
+        for (pred, confidence), model in zip(predictions, models, strict=True):
             composite_weight = confidence * model.weight
             dividends.append(pred.mul(composite_weight, axis=0))
             divisors.append(composite_weight)
@@ -281,15 +303,15 @@ class DiscreteRrlModel(RawModel):
 
     @override
     def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
-        predictions = [model.eval(X) for model in self.models]
-        results, _ = self.aggregate(predictions)
+        models = self.get_models()
+        predictions = [model.eval(X) for model in models]
+        results, _ = self.aggregate(models, predictions)
         return results.to_numpy(), {}
 
     def eval(self, data: list[pd.DataFrame]) -> tuple[pd.DataFrame, pd.Series]:
-        predictions = [
-            model.eval(X) for X, model in zip(data, self.models, strict=False)
-        ]
-        results, confidence = self.aggregate(predictions)
+        models = self.get_models()
+        predictions = [model.eval(X) for X, model in zip(data, models, strict=True)]
+        results, confidence = self.aggregate(models, predictions)
         return results, confidence
 
     def interpret(
@@ -303,11 +325,12 @@ class DiscreteRrlModel(RawModel):
         pd.Series,
     ]:
         names = self.config.dataset.names
+        models = self.get_models()
         predictions: list[tuple[pd.DataFrame, pd.Series]] = []
         active_lines: list[tuple[DataName, Line]] = []
-        for name, X, model in zip(names, data, self.models, strict=False):
+        for name, X, model in zip(names, data, models, strict=True):
             lines: list[Line] = []
             predictions.append(model.eval(X.head(1), lines))
             active_lines += [(name, line) for line in lines]
-        result, confidence = self.aggregate(predictions)
-        return names, self.models, predictions, active_lines, result, confidence
+        result, confidence = self.aggregate(models, predictions)
+        return names, models, predictions, active_lines, result, confidence

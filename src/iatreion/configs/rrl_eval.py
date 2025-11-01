@@ -41,7 +41,7 @@ class RrlEvalConfig:
     'Path to the Vmri_mean_sd column name change file.'
 
     mode: Annotated[
-        Literal['single', 'batch', 'eval'], Parameter(name=['--mode', '-m'])
+        Literal['single', 'batch', 'eval', 'show'], Parameter(name=['--mode', '-m'])
     ] = 'single'
     'Mode of RRL evaluation.'
 

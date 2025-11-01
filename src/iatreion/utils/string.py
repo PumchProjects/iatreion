@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 
 rule_symbols = ' _~&|()'
 code_pattern = re.compile(r'<u(?P<code>\d+)>')
@@ -19,6 +20,26 @@ def decode_string(s: str, /) -> str:
         return chr(code)
 
     return code_pattern.sub(replace, s)
+
+
+def name_to_stem(pattern: str, /) -> Callable[[str], str]:
+    compiled = re.compile(pattern)
+
+    def callback(name: str) -> str:
+        if (match := compiled.search(name)) is not None:
+            return match.group()
+        return name
+
+    return callback
+
+
+def stem_to_name(pattern: str, mapping: dict[str, str], /) -> Callable[[str], str]:
+    compiled = re.compile(pattern)
+
+    def callback(stem: str) -> str:
+        return compiled.sub(lambda m: mapping[m.group()], stem)
+
+    return callback
 
 
 def expand_range(s: str, /) -> str:

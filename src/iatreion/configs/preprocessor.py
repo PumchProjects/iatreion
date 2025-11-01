@@ -50,6 +50,10 @@ data_groups_mapping: dict[str, list[str]] = {
     'test-s-all': ['group'],
 }
 
+data_stem_mapping: dict[str, str] = {
+    'history': r'V\d+',
+}
+
 data_level_mapping: dict[str, str] = {
     'volume-new': 'level_type',
 }
@@ -230,6 +234,10 @@ class PreprocessorConfig:
             data_name,
             ['group_encrypted', 'group_Ab', 'AC to 3', 'AC 60'],
         )
+
+    @staticmethod
+    def get_stem_pattern(data_name: str) -> str | None:
+        return data_stem_mapping.get(data_name)
 
     @staticmethod
     def get_level_name(data_name: str) -> str | None:

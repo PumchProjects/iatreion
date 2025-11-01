@@ -5,6 +5,7 @@ import pandas as pd
 from matplotlib.figure import Figure
 
 from iatreion.configs import DiscreteRrlConfig, RrlEvalConfig
+from iatreion.exceptions import IatreionException
 from iatreion.models import DiscreteRrlModel
 from iatreion.preprocessors import get_preprocessors
 from iatreion.rrl import make_data_labels
@@ -41,22 +42,37 @@ def calc_score(arr: pd.DataFrame) -> 'pd.Series[float]': ...
 
 def calc_score(arr: list[float] | pd.DataFrame) -> 'float | pd.Series[float]':
     if isinstance(arr, list):
+        # Weights and biases are original values
         return max(arr) - min(arr)
     else:
-        return arr.max(axis=1) - arr.min(axis=1)
+        # Predictions are probabilities
+        return arr.max(axis=1)
 
 
-def get_models(config: RrlEvalConfig) -> list[tuple[str, list[str], list[list[str]]]]:
-    _, rrl_config = config.make_configs()
-    model = DiscreteRrlModel(rrl_config)
+def get_models(config: RrlEvalConfig) -> list[tuple[str, list[list[str]]]]:
+    process_config, rrl_config = config.make_configs()
+    preprocessors = get_preprocessors(process_config)
+    try:
+        callbacks = [
+            preprocessor.get_stem_to_name_callback() for preprocessor in preprocessors
+        ]
+    except IatreionException as e:
+        raise IatreionException(
+            'Failed to get the callback for displaying "$data_name" rules.', **e.mapping
+        ) from e
+    model = DiscreteRrlModel(rrl_config, callbacks)
     names = rrl_config.dataset.names
-    rule_list: list[tuple[str, list[str], list[list[str]]]] = []
-    for name, rrl in zip(names, model.models, strict=False):
-        rules: list[list[str]] = [[f'{bias:.2f}' for bias in rrl.biases]]
+    models = model.get_models()
+    rule_list: list[tuple[str, list[list[str]]]] = []
+    for name, rrl in zip(names, models, strict=True):
+        bias_label = get_max_label(rrl.biases, rrl.labels)
+        bias_score = calc_score(rrl.biases)
+        rules: list[list[str]] = [[bias_label, f'{bias_score:.2f}']]
         for line in rrl.lines:
-            weights = [f'{weight:.2f}' for weight in line.weights]
-            rules.append([*weights, line.print_rule()])
-        rule_list.append((name, rrl.labels, rules))
+            label = get_max_label(line.weights, line.labels)
+            score = calc_score(line.weights)
+            rules.append([label, f'{score:.2f}', line.print_rule()])
+        rule_list.append((name, rules))
     return rule_list
 
 
@@ -68,9 +84,12 @@ def get_data_model(
     process_config, rrl_config = config.make_configs()
     preprocessors = get_preprocessors(process_config)
     data = [preprocessor.get_data_outer() for preprocessor in preprocessors]
+    callbacks = [
+        preprocessor.get_stem_to_name_callback() for preprocessor in preprocessors
+    ]
     additional_data = process_config.final_indices
     group_names = preprocessors[0].get_group_names() if process_config.eval else None
-    model = DiscreteRrlModel(rrl_config)
+    model = DiscreteRrlModel(rrl_config, callbacks)
     return data, additional_data, group_names, model
 
 
@@ -81,11 +100,11 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
     result_list = [
         [max_label, f'{calc_score(result).item():.2f}', f'{confidence.item():.2%}']
     ]
-    score_list: list[list[str]] = []
-    for name, rrl, (pred, conf) in zip(names, models, predictions, strict=False):
+    pred_list: list[list[str]] = []
+    for name, rrl, (pred, conf) in zip(names, models, predictions, strict=True):
         pred_max_label = get_max_label(pred).item()
         pred_score = calc_score(pred).item()
-        score_list.append(
+        pred_list.append(
             [
                 name,
                 pred_max_label,
@@ -95,7 +114,7 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
             ]
         )
     bias_list: list[list[str]] = []
-    for name, rrl in zip(names, models, strict=False):
+    for name, rrl in zip(names, models, strict=True):
         bias_max_label = get_max_label(rrl.biases, rrl.labels)
         bias_score = calc_score(rrl.biases)
         bias_list.append([name, bias_max_label, f'{bias_score:.2f}'])
@@ -110,7 +129,7 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
                 support_list.append(rule_list)
             else:
                 oppose_list.append(rule_list)
-    return result_list, score_list, bias_list, support_list, oppose_list
+    return result_list, pred_list, bias_list, support_list, oppose_list
 
 
 def get_batched_result(config: RrlEvalConfig) -> pd.DataFrame:
@@ -119,7 +138,7 @@ def get_batched_result(config: RrlEvalConfig) -> pd.DataFrame:
     y_pred = get_max_label(result)
     y_pred.name = 'Label'
     y_score = calc_score(result)
-    y_score.name = 'Score'
+    y_score.name = 'Prob'
     confidence.name = 'Confidence'
     df = pd.concat(additional_data + [y_pred, y_score, confidence], axis=1)
     return df

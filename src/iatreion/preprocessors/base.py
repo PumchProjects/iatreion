@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 
 import pandas as pd
 
 from iatreion.configs import DataName, PreprocessorConfig
 from iatreion.exceptions import IatreionException
-from iatreion.utils import encode_string, logger
+from iatreion.utils import encode_string, logger, name_to_stem, stem_to_name
 
 from .process_info import ProcessInfo
 
@@ -18,6 +19,7 @@ class Preprocessor(ABC):
         self.data_name = config.get_data_name(name)
         self.group_columns = config.get_group_columns(self.data_name)
         self.contains_group_columns = config.contains_group_columns(self.data_name)
+        self.stem_pattern = config.get_stem_pattern(self.data_name)
         self.level_data: pd.Series | None = None
         self.process_info_: ProcessInfo | None = None
 
@@ -201,6 +203,19 @@ class Preprocessor(ABC):
                 data = pd.concat([self.level_data, data], axis=1)
             self.save_process_info()
         return data
+
+    def get_name_to_stem_callback(self) -> Callable[[str], str] | None:
+        if self.stem_pattern is not None:
+            return name_to_stem(self.stem_pattern)
+        return None
+
+    def get_stem_to_name_callback(self) -> Callable[[str], str] | None:
+        if self.stem_pattern is not None:
+            data = self.read_data()
+            callback = name_to_stem(self.stem_pattern)
+            mapping = {callback(name): name for name in data.columns}
+            return stem_to_name(self.stem_pattern, mapping)
+        return None
 
     @staticmethod
     def remove_useless_columns(data: pd.DataFrame) -> pd.DataFrame:
