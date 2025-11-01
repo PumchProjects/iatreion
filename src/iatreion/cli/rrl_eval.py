@@ -9,15 +9,11 @@ from .common import app, console
 
 
 def get_table(title: str, *headers: str) -> Table:
+    right_columns = {'Score', 'Probability', 'Confidence', 'Weight'}
     return Table(
         *(
-            Column(
-                header=header,
-                justify='right'
-                if header in ['Score', 'Prob', 'Confidence', 'Weight']
-                else 'left',
-            )
-            for header in headers
+            Column(header=name, justify='right' if name in right_columns else 'left')
+            for name in headers
         ),
         title=title,
         box=box.ROUNDED,
@@ -28,12 +24,12 @@ def get_table(title: str, *headers: str) -> Table:
 def display_result(config: RrlEvalConfig) -> None:
     result_list, pred_list, bias_list, support_list, oppose_list = get_result(config)
 
-    result_table = get_table('Result', 'Label', 'Prob', 'Confidence')
+    result_table = get_table('Result', 'Label', 'Probability', 'Confidence')
     result_table.add_row(*result_list[0], style='bold green')
     console.print(result_table)
 
     pred_table = get_table(
-        'Predictions', 'Module', 'Label', 'Prob', 'Confidence', 'Weight'
+        'Predictions', 'Module', 'Label', 'Probability', 'Confidence', 'Weight'
     )
     for line in pred_list:
         pred_table.add_row(*line)
@@ -60,7 +56,10 @@ def display_batched_result(config: RrlEvalConfig) -> None:
     result_table = get_table('Result', 'ID', *result.columns)
     for row in result.itertuples():
         result_table.add_row(
-            str(row.Index), *row[1:-2], f'{row.Prob:.2f}', f'{row.Confidence:.2%}'
+            str(row.Index),
+            *row[1:-2],
+            f'{row.Probability:.2%}',
+            f'{row.Confidence:.2%}',
         )
     console.print(result_table)
 

@@ -10,6 +10,7 @@ from .base import Preprocessor
 class AdlPreprocessor(Preprocessor):
     def __init__(self, config: PreprocessorConfig, name: DataName) -> None:
         super().__init__(config, name)
+        self.is_sum = name.endswith('-sum')
 
     @override
     def get_data(self) -> pd.DataFrame:

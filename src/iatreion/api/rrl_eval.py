@@ -98,7 +98,7 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
     names, models, predictions, active_lines, result, confidence = model.interpret(data)
     max_label = get_max_label(result).item()
     result_list = [
-        [max_label, f'{calc_score(result).item():.2f}', f'{confidence.item():.2%}']
+        [max_label, f'{calc_score(result).item():.2%}', f'{confidence.item():.2%}']
     ]
     pred_list: list[list[str]] = []
     for name, rrl, (pred, conf) in zip(names, models, predictions, strict=True):
@@ -108,7 +108,7 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
             [
                 name,
                 pred_max_label,
-                f'{pred_score:.2f}',
+                f'{pred_score:.2%}',
                 f'{conf.item():.2%}',
                 f'{rrl.weight:.2%}',
             ]
@@ -138,7 +138,7 @@ def get_batched_result(config: RrlEvalConfig) -> pd.DataFrame:
     y_pred = get_max_label(result)
     y_pred.name = 'Label'
     y_score = calc_score(result)
-    y_score.name = 'Prob'
+    y_score.name = 'Probability'
     confidence.name = 'Confidence'
     df = pd.concat(additional_data + [y_pred, y_score, confidence], axis=1)
     return df

@@ -45,11 +45,11 @@ def get_single_preprocessor(config: PreprocessorConfig, name: DataName) -> Prepr
             return CdrPreprocessor(config, name)
         case 'mmse':
             return MmsePreprocessor(config, name)
-        case 'mmse-sum':
+        case 'mmse-sum' | 'mmse-sum-pct':
             return MmseSumPreprocessor(config, name)
         case 'moca':
             return MocaPreprocessor(config, name)
-        case 'moca-sum':
+        case 'moca-sum' | 'moca-sum-pct':
             return MocaSumPreprocessor(config, name)
         case 'adl' | 'adl-sum':
             return AdlPreprocessor(config, name)

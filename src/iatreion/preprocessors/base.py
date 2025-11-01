@@ -15,7 +15,6 @@ class Preprocessor(ABC):
         super().__init__()
         self.config = config
         self.name = name
-        self.is_sum = name.endswith('-sum')
         self.data_name = config.get_data_name(name)
         self.group_columns = config.get_group_columns(self.data_name)
         self.contains_group_columns = config.contains_group_columns(self.data_name)
@@ -112,12 +111,19 @@ class Preprocessor(ABC):
         return data, real_ages
 
     def sum_columns(
-        self, data: pd.DataFrame, columns: list[str], name: str
+        self,
+        data: pd.DataFrame,
+        columns: list[str],
+        name: str,
+        *,
+        divisor: str | None = None,
     ) -> pd.DataFrame:
         # skipna=False ensures that NaN will propagate through the sum
         col: pd.Series = data[columns].sum(axis=1, skipna=False).astype('Int64')
         data = data.drop(columns=columns)
-        if self.config.dataset.simple:
+        if divisor is not None:
+            data[name] = col / (data[divisor] + 1e-8)
+        elif self.config.dataset.simple:
             data[name] = col
         else:
             if self.config.final:
