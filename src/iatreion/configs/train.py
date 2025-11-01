@@ -86,6 +86,9 @@ If None (default), no validation set is used.
 For discrete RRL, validation set is used for optimization when val_size is set.
 """
 
+    suspected_case: Annotated[bool, Parameter(name=['--suspected-case', '-sc'])] = False
+    'Whether to include suspected cases in training.'
+
     seed: int = 42
     'Random seed for reproducibility.'
 
@@ -136,7 +139,13 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     def get_name_group_mapping(self) -> Callable[[str], str | None]:
         # HACK: the group order inside "name" must be consistent with that in "groups"
         joined_groups = [''.join(group) for group in self.groups]
-        return lambda name: next((g for g in joined_groups if name in g), None)
+
+        def get_group(name: str) -> str | None:
+            if self.suspected_case:
+                name = name.removesuffix('?')
+            return next((g for g in joined_groups if name in g), None)
+
+        return get_group
 
     def get_group_index_mapping(self) -> dict[str, int]:
         return {''.join(group): i for i, group in enumerate(self.groups)}

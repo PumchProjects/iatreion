@@ -21,7 +21,7 @@ data_file_mapping: dict[str, str] = {
     'csvd': '核磁_csvd_20251008.xlsx',
     'volume': '核磁_volume.xlsx',
     'volume-new': '核磁_volume202510_历次.xlsx',
-    'volume-adni': 'ADNI.xlsx',
+    'volume-adni': '3TADNI.xlsx',
     'snp': '基因_snp.csv',
     'test-screen': '认证报告_20251016.xlsx@sc',
     'test-volume': '认证报告_20251016.xlsx@mri',

@@ -54,6 +54,9 @@ class RrlEvalConfig:
 'all' (default): do not deduplicate samples.
 """
 
+    suspected_case: Annotated[bool, Parameter(name=['--suspected-case', '-sc'])] = False
+    'Whether to include suspected cases in evaluation.'
+
     debug: Annotated[bool, Parameter(name=['--debug', '-D'], negative='')] = False
     'Whether to enable debug mode.'
 
@@ -64,6 +67,7 @@ class RrlEvalConfig:
             group_names=self.groups,
             keep=self.keep,
             final=True,
+            suspected_case=self.suspected_case,
             log_root=Path(self.thesaurus),
         )
         # HACK: Empty input prefix
