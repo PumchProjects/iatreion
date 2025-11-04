@@ -252,7 +252,7 @@ class Rrl:
         )
         max_lower = result[[f'{label}_lower' for label in self.labels]].max(axis=1)
         min_upper = result[[f'{label}_upper' for label in self.labels]].min(axis=1)
-        confidence = (max_lower - min_upper).map(expit)
+        confidence: pd.Series = (max_lower - min_upper).map(expit)
         # Returned results all have "float64" dtype
         return softmax_result, confidence
 
