@@ -49,7 +49,7 @@ def make_data_labels(
         D = D.sample(frac=1, random_state=0)
     group_mapping = train.get_name_group_mapping()
     if base_pos:
-        D[label_pos] = D[base_pos].fillna(D[label_pos])
+        D.loc[:, label_pos] = D[base_pos].fillna(D[label_pos])
     D.loc[:, label_pos] = (
         D[label_pos].map(group_mapping, na_action='ignore').astype('string')
     )
