@@ -6,8 +6,6 @@ from tkinter import ttk
 from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
 from typing import Literal, cast
 
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-
 from iatreion.api import get_batched_result, get_eval_result, get_models, get_result
 from iatreion.configs import DataName, RrlEvalConfig, name_data_mapping
 from iatreion.exceptions import IatreionException
@@ -80,6 +78,11 @@ def show_result(master: tk.Tk, config: RrlEvalConfig) -> None:
 
 
 def show_eval_result(master: tk.Tk, config: RrlEvalConfig) -> None:
+    from matplotlib.backends.backend_tkagg import (
+        FigureCanvasTkAgg,
+        NavigationToolbar2Tk,
+    )
+
     result, fig, _ = get_eval_result(config)
     dialog = create_dialog(master, '预测结果')
     frm = ttk.Frame(dialog)

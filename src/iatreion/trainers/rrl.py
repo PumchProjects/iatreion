@@ -17,17 +17,15 @@ class RrlTrainer(Trainer):
         self.config = config
         self.samples = get_samples(config.dataset, config.train)
         self.model: Any = None
+        self.state_dict: dict[str, Any] | None = None
         self.weight: float | None = None
         set_seed_torch(self.train_config.seed)
 
-    def save_model_callback(
-        self, model: Any | None = None, weight: float | None = None
-    ) -> tuple[Any, float]:
-        if model is not None and weight is not None:
-            self.model = model
-            self.weight = weight
-        assert self.weight is not None
-        return self.model, self.weight
+    def save_model_callback(self, *args: Any) -> tuple[Any, dict[str, Any], float]:
+        if len(args) > 0:
+            self.model, self.state_dict, self.weight = args
+        assert self.state_dict is not None and self.weight is not None
+        return self.model, self.state_dict, self.weight
 
     @override
     def train_step(self) -> TrainerReturn:

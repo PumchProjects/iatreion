@@ -273,7 +273,8 @@ class RRL:
         return y_pred_b, accuracy_b, f1_score_b
 
     def save_model(self, weight):
-        self.save_model_callback(self, weight)
+        state_dict = {key: value.clone() for key, value in self.net.state_dict().items()}
+        self.save_model_callback(self, state_dict, weight)
 
     def detect_dead_node(self, data_loader=None):
         with torch.no_grad():
