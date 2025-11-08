@@ -195,10 +195,23 @@ class Line:
 
 
 class Rrl:
-    rid_template = re.compile(r'RID\(w=(?P<weight>.*),t=(?P<temp>.*)\)')
+    rid_template = re.compile(
+        r"""
+            RID \(                       # RID(
+            et = (?P<train_err> .*? ) ,  # train error
+            ft = (?P<train_f1> .*? ) ,   # train f1
+            ev = (?P<val_err> .*? ) ,    # val error
+            fv = (?P<val_f1> .*? ) ,     # val f1
+            t = (?P<temp> .*? )          # temperature
+            \)                           # )
+        """,
+        re.VERBOSE,
+    )
     label_template = re.compile(r'(?P<label>.*)\(b=(?P<bias>.*)\)')
 
-    def __init__(self, file: Path, callback: Callable[[str], str] | None) -> None:
+    def __init__(
+        self, file: Path, weight: str, callback: Callable[[str], str] | None
+    ) -> None:
         with file.open('r', encoding='utf-8') as f:
             texts = f.readlines()
         headers = texts[0].split('\t')
@@ -206,7 +219,21 @@ class Rrl:
         match_obj = self.rid_template.match(headers[0])
         if match_obj is not None:
             self.temp = float(match_obj.group('temp'))
-            self.weight = float(match_obj.group('weight'))
+            match weight:
+                case 'uniform':
+                    self.weight = 1.0
+                case 'train-f1':
+                    self.weight = float(match_obj.group('train_f1'))
+                case 'val-f1':
+                    self.weight = float(match_obj.group('val_f1'))
+                case 'train-adaboost':
+                    error = float(match_obj.group('train_err'))
+                    self.weight = 0.5 * np.log((1 - error) / (error + 1e-8))
+                case 'val-adaboost':
+                    error = float(match_obj.group('val_err'))
+                    self.weight = 0.5 * np.log((1 - error) / (error + 1e-8))
+                case _:
+                    raise ValueError(f'Unknown weight mode: {weight}!')
         else:
             self.temp = 0.01
             self.weight = 1.0
@@ -275,7 +302,7 @@ class DiscreteRrlModel(RawModel):
     # HACK: Cannot bind models in __init__ because models change between folds
     def get_models(self) -> list[Rrl]:
         return [
-            Rrl(self.config.get_rrl_file(exp_root), callback)
+            Rrl(self.config.get_rrl_file(exp_root), self.config.weight, callback)
             for exp_root, callback in zip(self.exp_roots, self.callbacks, strict=True)
         ]
 
@@ -284,15 +311,14 @@ class DiscreteRrlModel(RawModel):
     ) -> tuple[pd.DataFrame, pd.Series]:
         if not predictions:
             raise IatreionException('No predictions to aggregate!')
-        dividends: list[pd.DataFrame] = []
-        divisors: list[pd.Series] = []
-        for (pred, confidence), model in zip(predictions, models, strict=True):
-            composite_weight = confidence * model.weight
-            dividends.append(pred.mul(composite_weight, axis=0))
-            divisors.append(composite_weight)
-        dividend = cast(pd.DataFrame, sum(dividends))
-        divisor = cast(pd.Series, sum(divisors))
-        results = dividend.div(divisor + 1e-8, axis=0)
+        results = cast(
+            pd.DataFrame,
+            sum(
+                pred.mul(confidence * model.weight, axis=0)
+                for (pred, confidence), model in zip(predictions, models, strict=True)
+            ),
+        )
+        results = results.div(results.sum(axis=1) + 1e-8, axis=0)
         confidence = pd.concat([c for _, c in predictions], axis=1).max(axis=1)
         results.loc[confidence < 0.5] = np.nan
         return results, confidence

@@ -208,14 +208,14 @@ class RRL:
                         logger.info(f'[bold yellow]New best model found! {self.best_f1:.2%} -> {f1_b:.2%}', extra={'markup': True})
                         self.best_f1 = f1_b
                         self.best_loss = epoch_loss_rrl
-                        self.save_model(f1_b)
+                        self.save_model(1.0 - acc_b, f1_b)
 
                 else: # use the data_loader as the valid loader
                     _, acc_b, f1_b = self.test(test_loader=data_loader, set_name='Training')
                     if epoch_loss_rrl < best_loss:
                         logger.info('[bold green]New best model found!', extra={'markup': True})
                         best_loss = epoch_loss_rrl
-                        self.save_model(f1_b)
+                        self.save_model(1.0 - acc_b, f1_b)
                 
                 accuracy_b.append(acc_b)
                 f1_score_b.append(f1_b)
@@ -272,9 +272,9 @@ class RRL:
 
         return y_pred_b, accuracy_b, f1_score_b
 
-    def save_model(self, weight):
+    def save_model(self, *metrics):
         state_dict = {key: value.clone() for key, value in self.net.state_dict().items()}
-        self.save_model_callback(self, state_dict, weight)
+        self.save_model_callback(self, state_dict, metrics)
 
     def detect_dead_node(self, data_loader=None):
         with torch.no_grad():
@@ -286,7 +286,7 @@ class RRL:
                 x_bar = x.to(self.device)
                 self.net.bi_forward(x_bar, count=True)
 
-    def rule_print(self, feature_name, label_name, train_loader, file=sys.stdout, mean=None, std=None, display=True, weight=1.0):
+    def rule_print(self, feature_name, label_name, train_loader, file=sys.stdout, mean=None, std=None, display=True, metrics=None):
         if self.net.layer_list[1] is None and train_loader is None:
             raise Exception("Need train_loader for the dead nodes detection.")
 
@@ -312,8 +312,9 @@ class RRL:
         if not display:
             return layer.rule2weights
         
+        _, acc, f1 = self.test(test_loader=train_loader, set_name='Training')
         temp = torch.exp(self.net.t).item()
-        print('RID(w={:.4f},t={:.5f})'.format(weight, temp), end='\t', file=file)
+        print('RID(et={:.4f},ft={:.4f},ev={:.4f},fv={:.4f},t={:.5f})'.format(1.0 - acc, f1, *metrics, temp), end='\t', file=file)
         for i, ln in enumerate(label_name):
             print('{}(b={:.4f})'.format(ln, layer.bl[i] / temp), end='\t', file=file)
         print('Support\tRule', file=file)

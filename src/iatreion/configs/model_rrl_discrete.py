@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated, Literal
 
 from cyclopts import Parameter
 
@@ -15,12 +16,21 @@ class DiscreteRrlConfig:
 
     train: TrainConfig
 
+    weight: Annotated[
+        Literal['uniform', 'train-f1', 'val-f1', 'train-adaboost', 'val-adaboost'],
+        Parameter(name=['--weight', '-w']),
+    ] = 'uniform'
+    'Mode of model weight calculation.'
+
     def __post_init__(self) -> None:
         self.dataset.simple = False
         if not self.train.final:
-            file_name = 'val.log' if self.train.val_size is not None else 'test.log'
             register_log_dir(
-                self.dataset, self.train, 'rrl-discrete', file_name=file_name
+                self.dataset,
+                self.train,
+                'rrl-discrete',
+                folder_name='val' if self.train.val_size is not None else self.weight,
+                file_name='test.log',
             )
 
     def get_exp_roots(self) -> list[Path]:

@@ -110,7 +110,7 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
                 pred_max_label,
                 f'{pred_score:.2%}',
                 f'{conf.item():.2%}',
-                f'{rrl.weight:.2%}',
+                f'{rrl.weight:.4f}',
             ]
         )
     bias_list: list[list[str]] = []

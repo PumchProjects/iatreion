@@ -17,14 +17,15 @@ class RrlTrainer(Trainer):
         self.config = config
         self.samples = get_samples(config.dataset, config.train)
         self.model: Any = None
-        self.state_dict: dict[str, Any] | None = None
-        self.weight: float | None = None
+        self.state_dict: dict[str, Any] = {}
+        self.metrics: tuple[float, ...] = ()
 
-    def save_model_callback(self, *args: Any) -> tuple[Any, dict[str, Any], float]:
+    def save_model_callback(
+        self, *args: Any
+    ) -> tuple[Any, dict[str, Any], tuple[float, ...]]:
         if len(args) > 0:
-            self.model, self.state_dict, self.weight = args
-        assert self.state_dict is not None and self.weight is not None
-        return self.model, self.state_dict, self.weight
+            self.model, self.state_dict, self.metrics = args
+        return self.model, self.state_dict, self.metrics
 
     @override
     def train_step(self) -> TrainerReturn:
@@ -35,16 +36,8 @@ class RrlTrainer(Trainer):
         train_model(self.config, self.save_model_callback, samples)
         end = perf_counter_ns()
         training_time = (end - start) / 1e9
-        y_score, complexity, weight = test_model(
-            self.config, self.save_model_callback, samples
-        )
-        return (
-            training_time,
-            samples[-2],
-            y_score,
-            samples[-1],
-            {'Log#E': complexity, 'ValF1': (weight, '.2%')},
-        )
+        y_score, complexity = test_model(self.config, self.save_model_callback, samples)
+        return training_time, samples[-2], y_score, samples[-1], {'Log#E': complexity}
 
     @override
     def train_final(self) -> None:

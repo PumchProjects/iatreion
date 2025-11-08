@@ -37,13 +37,13 @@ def get_data_loader(args: RrlConfig, samples: Samples, pin_memory=False):
     return db_enc, train_loader, valid_loader, test_loader
 
 
-def load_model(save_model_callback: Callable[..., tuple[RRL, dict[str, Any], float]]) -> tuple[RRL, float]:
-    rrl, state_dict, weight = save_model_callback()
+def load_model(save_model_callback: Callable[..., tuple[RRL, dict[str, Any], tuple[float, ...]]]) -> tuple[RRL, tuple[float, ...]]:
+    rrl, state_dict, metrics = save_model_callback()
     rrl.net.load_state_dict(state_dict)
-    return rrl, weight
+    return rrl, metrics
 
 
-def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, dict[str, Any], float]], samples: Samples):
+def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, dict[str, Any], tuple[float, ...]]], samples: Samples):
     writer = SummaryWriter(args.folder_path)
 
     db_enc, train_loader, valid_loader, _ = get_data_loader(args, samples, pin_memory=True)
@@ -85,20 +85,20 @@ def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, d
         save_interval=args.save_interval)
     
     if args.train.final and args.print_rule:
-        rrl, weight = load_model(save_model_callback)
+        rrl, metrics = load_model(save_model_callback)
         with open(args.rrl_file, 'w') as rrl_file:
-            rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std, weight=weight)
+            rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std, metrics=metrics)
 
 
-def test_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, float]], samples: Samples):
-    rrl, weight = load_model(save_model_callback)
+def test_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, dict[str, Any], tuple[float, ...]]], samples: Samples):
+    rrl, metrics = load_model(save_model_callback)
     db_enc, train_loader, _, test_loader = get_data_loader(args, samples)
     y_score, _, _ = rrl.test(test_loader=test_loader, set_name='Test')
     if args.print_rule:
         with open(args.rrl_file, 'w') as rrl_file:
-            rule2weights = rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std, weight=weight)
+            rule2weights = rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std, metrics=metrics)
     else:
-        rule2weights = rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, mean=db_enc.mean, std=db_enc.std, weight=weight, display=False)
+        rule2weights = rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, mean=db_enc.mean, std=db_enc.std, metrics=metrics, display=False)
     
     metric = 'Log(#Edges)'
     edge_cnt = 0
@@ -122,4 +122,4 @@ def test_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, fl
                 connected_rid[ln - abs(rid[0])].add(rid[1])
     complexity = np.log(edge_cnt).item() if edge_cnt > 0 else np.nan
     logger.debug('\n\t{} of RRL  Model: {}'.format(metric, complexity))
-    return y_score, complexity, weight
+    return y_score, complexity
