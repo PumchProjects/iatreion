@@ -19,7 +19,6 @@ class RrlTrainer(Trainer):
         self.model: Any = None
         self.state_dict: dict[str, Any] | None = None
         self.weight: float | None = None
-        set_seed_torch(self.train_config.seed)
 
     def save_model_callback(self, *args: Any) -> tuple[Any, dict[str, Any], float]:
         if len(args) > 0:
@@ -29,6 +28,8 @@ class RrlTrainer(Trainer):
 
     @override
     def train_step(self) -> TrainerReturn:
+        # HACK: Reset the seed for each training step to ensure reproducibility
+        set_seed_torch(self.train_config.seed)
         samples = next(self.samples)
         start = perf_counter_ns()
         train_model(self.config, self.save_model_callback, samples)
@@ -47,5 +48,7 @@ class RrlTrainer(Trainer):
 
     @override
     def train_final(self) -> None:
+        # HACK: Ditto albeit with only one training step
+        set_seed_torch(self.train_config.seed)
         samples = next(self.samples)
         train_model(self.config, self.save_model_callback, samples)
