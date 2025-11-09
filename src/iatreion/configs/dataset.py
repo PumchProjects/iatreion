@@ -37,6 +37,7 @@ type DataName = Literal[
     'biomarker',
     'cbf',
     'csvd',
+    'csvd-manual',
     'volume',
     'volume-v',
     'volume-pct',

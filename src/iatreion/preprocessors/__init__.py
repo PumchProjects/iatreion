@@ -67,7 +67,7 @@ def get_single_preprocessor(config: PreprocessorConfig, name: DataName) -> Prepr
             return BiomarkerPreprocessor(config, name)
         case 'cbf':
             return CbfPreprocessor(config, name)
-        case 'csvd':
+        case 'csvd' | 'csvd-manual':
             return CsvdPreprocessor(config, name)
         case 'volume':
             return VolumePreprocessor(config, name)

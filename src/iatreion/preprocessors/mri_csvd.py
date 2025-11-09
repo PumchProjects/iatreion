@@ -23,6 +23,7 @@ class CsvdPreprocessor(Preprocessor):
 
     def __init__(self, config: PreprocessorConfig, name: DataName) -> None:
         super().__init__(config, name)
+        self.is_manual = name.endswith('-manual')
 
     def parse_column_name(self, column: str, previous: str) -> str:
         if col_match := self.col_pattern.match(column):
@@ -58,10 +59,18 @@ class CsvdPreprocessor(Preprocessor):
             # Drop rows having any NaN values implicitly
         return data
 
+    def filter_manual(self, data: pd.DataFrame) -> pd.DataFrame:
+        if not self.config.final:
+            # Drop columns with less than 85% non-NaN values (including unnamed columns)
+            threshold = int(len(data) * 0.85)
+            data = data.dropna(axis=1, thresh=threshold)
+            # Drop rows having any NaN values implicitly
+        return data
+
     def binarize(self, data: pd.DataFrame) -> pd.DataFrame:
         if self.config.dataset.simple:
             return data
-        binarize_th = 10
+        binarize_th = 12
         for name in data.columns:
             col = data[name]
             if self.config.final:
@@ -89,11 +98,14 @@ class CsvdPreprocessor(Preprocessor):
         # Set "/" as NaN
         data = self.read_data()
 
-        # Parse column names
-        data = self.rename(data)
-
-        # Filter columns and rows
-        data = self.filter(data)
+        if self.is_manual:
+            # Filter columns and rows
+            data = self.filter_manual(data)
+        else:
+            # Parse column names
+            data = self.rename(data)
+            # Filter columns and rows
+            data = self.filter(data)
 
         # Binarize certain columns
         data = self.binarize(data)
