@@ -46,7 +46,7 @@ data_indices_mapping: dict[str, list[str]] = {
 }
 
 data_groups_mapping: dict[str, list[str]] = {
-    'volume-adni': ['group_encrypted', 'group_Ab'],
+    'volume-adni': ['group_encrypted', 'group_Ab', 'AC 60'],
     'test-screen': ['group'],
     'test-volume': ['group'],
     'test-s-all': ['group'],
@@ -195,7 +195,7 @@ class PreprocessorConfig:
 
     @property
     def group_data_path(self) -> Path:
-        return self.input_prefix / '副本患者及分组加密对应表202510_.xlsx'
+        return self.input_prefix / '患者及分组加密对应表20251106.xlsx'
 
     @property
     def basic_data_path(self) -> Path:
