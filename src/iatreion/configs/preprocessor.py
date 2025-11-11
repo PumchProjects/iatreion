@@ -22,7 +22,7 @@ data_file_mapping: dict[str, str] = {
     'csvd-manual': '核磁_csvd_人工_给清华.xlsx',
     'volume': '核磁_volume.xlsx',
     'volume-new': '核磁_volume202510_历次.xlsx',
-    'volume-adni': '3TADNI.xlsx',
+    'volume-adni': '3TADNI2.xlsx',
     'snp': '基因_snp.csv',
     'test-screen': '认证报告_20251016.xlsx@sc',
     'test-volume': '认证报告_20251016.xlsx@mri',
@@ -43,13 +43,6 @@ data_indices_mapping: dict[str, list[str]] = {
     'snp': [],
     'test-screen': ['测试日期'],
     'test-volume': ['MRI_time'],
-}
-
-data_groups_mapping: dict[str, list[str]] = {
-    'volume-adni': ['group_encrypted', 'group_Ab', 'AC 60'],
-    'test-screen': ['group'],
-    'test-volume': ['group'],
-    'test-s-all': ['group'],
 }
 
 data_stem_mapping: dict[str, str] = {
@@ -156,6 +149,15 @@ class PreprocessorConfig:
     input_prefix: Annotated[ExistingDirectory, Parameter(name=['--input', '-i'])]
     'Prefix of the input files.'
 
+    index_name_: Annotated[str | None, Parameter(name=['--index-name', '-in'])] = None
+    'Index column name in the data files. If not set, use default index name.'
+
+    group_columns_: Annotated[
+        list[str] | None,
+        Parameter(name=['--group-columns', '-gc'], consume_multiple=True),
+    ] = None
+    'Group columns in the data files. If not set, use default group columns.'
+
     vmri_data_path_: Annotated[Path | None, Parameter(parse=False)] = None
 
     vmri_change_path_: Annotated[Path | None, Parameter(parse=False)] = None
@@ -189,6 +191,8 @@ class PreprocessorConfig:
 
     @property
     def index_name(self) -> str:
+        if self.index_name_ is not None:
+            return self.index_name_
         if self.final and not self.debug:
             return 'ID'
         return 'serial_num'
@@ -239,16 +243,15 @@ class PreprocessorConfig:
     def get_indices_names(data_name: str) -> list[str]:
         return data_indices_mapping[data_name]
 
-    @staticmethod
-    def contains_group_columns(data_name: str) -> bool:
-        return data_name in data_groups_mapping
+    @property
+    def contains_group_columns(self) -> bool:
+        return self.group_columns_ is not None
 
-    @staticmethod
-    def get_group_columns(data_name: str) -> list[str]:
-        return data_groups_mapping.get(
-            data_name,
-            ['group_encrypted', 'group_Ab', 'AC to 3', 'AC 60'],
-        )
+    @property
+    def group_columns(self) -> list[str]:
+        if self.group_columns_ is not None:
+            return self.group_columns_
+        return ['group_encrypted', 'group_Ab', 'AC to 3', 'AC 60']
 
     @staticmethod
     def get_stem_pattern(data_name: str) -> str | None:
