@@ -156,6 +156,9 @@ def main() -> None:
             label = f'{data_mapping[data_name]}数据:'
             command = set_data_path(data_name)
             make_row(frm, i, label, bundle.data[data_name], '选择文件', command)
+        row = start + len(data_names)
+        make_row(frm, row, '患者ID列名:', bundle.index)
+        make_row(frm, row + 1, '患者分组列名:', bundle.label)
 
     def set_names() -> None:
         selected_names = select_items(
@@ -218,6 +221,8 @@ def main() -> None:
     make_data_rows()
 
     def run_inference() -> None:
+        bundle.set_index()
+        bundle.set_label()
         save_config(config, config_path)
         try:
             match config.mode:
@@ -239,6 +244,8 @@ def main() -> None:
                 vmri='核磁体积均值标准差',
                 vmri_change='核磁体积表头变化',
                 process_info='预处理信息',
+                index_name='患者ID列名',
+                label_name='患者分组列名',
             )
             show_error_message(str(e))
         except Exception as e:

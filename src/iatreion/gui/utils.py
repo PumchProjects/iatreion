@@ -97,7 +97,7 @@ def make_table(
     title: str,
     *headers: str,
 ) -> None:
-    frm = ttk.Labelframe(master, text=title)
+    frm = ttk.Labelframe(master, text=title) if title else ttk.Frame(master)
     frm.grid_columnconfigure(0, weight=1)
     frm.grid(row=row, column=column, sticky=tk.EW, padx=5, pady=5)
     tree = ttk.Treeview(frm, columns=headers, show='headings')

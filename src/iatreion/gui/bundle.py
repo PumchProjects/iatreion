@@ -31,6 +31,8 @@ class ConfigBundle:
     mode: tk.StringVar = field(default_factory=tk.StringVar)
     keep: tk.StringVar = field(default_factory=tk.StringVar)
     suspected: tk.BooleanVar = field(default_factory=tk.BooleanVar)
+    index: tk.StringVar = field(default_factory=tk.StringVar)
+    label: tk.StringVar = field(default_factory=tk.StringVar)
     debug: tk.BooleanVar = field(default_factory=tk.BooleanVar)
 
     def set_field(self, field: str) -> None:
@@ -60,6 +62,10 @@ class ConfigBundle:
                 self.keep.set(keep_mapping[self.config.keep])
             case 'suspected':
                 self.suspected.set(self.config.suspected_case)
+            case 'index':
+                self.index.set(self.config.index_name)
+            case 'label':
+                self.label.set(self.config.label_name)
             case 'debug':
                 self.debug.set(self.config.debug)
             case _:
@@ -102,6 +108,12 @@ class ConfigBundle:
 
     def set_suspected(self) -> None:
         self.config.suspected_case = self.suspected.get()
+
+    def set_index(self) -> None:
+        self.config.index_name = self.index.get()
+
+    def set_label(self) -> None:
+        self.config.label_name = self.label.get()
 
     def set_debug(self) -> None:
         self.config.debug = self.debug.get()

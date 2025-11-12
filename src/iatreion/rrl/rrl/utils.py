@@ -40,8 +40,8 @@ def make_data_labels(
     *,
     shuffle: bool = False,
 ) -> tuple[pd.DataFrame, pd.Series]:
-    base_pos = train.base_pos if len(group_columns) > 1 else ''
-    label_pos = train.label_pos if len(group_columns) > 1 else group_columns[0]
+    base_pos = train.base_pos
+    label_pos = train.label_pos
 
     if train.keep != 'all':
         D = D[~D.index.duplicated(keep=train.keep)]

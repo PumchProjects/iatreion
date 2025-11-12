@@ -42,8 +42,6 @@ class Preprocessor(ABC):
             self.config.process_info_dict[self.name] = info
 
     def get_group_names(self) -> pd.DataFrame:
-        if self.config.eval:
-            return self.config.data['eval_group_names'].copy()
         if self.config.contains_group_columns:
             return self.config.data[self.data_name][self.config.group_columns].copy()
         if 'group_names' not in self.config.data:
@@ -184,10 +182,6 @@ class Preprocessor(ABC):
             self.config.data[self.data_name] = data
             if indices_names := self.config.get_indices_names(self.data_name):
                 self.config.final_indices.append(data[indices_names].astype(str))
-            if self.config.eval:
-                # HACK: For evaluation, only keep the intersecting group columns
-                columns = data.columns.intersection(self.config.group_columns)
-                self.config.data['eval_group_names'] = data[columns]
         data = self.config.data[self.data_name].copy()
         if (
             level := self.config.get_level_name(self.data_name)

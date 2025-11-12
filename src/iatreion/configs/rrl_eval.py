@@ -57,6 +57,12 @@ class RrlEvalConfig:
     suspected_case: Annotated[bool, Parameter(name=['--suspected-case', '-sc'])] = False
     'Whether to include suspected cases in evaluation.'
 
+    index_name: Annotated[str, Parameter(name=['--index-name', '-in'])] = ''
+    'Index column name in the data files. If not set, use default index name.'
+
+    label_name: Annotated[str, Parameter(name=['--label-name', '-ln'])] = ''
+    'Label column name in the data files. If not set, determined automatically.'
+
     debug: Annotated[bool, Parameter(name=['--debug', '-D'], negative='')] = False
     'Whether to enable debug mode.'
 
@@ -68,19 +74,20 @@ class RrlEvalConfig:
             keep=self.keep,
             final=True,
             suspected_case=self.suspected_case,
+            label_name=self.label_name or None,
             log_root=Path(self.thesaurus),
         )
         # HACK: Empty input prefix
         process_config = PreprocessorConfig(
             dataset=dataset,
             input_prefix=Path(),
+            index_name_=self.index_name or None,
+            group_columns_=[self.label_name] if self.label_name else None,
             vmri_data_path_=Path(self.vmri),
             vmri_change_path_=Path(self.vmri_change),
             data_paths={name: Path(path) for name, path in self.data.items()},
             process_info_path_=Path(self.process),
             final=True,
-            eval=self.mode == 'eval',
-            debug=self.debug,
         )
         rrl_config = DiscreteRrlConfig(dataset=dataset, train=train)
         return process_config, rrl_config

@@ -168,10 +168,6 @@ class PreprocessorConfig:
 
     final: Annotated[bool, Parameter(parse=False)] = False
 
-    eval: Annotated[bool, Parameter(parse=False)] = False
-
-    debug: Annotated[bool, Parameter(parse=False)] = False
-
     data: Annotated[dict[str, pd.DataFrame], Parameter(parse=False)] = field(
         default_factory=dict
     )
@@ -193,8 +189,8 @@ class PreprocessorConfig:
     def index_name(self) -> str:
         if self.index_name_ is not None:
             return self.index_name_
-        if self.final and not self.debug:
-            return 'ID'
+        if self.final:
+            raise IatreionException('$index_name must be set', index_name='Index name')
         return 'serial_num'
 
     @property
@@ -245,7 +241,12 @@ class PreprocessorConfig:
 
     @property
     def contains_group_columns(self) -> bool:
-        return self.group_columns_ is not None
+        contains = self.group_columns_ is not None
+        if self.final and not contains:
+            raise IatreionException(
+                '$label_name must be set in eval mode', label_name='Label name'
+            )
+        return contains
 
     @property
     def group_columns(self) -> list[str]:

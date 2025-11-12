@@ -89,8 +89,8 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     suspected_case: Annotated[bool, Parameter(name=['--suspected-case', '-sc'])] = False
     'Whether to include suspected cases in training.'
 
-    label_pos_: Annotated[str | None, Parameter(name=['--label-pos', '-lp'])] = None
-    'Position of the label column in the data file. If not set, determined automatically.'
+    label_name: Annotated[str | None, Parameter(name=['--label-name', '-ln'])] = None
+    'Label column name in the data files. If not set, determined automatically.'
 
     seed: int = 42
     'Random seed for reproducibility.'
@@ -138,9 +138,9 @@ For discrete RRL, validation set is used for optimization when val_size is set.
                     i += 1
             self.groups.append(sorted(names))
         self.groups.sort(key=lambda x: x[0])
-        if self.label_pos_ is not None:
+        if self.label_name is not None:
             self.base_pos = ''
-            self.label_pos = self.label_pos_
+            self.label_pos = self.label_name
 
     def get_name_group_mapping(self) -> Callable[[str], str | None]:
         group_sets = [(''.join(group), set(group)) for group in self.groups]
@@ -174,8 +174,8 @@ For discrete RRL, validation set is used for optimization when val_size is set.
             description = f'at {self.level_type}'
         else:
             description = 'original'
-        if self.label_pos_ is not None:
-            description = f'{description}, on {self.label_pos_}'
+        if self.label_name is not None:
+            description = f'{description}, on {self.label_name}'
         return description
 
     @property
