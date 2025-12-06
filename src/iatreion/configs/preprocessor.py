@@ -169,11 +169,11 @@ class PreprocessorConfig:
     final: Annotated[bool, Parameter(parse=False)] = False
 
     data: Annotated[dict[str, pd.DataFrame], Parameter(parse=False)] = field(
-        default_factory=dict
+        default_factory=dict[str, pd.DataFrame]
     )
 
     final_indices: Annotated[list[pd.DataFrame], Parameter(parse=False)] = field(
-        default_factory=list
+        default_factory=list[pd.DataFrame]
     )
 
     process_info_dict_: Annotated[

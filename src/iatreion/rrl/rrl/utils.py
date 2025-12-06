@@ -142,8 +142,16 @@ def read_data(
 
     X_df, y_df, f_list = read_csv(dataset.names[0], dataset, train)
     for name in dataset.names[1:]:
-        child_X_df, _, child_f_list = read_csv(name, dataset, train)
-        X_df = X_df.merge(child_X_df, how='inner', left_index=True, right_index=True)
+        child_X_df, child_y_df, child_f_list = read_csv(name, dataset, train)
+        X_df = X_df.merge(child_X_df, how='outer', left_index=True, right_index=True)
+        merge_y_df = pd.merge(
+            y_df.to_frame('left'),
+            child_y_df.to_frame('right'),
+            how='outer',
+            left_index=True,
+            right_index=True,
+        )
+        y_df = merge_y_df['left'].combine_first(merge_y_df['right'])
         f_list += child_f_list
     y_df = y_df[X_df.index]
     f_df = pd.DataFrame(f_list)

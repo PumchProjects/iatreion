@@ -1,9 +1,12 @@
+from typing import Any
+
 from cyclopts import App
 
 from iatreion.configs import (
     DiscreteRrlConfig,
     RandomForestConfig,
     RrlConfig,
+    TabPFNConfig,
     XgboostConfig,
 )
 from iatreion.models import DiscreteRrlModel, RandomForestModel, XgboostModel
@@ -25,7 +28,7 @@ def rrl(*, config: RrlConfig) -> None:
 
 
 @sub_app.command(sort_key=1)
-def xgboost(*, config: XgboostConfig, **param) -> None:
+def xgboost(*, config: XgboostConfig, **param: Any) -> None:
     """Train an XGBoost model.
 
     Parameters
@@ -49,6 +52,16 @@ def random_forest(*, config: RandomForestConfig) -> None:
 
 
 @sub_app.command(sort_key=3)
+def tabpfn(*, config: TabPFNConfig) -> None:
+    """Train a TabPFN model."""
+    from iatreion.models.tabpfn import TabPFNModel
+
+    model = TabPFNModel(config)
+    trainer = ModelTrainer(config.dataset, config.train, model)
+    trainer.train()
+
+
+@sub_app.command(sort_key=4)
 def rrl_eval(*, config: DiscreteRrlConfig) -> None:
     """Evaluate trained RRL models."""
     model = DiscreteRrlModel(config)

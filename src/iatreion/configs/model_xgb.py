@@ -17,7 +17,7 @@ class XgboostConfig:
     train: TrainConfig
 
     param: Annotated[dict[str, Any], Parameter(parse=False)] = field(
-        default_factory=dict
+        default_factory=dict[str, Any]
     )
 
     num_round: int = 100

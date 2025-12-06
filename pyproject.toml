@@ -20,6 +20,8 @@ cpu = [
     "torch>=2.5.1",
 ]
 cu121 = [
+    "tabpfn>=6.0.6",
+    "tabpfn-extensions[interpretability]>=0.2.2",
     "tensorboard>=2.19.0",
     "torch>=2.5.1",
 ]

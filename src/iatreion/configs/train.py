@@ -111,7 +111,7 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     label_pos: Annotated[str, Parameter(parse=False)] = 'group_encrypted'
 
     groups: Annotated[list[list[str]], Parameter(parse=False)] = field(
-        default_factory=list
+        default_factory=list[list[str]]
     )
 
     def set_groups(self) -> None:
