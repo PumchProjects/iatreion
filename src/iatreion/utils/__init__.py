@@ -1,4 +1,4 @@
-from .file import get_config_path, load_dict, save_dict
+from .file import chdir, get_config_path, load_dict, save_dict
 from .logging import add_file_handler, logger, progress
 from .seed import set_device, set_seed, set_seed_torch
 from .string import (

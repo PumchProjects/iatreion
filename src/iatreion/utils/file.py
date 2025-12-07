@@ -1,4 +1,6 @@
 import os
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -29,3 +31,13 @@ def order(d: dict, /) -> dict:
 def save_dict(config_dict: dict[str, Any], path: Path) -> None:
     with path.open('wb') as f:
         tomli_w.dump(order(config_dict), f)
+
+
+@contextmanager
+def chdir(path: str | Path) -> Generator[None, None, None]:
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(path)
+        yield
+    finally:
+        os.chdir(original_cwd)

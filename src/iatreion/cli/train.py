@@ -4,12 +4,18 @@ from cyclopts import App
 
 from iatreion.configs import (
     DiscreteRrlConfig,
+    LimiXConfig,
     RandomForestConfig,
     RrlConfig,
     TabPFNConfig,
     XgboostConfig,
 )
-from iatreion.models import DiscreteRrlModel, RandomForestModel, XgboostModel
+from iatreion.models import (
+    DiscreteRrlModel,
+    LimiXModel,
+    RandomForestModel,
+    XgboostModel,
+)
 from iatreion.trainers import ModelTrainer, RawModelTrainer
 
 from .common import app
@@ -62,6 +68,14 @@ def tabpfn(*, config: TabPFNConfig) -> None:
 
 
 @sub_app.command(sort_key=4)
+def limix(*, config: LimiXConfig) -> None:
+    """Train a LimiX model."""
+    model = LimiXModel(config)
+    trainer = ModelTrainer(config.dataset, config.train, model)
+    trainer.train()
+
+
+@sub_app.command(sort_key=5)
 def rrl_eval(*, config: DiscreteRrlConfig) -> None:
     """Evaluate trained RRL models."""
     model = DiscreteRrlModel(config)
