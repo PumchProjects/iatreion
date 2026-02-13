@@ -22,6 +22,7 @@ cpu = [
 cu121 = [
     "tabpfn>=6.0.6",
     "tabpfn-extensions[interpretability]>=0.2.2",
+    "numba>=0.59.0",
     "tensorboard>=2.19.0",
     "torch>=2.5.1",
 ]
