@@ -23,7 +23,6 @@ class DiscreteRrlConfig:
     'Mode of model weight calculation.'
 
     def __post_init__(self) -> None:
-        self.dataset.simple = False
         if not self.train.final:
             register_log_dir(
                 self.dataset,

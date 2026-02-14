@@ -69,6 +69,5 @@ class LimiXConfig:
         )
 
     def __post_init__(self) -> None:
-        self.dataset.simple = True
         register_log_dir(self.dataset, self.train, 'limix')
         self.data_subdir.mkdir(parents=True, exist_ok=True)

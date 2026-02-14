@@ -78,7 +78,6 @@ class RrlConfig:
     folder_name: Annotated[str | None, Parameter(parse=False)] = None
 
     def __post_init__(self) -> None:
-        self.dataset.simple = False
         if self.debug:
             over_sampler = str(self.train.over_sampler).upper()
             self.folder_name = (

@@ -79,14 +79,11 @@ For other models, features are concatenated.
     def name_str(self) -> str:
         return ', '.join(self.names)
 
-    def get_true_name(self, name: DataName) -> str:
-        return f'{name}-simple' if self.simple else name
-
     def get_data(self, name: DataName) -> Path:
-        return self.prefix / f'{self.get_true_name(name)}.data'
+        return self.prefix / f'{name}.data'
 
     def get_info(self, name: DataName) -> Path:
-        return self.prefix / f'{self.get_true_name(name)}.info'
+        return self.prefix / f'{name}.info'
 
     def get_fmap(self, name: DataName) -> Path:
-        return self.prefix / f'{self.get_true_name(name)}.fmap'
+        return self.prefix / f'{name}.fmap'

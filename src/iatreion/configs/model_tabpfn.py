@@ -31,5 +31,4 @@ class TabPFNConfig:
         return self.train.log_dir / f'score_{self.train.ith_kfold}.json'
 
     def __post_init__(self) -> None:
-        self.dataset.simple = True
         register_log_dir(self.dataset, self.train, 'tabpfn')

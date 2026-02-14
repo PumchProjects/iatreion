@@ -14,42 +14,21 @@ class CompositePreprocessor(Preprocessor):
     @override
     def get_data(self) -> pd.DataFrame:
         data = self.read_data()
-        selected: list[pd.Series | pd.DataFrame] = []
         data.loc[data['接龙A_错误数'] >= 2, '接龙A_A法时间'] = 1000
         data = self.binarize_column(
-            data, '单个动作模仿正确数', 6, '单个动作模仿正常', '单个动作模仿异常'
+            data, '单个动作模仿正确数', 6, '单个动作模仿', '正常', '异常'
         )
         data = self.binarize_column(
-            data, '系列动作模仿正确数', 2, '系列动作模仿正常', '系列动作模仿异常'
+            data, '系列动作模仿正确数', 2, '系列动作模仿', '正常', '异常'
         )
-        selected += [
+        # HACK: Rey再认不是正确/错误的一律视为缺失
+        data.loc[~data['Rey再认'].isin(['正确', '错误']), 'Rey再认'] = pd.NA
+        selected = [
             data.loc[:, '动物列名_实际数字'],
             data.loc[:, ['数字符号_正确数', '接龙A_A法时间']],
-        ]
-        if self.config.dataset.simple:
-            data['Rey再认正确'] = (data['Rey再认'] == '正确').astype('Int8')
-            selected += [
-                data.loc[:, ['临摹总分', '单个动作模仿正常', 'Rey临摹总分']],
-                data.loc[:, '系列动作模仿正常'],
-                data.loc[:, ['Rey回忆总分', 'Rey再认正确']],
-            ]
-        else:
-            data['Rey再认正确'] = (data['Rey再认'] == '正确').astype('Int8')
-            data['Rey再认错误'] = (data['Rey再认'] == '错误').astype('Int8')
-            selected += [
-                data.loc[
-                    :,
-                    [
-                        '临摹总分',
-                        '单个动作模仿正常',
-                        '单个动作模仿异常',
-                        'Rey临摹总分',
-                    ],
-                ],
-                data.loc[:, ['系列动作模仿正常', '系列动作模仿异常']],
-                data.loc[:, ['Rey回忆总分', 'Rey再认正确', 'Rey再认错误']],
-            ]
-        selected += [
+            data.loc[:, ['临摹总分', '单个动作模仿', 'Rey临摹总分']],
+            data.loc[:, '系列动作模仿'],
+            data.loc[:, ['Rey回忆总分', 'Rey再认']],
             data.loc[:, '积木_总分'],
             data.loc[:, '联想学习3次测试总分'],
             data.loc[:, '情景记忆总分'],

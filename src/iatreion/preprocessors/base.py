@@ -117,23 +117,7 @@ class Preprocessor(ABC):
         # skipna=False ensures that NaN will propagate through the sum
         col: pd.Series = data[columns].sum(axis=1, skipna=False).astype('Int64')
         data = data.drop(columns=columns)
-        if divisor is not None:
-            data[name] = col / (data[divisor] + 1e-8)
-        elif self.config.dataset.simple:
-            data[name] = col
-        else:
-            if self.config.final:
-                min_value = self.process_info(int, name, 'min')
-                max_value = self.process_info(int, name, 'max')
-            else:
-                min_value, max_value = int(col.min()), int(col.max())
-                self.process_info[name, 'min'] = min_value
-                self.process_info[name, 'max'] = max_value
-            data[f'{name} <= {min_value}'] = (col <= min_value).astype('Int8')
-            for th in range(min_value + 1, max_value):
-                data[f'{name} <= {th}'] = (col <= th).astype('Int8')
-                data[f'{name} >= {th}'] = (col >= th).astype('Int8')
-            data[f'{name} >= {max_value}'] = (col >= max_value).astype('Int8')
+        data[name] = col / (data[divisor] + 1e-8) if divisor is not None else col
         return data
 
     def binarize_column(
@@ -141,18 +125,13 @@ class Preprocessor(ABC):
         data: pd.DataFrame,
         column: str,
         threshold: int,
+        name: str,
         ge_name: str,
         lt_name: str,
-        *,
-        ge_main: bool = True,
     ) -> pd.DataFrame:
         col: pd.Series = (data[column] >= threshold).astype('Int8')
         data = data.drop(columns=[column])
-        if self.config.dataset.simple:
-            data[ge_name if ge_main else lt_name] = col
-        else:
-            data[ge_name] = (col == 1).astype('Int8')
-            data[lt_name] = (col == 0).astype('Int8')
+        data[name] = col.map({1: ge_name, 0: lt_name})
         return data
 
     def drop_columns(
@@ -228,8 +207,7 @@ class Preprocessor(ABC):
         return data
 
     def get_augmented_vector_name(self, data: pd.DataFrame) -> list[tuple[str, str]]:
-        # HACK: This threshold is currently useless
-        discrete_th = 3
+        discrete_th = 10
         augmented_vector_name: list[tuple[str, str]] = []
         start_idx = 1 if self.level_data is not None else 0
         data = data.iloc[:, start_idx : -len(self.config.group_columns)]
@@ -237,7 +215,7 @@ class Preprocessor(ABC):
             nunique = data[name].nunique()
             if nunique <= 2:
                 augmented_vector_name.append((name, 'binary'))
-            elif nunique < discrete_th and not self.config.dataset.simple:
+            elif nunique <= discrete_th:
                 augmented_vector_name.append((name, 'discrete'))
             else:
                 augmented_vector_name.append((name, 'continuous'))
@@ -258,7 +236,7 @@ class Preprocessor(ABC):
         for i, (name_, type_) in enumerate(augmented_vector_name):
             name = encode_string(name_, ' ')
             match type_:
-                case 'binary':
+                case 'binary' | 'discrete':
                     fmap.append(f'{i}\t{name}\ti\n')
                 case 'continuous':
                     fmap.append(f'{i}\t{name}\tq\n')
@@ -266,27 +244,22 @@ class Preprocessor(ABC):
                     raise ValueError(f'Unsupported type "{type_}" for "{name_}"')
         with self.config.dataset.get_fmap(self.name).open('w', encoding='utf-8') as f:
             f.writelines(fmap)
-        with self.config.dataset.get_data(self.name).open('w', encoding='utf-8') as f:
-            raw = data.to_string(header=False, index_names=False).split('\n')
-            f.write('\n'.join([','.join(element.split()) for element in raw]))
+        data_file = self.config.dataset.get_data(self.name)
+        data.to_csv(data_file, na_rep='<NA>', float_format='%.6f', header=False)
 
-    def process_once(self) -> None:
-        binarized = f'({"non-" if self.config.dataset.simple else ""}binarized)'
+    def process(self) -> None:
         logger.info(
-            f'[bold green]Processing "{self.name}" data[/] [yellow]{binarized}...',
+            f'[bold green]Processing "{self.name}" data...',
             extra={'markup': True},
         )
         data = self.get_data_outer()
         # HACK: Subset contains level type column if present
         subset = data.columns
         data = self.merge_group_names(data)
-        data = data.dropna(subset=subset)
+        # Drop rows with less than 50% non-NaN values
+        threshold = int(len(subset) * 0.5)
+        data = data.dropna(axis=0, thresh=threshold, subset=subset)
         data = self.remove_useless_columns(data)
         augmented_vector_name = self.get_augmented_vector_name(data)
         logger.info('Saving data...')
         self.save_data(data, augmented_vector_name)
-
-    def process(self) -> None:
-        for simple in [False, True]:
-            self.config.dataset.simple = simple
-            self.process_once()
