@@ -63,12 +63,10 @@ type DataName = Literal[
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class DatasetConfig:
-    prefix: Annotated[Directory, Parameter(name=['--prefix', '-p'])]
+    prefix: Annotated[Directory, Parameter(alias='-p')]
     'Prefix of the data files.'
 
-    names: Annotated[
-        list[DataName], Parameter(name=['--names', '-n'], consume_multiple=True)
-    ]
+    names: Annotated[list[DataName], Parameter(alias='-n', consume_multiple=True)]
     """Names of the data files.
 For discrete RRL, separate models are evaluated and then aggregated.
 For other models, features are concatenated.

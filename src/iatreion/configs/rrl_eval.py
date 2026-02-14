@@ -13,57 +13,53 @@ from .train import TrainConfig
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class RrlEvalConfig:
-    names: Annotated[
-        list[DataName], Parameter(name=['--names', '-n'], consume_multiple=True)
-    ] = field(default_factory=list)
+    names: Annotated[list[DataName], Parameter(alias='-n', consume_multiple=True)] = (
+        field(default_factory=list)
+    )
     'Name of the data file.'
 
-    groups: Annotated[
-        list[str], Parameter(name=['--groups', '-g'], consume_multiple=True)
-    ] = field(default_factory=list)
+    groups: Annotated[list[str], Parameter(alias='-g', consume_multiple=True)] = field(
+        default_factory=list
+    )
     'Group names of the data.'
 
-    thesaurus: Annotated[str, Parameter(name=['--thesaurus', '-t'])] = ''
+    thesaurus: Annotated[str, Parameter(alias='-t')] = ''
     'Root directory for trained RRL models.'
 
-    process: Annotated[str, Parameter(name=['--process', '-p'])] = ''
+    process: Annotated[str, Parameter(alias='-p')] = ''
     'Path to the processing info file.'
 
-    data: Annotated[dict[str, str], Parameter(name=['--data', '-d'])] = field(
-        default_factory=dict
-    )
+    data: Annotated[dict[str, str], Parameter(alias='-d')] = field(default_factory=dict)
     'Path to the data file.'
 
-    vmri: Annotated[str, Parameter(name=['--vmri', '-v'])] = ''
+    vmri: Annotated[str, Parameter(alias='-v')] = ''
     'Path to the Vmri_mean_sd data file.'
 
-    vmri_change: Annotated[str, Parameter(name=['--vmri-change', '-vc'])] = ''
+    vmri_change: Annotated[str, Parameter(alias='-vc')] = ''
     'Path to the Vmri_mean_sd column name change file.'
 
     mode: Annotated[
-        Literal['single', 'batch', 'eval', 'show'], Parameter(name=['--mode', '-m'])
+        Literal['single', 'batch', 'eval', 'show'], Parameter(alias='-m')
     ] = 'single'
     'Mode of RRL evaluation.'
 
-    keep: Annotated[
-        Literal['all', 'first', 'last'], Parameter(name=['--keep', '-k'])
-    ] = 'all'
+    keep: Annotated[Literal['all', 'first', 'last'], Parameter(alias='-k')] = 'all'
     """Deduplication strategy for duplicated samples when in eval mode.
 'first': keep the first sample of each patient.
 'last': keep the last sample of each patient.
 'all' (default): do not deduplicate samples.
 """
 
-    suspected_case: Annotated[bool, Parameter(name=['--suspected-case', '-sc'])] = False
+    suspected_case: Annotated[bool, Parameter(alias='-sc', negative='')] = False
     'Whether to include suspected cases in evaluation.'
 
-    index_name: Annotated[str, Parameter(name=['--index-name', '-in'])] = ''
+    index_name: Annotated[str, Parameter(alias='-in')] = ''
     'Index column name in the data files. If not set, use default index name.'
 
-    label_name: Annotated[str, Parameter(name=['--label-name', '-ln'])] = ''
+    label_name: Annotated[str, Parameter(alias='-ln')] = ''
     'Label column name in the data files. If not set, determined automatically.'
 
-    debug: Annotated[bool, Parameter(name=['--debug', '-D'], negative='')] = False
+    debug: Annotated[bool, Parameter(alias='-D', negative='')] = False
     'Whether to enable debug mode.'
 
     def make_configs(self) -> tuple[PreprocessorConfig, DiscreteRrlConfig]:

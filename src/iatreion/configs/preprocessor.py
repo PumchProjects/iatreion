@@ -139,22 +139,17 @@ sequence_mapping: dict[DataName, list[DataName]] = {
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class PreprocessorConfig:
-    # HACK: Cyclopts does not support dataclass inheritance yet
-    # HACK: The help texts of the parameters are not shown in the help message
-    # HACK: Below is the current workaround
-    # HACK: Alternative workaround: use Parameter(help=...)
-    # TODO: Read Cyclopts documentation to find a better way
+    # TODO: Cyclopts supports dataclass inheritance now
     dataset: DatasetConfig
 
     input_prefix: Annotated[ExistingDirectory, Parameter(name=['--input', '-i'])]
     'Prefix of the input files.'
 
-    index_name_: Annotated[str | None, Parameter(name=['--index-name', '-in'])] = None
+    index_name_: Annotated[str | None, Parameter(alias='-in')] = None
     'Index column name in the data files. If not set, use default index name.'
 
     group_columns_: Annotated[
-        list[str] | None,
-        Parameter(name=['--group-columns', '-gc'], consume_multiple=True),
+        list[str] | None, Parameter(alias='-gc', consume_multiple=True)
     ] = None
     'Group columns in the data files. If not set, use default group columns.'
 

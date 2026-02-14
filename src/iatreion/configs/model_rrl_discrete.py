@@ -18,7 +18,7 @@ class DiscreteRrlConfig:
 
     weight: Annotated[
         Literal['uniform', 'train-f1', 'val-f1', 'train-adaboost', 'val-adaboost'],
-        Parameter(name=['--weight', '-w']),
+        Parameter(alias='-w'),
     ] = 'uniform'
     'Mode of model weight calculation.'
 

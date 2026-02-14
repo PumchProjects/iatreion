@@ -5,7 +5,7 @@ from iatreion.api import get_batched_result, get_eval_result, get_models, get_re
 from iatreion.configs import RrlEvalConfig, register_log_dir
 from iatreion.utils import logger
 
-from .common import app, console
+from .common import console
 
 
 def get_table(title: str, *headers: str) -> Table:
@@ -83,9 +83,10 @@ def display_models(config: RrlEvalConfig) -> None:
         console.print(table)
 
 
-@app.command(sort_key=2)
-def rrl_eval(*, config: RrlEvalConfig) -> None:
+def rrl_eval(*, config: RrlEvalConfig | None = None) -> None:
     """Evaluate an RRL model."""
+    if config is None:
+        config = RrlEvalConfig()
     match config.mode:
         case 'single':
             display_result(config)

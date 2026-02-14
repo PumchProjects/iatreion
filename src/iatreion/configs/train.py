@@ -30,9 +30,7 @@ class TrainConfig:
     ]
     'Group names of the data.'
 
-    keep: Annotated[
-        Literal['all', 'first', 'last'], Parameter(name=['--keep', '-k'])
-    ] = 'all'
+    keep: Annotated[Literal['all', 'first', 'last'], Parameter(alias='-k')] = 'all'
     """Deduplication strategy for duplicated samples.
 'first': keep the first sample of each patient.
 'last': keep the last sample of each patient.
@@ -51,51 +49,47 @@ For RRL, this parameter is used to extract the weight of the corresponding model
 When evaluating RRL, this parameter is useless.
 """
 
-    true_ref: Annotated[bool, Parameter(name=['--true-ref', '-tr'])] = False
+    true_ref: Annotated[bool, Parameter(alias='-tr', negative='')] = False
     'Align not only the test data, but also the training data to the reference data.'
 
-    level_type: Annotated[str | None, Parameter(name=['--level-type', '-lt'])] = None
+    level_type: Annotated[str | None, Parameter(alias='-lt')] = None
     'Level type for training set of duplicated data.'
 
-    n_splits: Annotated[int, Parameter(name=['--n-splits', '-ns'])] = 10
+    n_splits: Annotated[int, Parameter(alias='-ns')] = 10
     'Number of splits for cross-validation.'
 
-    n_repeats: Annotated[int, Parameter(name=['--n-repeats', '-nr'])] = 10
+    n_repeats: Annotated[int, Parameter(alias='-nr')] = 10
     'Number of repeats for cross-validation.'
 
-    device_id: Annotated[int, Parameter(name=['--device-id', '-i'])] = 0
+    device_id: Annotated[int, Parameter(alias='-i')] = 0
     'Device ID for training. Default is 0.'
 
-    final: Annotated[bool, Parameter(name=['--final', '-f'])] = False
+    final: Annotated[bool, Parameter(alias='-f', negative='')] = False
     'Whether to use the whole dataset for training or testing.'
 
-    over_sampler: Annotated[
-        SamplerName | None, Parameter(name=['--over-sampler', '-os'])
-    ] = None
+    over_sampler: Annotated[SamplerName | None, Parameter(alias='-os')] = None
     'Over-sampling method to use.'
 
-    min_n_samples: Annotated[int, Parameter(name=['--min-n-samples', '-mns'])] = 0
+    min_n_samples: Annotated[int, Parameter(alias='-mns')] = 0
     'Minimum number of samples for each class after resampling.'
 
-    val_size: Annotated[float | int | None, Parameter(name=['--val-size', '-vs'])] = (
-        None
-    )
+    val_size: Annotated[float | int | None, Parameter(alias='-vs')] = None
     """If float, should be between 0.0 and 1.0 and represent the proportion of the dataset to include in the validation split.
 If int, represents the absolute number of validation samples.
 If None (default), no validation set is used.
 For discrete RRL, validation set is used for optimization when val_size is set.
 """
 
-    suspected_case: Annotated[bool, Parameter(name=['--suspected-case', '-sc'])] = False
+    suspected_case: Annotated[bool, Parameter(alias='-sc', negative='')] = False
     'Whether to include suspected cases in training.'
 
-    label_name: Annotated[str | None, Parameter(name=['--label-name', '-ln'])] = None
+    label_name: Annotated[str | None, Parameter(alias='-ln')] = None
     'Label column name in the data files. If not set, determined automatically.'
 
     seed: int = 42
     'Random seed for reproducibility.'
 
-    plot_roc: bool = True
+    plot_roc: Annotated[bool, Parameter(negative='')] = True
     'Plot ROC curve.'
 
     log_root: Directory = Path('logs')

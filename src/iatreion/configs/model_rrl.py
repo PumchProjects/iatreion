@@ -15,28 +15,28 @@ class RrlConfig:
 
     train: TrainConfig
 
-    epoch: Annotated[int, Parameter(name=['--epoch', '-e'])] = 41
+    epoch: Annotated[int, Parameter(alias='-e')] = 41
     'Set the total epoch.'
 
-    batch_size: Annotated[int, Parameter(name=['--batch_size', '-bs'])] = 64
+    batch_size: Annotated[int, Parameter(alias='-bs')] = 64
     'Set the batch size.'
 
-    learning_rate: Annotated[float, Parameter(name=['--learning_rate', '-lr'])] = 0.01
+    learning_rate: Annotated[float, Parameter(alias='-lr')] = 0.01
     'Set the initial learning rate.'
 
-    lr_decay_rate: Annotated[float, Parameter(name=['--lr_decay_rate', '-lrdr'])] = 0.75
+    lr_decay_rate: Annotated[float, Parameter(alias='-lrdr')] = 0.75
     'Set the learning rate decay rate.'
 
-    lr_decay_epoch: Annotated[int, Parameter(name=['--lr_decay_epoch', '-lrde'])] = 10
+    lr_decay_epoch: Annotated[int, Parameter(alias='-lrde')] = 10
     'Set the learning rate decay epoch.'
 
-    weight_decay: Annotated[float, Parameter(name=['--weight_decay', '-wd'])] = 0.0
+    weight_decay: Annotated[float, Parameter(alias='-wd')] = 0.0
     'Set the weight decay (L2 penalty).'
 
-    log_iter: Annotated[int, Parameter(name=['--log_iter', '-li'])] = 500
+    log_iter: Annotated[int, Parameter(alias='-li')] = 500
     'The number of iterations (batches) to log once.'
 
-    save_interval: Annotated[int, Parameter(name=['--save_interval', '-si'])] = 100
+    save_interval: Annotated[int, Parameter(alias='-si')] = 100
     'The number of epochs to save the model based on training loss (when val_size=None), or the number of iterations (batches) to save the model based on validation F1 (when val_size is set).'
 
     nlaf: Annotated[bool, Parameter(negative='')] = False
@@ -69,10 +69,10 @@ class RrlConfig:
     print_rule: Annotated[bool, Parameter(negative='')] = False
     'Print the rules.'
 
-    structure: Annotated[str, Parameter(name=['--structure', '-s'])] = '5@64'
+    structure: Annotated[str, Parameter(alias='-s')] = '5@64'
     'Set the number of nodes in the binarization layer and logical layers. E.g., 10@64, 10@64@32@16.'
 
-    debug: Annotated[bool, Parameter(name=['--debug', '-D'], negative='')] = False
+    debug: Annotated[bool, Parameter(alias='-D', negative='')] = False
     'Whether to enable debug mode.'
 
     folder_name: Annotated[str | None, Parameter(parse=False)] = None
