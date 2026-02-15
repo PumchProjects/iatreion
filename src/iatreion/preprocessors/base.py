@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 
 import pandas as pd
+from pandas.api.types import is_string_dtype
 
 from iatreion.configs import DataName, PreprocessorConfig
 from iatreion.exceptions import IatreionException
@@ -212,11 +213,10 @@ class Preprocessor(ABC):
         start_idx = 1 if self.level_data is not None else 0
         data = data.iloc[:, start_idx : -len(self.config.group_columns)]
         for name in data.columns:
-            nunique = data[name].nunique()
-            if nunique <= 2:
-                augmented_vector_name.append((name, 'binary'))
-            elif nunique <= discrete_th:
-                augmented_vector_name.append((name, 'discrete'))
+            if is_string_dtype(data[name]):
+                augmented_vector_name.append((name, 'unordered'))
+            elif data[name].nunique() <= discrete_th:
+                augmented_vector_name.append((name, 'ordered'))
             else:
                 augmented_vector_name.append((name, 'continuous'))
         return augmented_vector_name
@@ -236,7 +236,7 @@ class Preprocessor(ABC):
         for i, (name_, type_) in enumerate(augmented_vector_name):
             name = encode_string(name_, ' ')
             match type_:
-                case 'binary' | 'discrete':
+                case 'unordered' | 'ordered':
                     fmap.append(f'{i}\t{name}\ti\n')
                 case 'continuous':
                     fmap.append(f'{i}\t{name}\tq\n')
