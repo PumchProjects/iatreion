@@ -3,7 +3,6 @@ from typing import cast
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from matplotlib.axes import Axes
 from numpy.typing import NDArray
 from sklearn.metrics import (
@@ -33,7 +32,6 @@ class Record[T]:
     f1: T
     sensitivity: T
     specificity: T
-    consistency: T
     complexity: dict[str, tuple[T, str]] = field(default_factory=dict)
     cm: NDArray | None = None
 
@@ -129,22 +127,12 @@ class RecordROC:
         return mean_auc
 
 
-def consistency_ratio(y_pred: NDArray, index: NDArray) -> float:
-    pred = pd.Series(y_pred, index=index)
-    valid_pred = pred.groupby(level=0).filter(lambda x: len(x) > 1)
-    if valid_pred.empty:
-        return float('nan')
-    nunique = valid_pred.groupby(level=0).nunique()
-    return nunique[nunique == 1].sum() / len(nunique)
-
-
 class Recorder:
     def __init__(self, config: TrainConfig) -> None:
         self.config = config
-        self.result = Record[list[float]](*([] for _ in range(9)))  # type: ignore
+        self.result = Record[list[float]](*([] for _ in range(8)))  # type: ignore
         self.roc = RecordROC(config)
         self.calc_sen_and_spc = config.num_class == 2
-        self.calc_consistency = config.keep == 'all'
 
     def record(self, results: TrainerReturn) -> str:
         training_time, y_true, y_score, index, complexity = results
@@ -186,8 +174,6 @@ class Recorder:
                     y_true, y_pred, labels=labels, pos_label=1, zero_division=np.nan
                 )
             )
-        if self.calc_consistency:
-            self.result.consistency.append(consistency_ratio(y_pred, index))
         width = 4
         for key, value in complexity.items():
             if isinstance(value, tuple):
@@ -208,9 +194,6 @@ class Recorder:
             else '',
             f'{"SPC":{width}} {self.result.specificity[-1]:.2%}\n'
             if self.calc_sen_and_spc
-            else '',
-            f'{"CST":{width}} {self.result.consistency[-1]:.2%}\n'
-            if self.calc_consistency
             else '',
             *(
                 f'{key:{width}} {values[-1]:{fmt}}\n'
@@ -235,7 +218,6 @@ class Recorder:
             np.nanmean(self.result.f1).item(),
             np.nanmean(self.result.sensitivity).item(),
             np.nanmean(self.result.specificity).item(),
-            np.nanmean(self.result.consistency).item(),
             complexity,
             self.result.cm,
         )
@@ -254,9 +236,6 @@ class Recorder:
             else '',
             f'AVG {"SPC":{width}} {final.specificity:.2%}\n'
             if self.calc_sen_and_spc
-            else '',
-            f'AVG {"CST":{width}} {final.consistency:.2%}\n'
-            if self.calc_consistency
             else '',
             *(
                 f'AVG {key:{width}} {value:{fmt}}\n'

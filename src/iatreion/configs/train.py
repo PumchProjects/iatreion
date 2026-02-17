@@ -30,11 +30,10 @@ class TrainConfig:
     ]
     'Group names of the data.'
 
-    keep: Annotated[Literal['all', 'first', 'last'], Parameter(alias='-k')] = 'all'
+    keep: Annotated[Literal['first', 'last'], Parameter(alias='-k')] = 'last'
     """Deduplication strategy for duplicated samples.
 'first': keep the first sample of each patient.
 'last': keep the last sample of each patient.
-'all' (default): do not deduplicate samples.
 """
 
     ref_names: Annotated[
@@ -159,10 +158,8 @@ For discrete RRL, validation set is used for optimization when val_size is set.
                 description = f'ref {ref_names}, keep {self.keep}'
             else:
                 description = f'of {ref_names}, keep {self.keep}'
-        elif self.keep != 'all':
-            description = f'keep {self.keep}'
         else:
-            description = 'original'
+            description = f'keep {self.keep}'
         if self.label_name is not None:
             description = f'{description}, on {self.label_name}'
         return description

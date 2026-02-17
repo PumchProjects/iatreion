@@ -42,8 +42,7 @@ def make_data_labels(
     base_pos = train.base_pos
     label_pos = train.label_pos
 
-    if train.keep != 'all':
-        D = D[~D.index.duplicated(keep=train.keep)]
+    D = D[~D.index.duplicated(keep=train.keep)]
     if shuffle:
         D = D.sample(frac=1, random_state=0)
     group_mapping = train.get_name_group_mapping()
