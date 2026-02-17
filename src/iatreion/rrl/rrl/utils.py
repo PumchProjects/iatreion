@@ -1,5 +1,4 @@
 from collections.abc import Generator
-from typing import Literal, overload
 
 import numpy as np
 import pandas as pd
@@ -59,39 +58,9 @@ def make_data_labels(
     return X_df, y_df
 
 
-@overload
 def read_csv(
-    name: DataName,
-    dataset: DatasetConfig,
-    train: TrainConfig,
-    *,
-    shuffle: bool = ...,
-    return_level: Literal[False] = ...,
-) -> tuple[pd.DataFrame, pd.Series, list[list[str]]]: ...
-
-
-@overload
-def read_csv(
-    name: DataName,
-    dataset: DatasetConfig,
-    train: TrainConfig,
-    *,
-    shuffle: bool = ...,
-    return_level: Literal[True],
-) -> tuple[pd.DataFrame, pd.Series, pd.Series | None, list[list[str]]]: ...
-
-
-def read_csv(
-    name: DataName,
-    dataset: DatasetConfig,
-    train: TrainConfig,
-    *,
-    shuffle: bool = False,
-    return_level: bool = False,
-) -> (
-    tuple[pd.DataFrame, pd.Series, list[list[str]]]
-    | tuple[pd.DataFrame, pd.Series, pd.Series | None, list[list[str]]]
-):
+    name: DataName, dataset: DatasetConfig, train: TrainConfig, *, shuffle: bool = False
+) -> tuple[pd.DataFrame, pd.Series, list[list[str]]]:
     data_path = dataset.get_data(name)
     info_path = dataset.get_info(name)
 
@@ -104,42 +73,15 @@ def read_csv(
     X_df, y_df = make_data_labels(D, train, group_columns, shuffle=shuffle)
     f_list = f_list[1 : -len(group_columns)]
 
-    level: pd.Series | None = None
-    if f_list[0][1] == 'level':
-        level = X_df.iloc[:, 0].reset_index(drop=True)
-        X_df = X_df.iloc[:, 1:]
-        f_list = f_list[1:]
     X_df.rename(columns=encode_string, inplace=True)
     f_list = [[encode_string(name), type] for name, type in f_list]
 
-    if return_level:
-        return X_df, y_df, level, f_list
     return X_df, y_df, f_list
 
 
 def read_data(
     dataset: DatasetConfig, train: TrainConfig, *, shuffle: bool = False
-) -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.Series | None, pd.DataFrame]:
-    if train.keep == 'all':
-        if train.ref_names is not None:
-            raise ValueError(
-                'Datasets must be deduplicated when reference datasets are used.'
-            )
-        if len(dataset.names) > 1:
-            raise ValueError(
-                'Datasets must be deduplicated when multiple datasets are used.'
-            )
-        X_df, y_df, level, f_list = read_csv(
-            dataset.names[0], dataset, train, shuffle=shuffle, return_level=True
-        )
-        f_df = pd.DataFrame(f_list)
-        ref_y_df = y_df.groupby(level=0).first()
-        return X_df, y_df, ref_y_df, level, f_df
-    if train.level_type is not None:
-        raise ValueError(
-            'Datasets must NOT be deduplicated when using level type filtering.'
-        )
-
+) -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.DataFrame]:
     X_df, y_df, f_list = read_csv(dataset.names[0], dataset, train)
     for name in dataset.names[1:]:
         child_X_df, child_y_df, child_f_list = read_csv(name, dataset, train)
@@ -164,7 +106,7 @@ def read_data(
         ref_y_df = y_df
     if shuffle:
         ref_y_df = ref_y_df.sample(frac=1, random_state=0)
-    return X_df, y_df, ref_y_df, None, f_df
+    return X_df, y_df, ref_y_df, f_df
 
 
 class DBEncoder:
@@ -370,7 +312,7 @@ type RawSamples = tuple[
 
 
 def get_train_test(
-    config: TrainConfig, X_df: pd.DataFrame, ref_y: pd.Series, level: pd.Series | None
+    config: TrainConfig, X_df: pd.DataFrame, ref_y: pd.Series
 ) -> Generator[tuple[NDArray, NDArray | None, NDArray], None, None]:
     if config.final:
         train_arr = np.arange(len(X_df))
@@ -412,26 +354,17 @@ def get_train_test(
             )
             test_arr = X_index.index[X_index.isin(test_index)].to_numpy()
 
-            if level is not None and config.level_type is not None:
-                level_train = level.iloc[train_arr]
-                train_arr = level_train.index[
-                    level_train == config.level_type
-                ].to_numpy()
-                if val_arr is not None:
-                    level_val = level.iloc[val_arr]
-                    val_arr = level_val.index[level_val == config.level_type].to_numpy()
-
             yield train_arr, val_arr, test_arr
 
 
 def get_samples(
     dataset: DatasetConfig, train: TrainConfig
 ) -> Generator[Samples, None, None]:
-    X_df, y_df, ref_y_df, level, f_df = read_data(dataset, train, shuffle=True)
+    X_df, y_df, ref_y_df, f_df = read_data(dataset, train, shuffle=True)
 
     db_enc = DBEncoder(train, f_df)
 
-    for train_arr, val_arr, test_arr in get_train_test(train, X_df, ref_y_df, level):
+    for train_arr, val_arr, test_arr in get_train_test(train, X_df, ref_y_df):
         X_train = X_df.iloc[train_arr]
         y_train = y_df.iloc[train_arr]
         X_val = None if val_arr is None else X_df.iloc[val_arr]
@@ -451,9 +384,9 @@ def get_samples(
 def get_raw_samples(
     dataset: DatasetConfig, train: TrainConfig
 ) -> Generator[RawSamples, None, None]:
-    X_df, y_df, ref_y_df, level, f_df = read_data(dataset, train, shuffle=True)
+    X_df, y_df, ref_y_df, f_df = read_data(dataset, train, shuffle=True)
 
-    for train_arr, val_arr, test_arr in get_train_test(train, X_df, ref_y_df, level):
+    for train_arr, val_arr, test_arr in get_train_test(train, X_df, ref_y_df):
         X_train = X_df.iloc[train_arr]
         y_train = y_df.iloc[train_arr]
         X_val = None if val_arr is None else X_df.iloc[val_arr]

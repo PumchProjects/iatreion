@@ -52,9 +52,6 @@ When evaluating RRL, this parameter is useless.
     true_ref: Annotated[bool, Parameter(alias='-tr', negative='')] = False
     'Align not only the test data, but also the training data to the reference data.'
 
-    level_type: Annotated[str | None, Parameter(alias='-lt')] = None
-    'Level type for training set of duplicated data.'
-
     n_splits: Annotated[int, Parameter(alias='-ns')] = 10
     'Number of splits for cross-validation.'
 
@@ -164,8 +161,6 @@ For discrete RRL, validation set is used for optimization when val_size is set.
                 description = f'of {ref_names}, keep {self.keep}'
         elif self.keep != 'all':
             description = f'keep {self.keep}'
-        elif self.level_type is not None:
-            description = f'at {self.level_type}'
         else:
             description = 'original'
         if self.label_name is not None:

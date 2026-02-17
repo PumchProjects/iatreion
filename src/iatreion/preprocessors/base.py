@@ -18,7 +18,6 @@ class Preprocessor(ABC):
         self.name = name
         self.data_name = config.get_data_name(name)
         self.stem_pattern = config.get_stem_pattern(self.data_name)
-        self.level_data: pd.Series | None = None
         self.process_info_: ProcessInfo | None = None
 
     @property
@@ -162,12 +161,7 @@ class Preprocessor(ABC):
             self.config.data[self.data_name] = data
             if indices_names := self.config.get_indices_names(self.data_name):
                 self.config.final_indices.append(data[indices_names].astype(str))
-        data = self.config.data[self.data_name].copy()
-        if (
-            level := self.config.get_level_name(self.data_name)
-        ) and level in data.columns:  # In case that level data is not present
-            self.level_data = data[level]
-        return data
+        return self.config.data[self.data_name].copy()
 
     @abstractmethod
     def get_data(self) -> pd.DataFrame: ...
@@ -177,8 +171,6 @@ class Preprocessor(ABC):
         if self.config.final:
             data.rename(columns=encode_string, inplace=True)
         else:
-            if self.level_data is not None:
-                data = pd.concat([self.level_data, data], axis=1)
             self.save_process_info()
         return data
 
@@ -210,8 +202,7 @@ class Preprocessor(ABC):
     def get_augmented_vector_name(self, data: pd.DataFrame) -> list[tuple[str, str]]:
         discrete_th = 10
         augmented_vector_name: list[tuple[str, str]] = []
-        start_idx = 1 if self.level_data is not None else 0
-        data = data.iloc[:, start_idx : -len(self.config.group_columns)]
+        data = data.iloc[:, : -len(self.config.group_columns)]
         for name in data.columns:
             if is_string_dtype(data[name]):
                 augmented_vector_name.append((name, 'unordered'))
@@ -227,8 +218,6 @@ class Preprocessor(ABC):
         feature_names = [f'{pair[0]} {pair[1]}\n' for pair in augmented_vector_name]
         with self.config.dataset.get_info(self.name).open('w', encoding='utf-8') as f:
             f.write(f'{self.config.index_name} index\n')
-            if self.level_data is not None:
-                f.write(f'{self.level_data.name} level\n')
             f.writelines(feature_names)
             for col in self.config.group_columns:
                 f.write(f'{col} label\n')

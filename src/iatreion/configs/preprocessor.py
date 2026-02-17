@@ -49,10 +49,6 @@ data_stem_mapping: dict[str, str] = {
     'history': r'V\d+',
 }
 
-data_level_mapping: dict[str, str] = {
-    'volume-new': 'level_type',
-}
-
 name_data_mapping: dict[DataName, str] = {
     'basic-noage': 'screen',
     'basic': 'screen',
@@ -252,10 +248,6 @@ class PreprocessorConfig:
     @staticmethod
     def get_stem_pattern(data_name: str) -> str | None:
         return data_stem_mapping.get(data_name)
-
-    @staticmethod
-    def get_level_name(data_name: str) -> str | None:
-        return data_level_mapping.get(data_name)
 
     @property
     def process_info_path(self) -> Path:
