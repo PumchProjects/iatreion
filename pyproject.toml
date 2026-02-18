@@ -4,7 +4,7 @@ version = "0.1.0"
 description = 'An interpretable dementia diagnoser. From Ancient Greek ἰατρεῖον ("clinic").'
 requires-python = ">=3.12"
 dependencies = [
-    "cyclopts>=3.13.1",
+    "cyclopts>=4.5.3",
     "pandas[excel]>=2.2.3",
     "pandas-stubs>=2.2.3.250308",
     "imbalanced-learn>=0.14.0",
@@ -22,7 +22,6 @@ cpu = [
 cu121 = [
     "tabpfn>=6.0.6",
     "tabpfn-extensions[interpretability]>=0.2.2",
-    "numba>=0.59.0",
     "tensorboard>=2.19.0",
     "torch>=2.5.1",
 ]
