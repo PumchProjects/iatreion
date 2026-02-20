@@ -25,7 +25,11 @@ def get_exp_root(name: str, train: TrainConfig) -> Path:
 
 
 def get_rrl_file(exp_root: Path, train: TrainConfig) -> Path:
-    return exp_root / ('rrl.tsv' if train.final else f'rrl_{train.ith_kfold}.tsv')
+    return exp_root / (
+        f'{train.cur_name}.tsv'
+        if train.final
+        else f'{train.cur_name}_{train.ith_kfold}.tsv'
+    )
 
 
 def register_log_dir(

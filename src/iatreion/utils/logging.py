@@ -26,11 +26,17 @@ logger.setLevel(logging.DEBUG)
 logger.addHandler(RichHandler(logging.INFO))
 
 
-def add_file_handler(filename: Path, mode: str = 'w') -> None:
+def add_file_handler(filename: Path, mode: str = 'w') -> FileHandler:
     filename.parent.mkdir(parents=True, exist_ok=True)
     file_handler = FileHandler(filename, mode=mode)
     file_handler.setFormatter(Formatter('%(asctime)s %(levelname)-8s %(message)s'))
     logger.addHandler(file_handler)
+    return file_handler
+
+
+def remove_file_handler(file_handler: FileHandler) -> None:
+    logger.removeHandler(file_handler)
+    file_handler.close()
 
 
 progress = Progress(

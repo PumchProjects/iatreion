@@ -11,9 +11,7 @@ from .base import Trainer, TrainerReturn
 
 class RrlTrainer(Trainer):
     def __init__(self, config: RrlConfig) -> None:
-        super().__init__(
-            config.dataset, config.train, epilog_callback=config.epilog_callback
-        )
+        super().__init__(config.dataset, config.train)
         self.config = config
         self.samples = get_samples(config.dataset, config.train)
         self.model: Any = None
@@ -37,7 +35,7 @@ class RrlTrainer(Trainer):
         end = perf_counter_ns()
         training_time = (end - start) / 1e9
         y_score, complexity = test_model(self.config, self.save_model_callback, samples)
-        return training_time, samples[-2], y_score, samples[-1], {'Log#E': complexity}
+        return training_time, samples[-1], y_score, {'Log#E': complexity}
 
     @override
     def train_final(self) -> None:

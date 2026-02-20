@@ -16,7 +16,7 @@ from .rrl.utils import Samples
 
 
 def get_data_loader(args: RrlConfig, samples: Samples, pin_memory=False):
-    db_enc, X_train, y_train, X_val, y_val, X_test, y_test, _ = samples
+    db_enc, X_train, y_train, X_val, y_val, X_test, y_test = samples
 
     train_set = TensorDataset(torch.tensor(X_train.astype(np.float32)), torch.tensor(y_train))
     valid_set = (

@@ -242,7 +242,6 @@ class Preprocessor(ABC):
             extra={'markup': True},
         )
         data = self.get_data_outer()
-        # HACK: Subset contains level type column if present
         subset = data.columns
         data = self.merge_group_names(data)
         # Drop rows with less than 50% non-NaN values

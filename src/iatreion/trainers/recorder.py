@@ -1,5 +1,6 @@
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import cast
+from typing import Self, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,7 +19,7 @@ from sklearn.metrics import (
 from iatreion.configs import TrainConfig
 
 type TrainerReturn = tuple[
-    float, NDArray, NDArray, NDArray, dict[str, float | tuple[float, str]]
+    float, NDArray, NDArray, dict[str, float | tuple[float, str]]
 ]
 
 
@@ -133,9 +134,13 @@ class Recorder:
         self.result = Record[list[float]](*([] for _ in range(8)))  # type: ignore
         self.roc = RecordROC(config)
         self.calc_sen_and_spc = config.num_class == 2
+        self.y_true_all: list[NDArray] = []
+        self.y_score_all: list[NDArray] = []
 
     def record(self, results: TrainerReturn) -> str:
-        training_time, y_true, y_score, index, complexity = results
+        training_time, y_true, y_score, complexity = results
+        self.y_true_all.append(y_true)
+        self.y_score_all.append(y_score)
         self.result.time.append(training_time)
         y_pred = y_score.argmax(axis=1)
         labels = list(range(self.config.num_class))
@@ -202,6 +207,16 @@ class Recorder:
             f'{"Time":{width}} {training_time:.3f}s',
         ]
         return ''.join(result_lines)
+
+    def record_from(self, recorders: Iterable[Self]) -> str:
+        time_list = []
+        y_score_list = []
+        for recorder in recorders:
+            time_list.append(recorder.result.time[-1])
+            y_score_list.append(recorder.y_score_all[-1])
+            y_true = recorder.y_true_all[-1]
+        results = (sum(time_list), y_true, np.mean(y_score_list, axis=0), {})
+        return self.record(results)
 
     def finish(self) -> str:
         complexity: dict[str, tuple[float, str]] = {}

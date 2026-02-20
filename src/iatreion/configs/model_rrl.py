@@ -95,6 +95,3 @@ class RrlConfig:
     @property
     def rrl_file(self) -> str:
         return str(get_rrl_file(self.train.log_dir, self.train))
-
-    def epilog_callback(self) -> None:
-        register_log_dir(self.dataset, self.train, 'rrl', self.folder_name, 'short.log')

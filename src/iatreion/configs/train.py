@@ -1,4 +1,5 @@
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal
@@ -6,9 +7,13 @@ from typing import Annotated, Literal
 from cyclopts import Parameter
 from cyclopts.types import Directory
 
-from iatreion.utils import expand_range, set_device, set_seed
-
-from .dataset import DataName
+from iatreion.utils import (
+    add_file_handler,
+    expand_range,
+    remove_file_handler,
+    set_device,
+    set_seed,
+)
 
 type SamplerName = Literal[
     'adasyn',
@@ -36,26 +41,29 @@ class TrainConfig:
 'last': keep the last sample of each patient.
 """
 
-    ref_names: Annotated[
-        list[DataName] | None, Parameter(name=['--refs', '-r'], consume_multiple=True)
-    ] = None
-    """Names of the reference data files.
-When final=False, align test data to the reference data.
-Training data are also aligned when true_ref=True.
-For discrete RRL, this parameter is used to gather the correct RRL models.
-When final=True, the whole dataset is used for training and no alignment is performed.
-For RRL, this parameter is used to extract the weight of the corresponding model.
-When evaluating RRL, this parameter is useless.
+    aggregate: Annotated[
+        Literal['average', 'concat', 'stack'], Parameter(alias='-a')
+    ] = 'average'
+    """Aggregation strategy for multimodal samples of the same patient.
+'average': simple average predictions of different modalities.
+'concat': concatenate features of different modalities.
+'stack': late fusion by stacking predictions of different modalities as features for a meta-classifier.
 """
 
     true_ref: Annotated[bool, Parameter(alias='-tr', negative='')] = False
     'Align not only the test data, but also the training data to the reference data.'
 
-    n_splits: Annotated[int, Parameter(alias='-ns')] = 10
-    'Number of splits for cross-validation.'
+    n_outer_splits: Annotated[int, Parameter(alias='-nos')] = 5
+    'Number of splits for outer cross-validation.'
 
-    n_repeats: Annotated[int, Parameter(alias='-nr')] = 10
-    'Number of repeats for cross-validation.'
+    n_outer_repeats: Annotated[int, Parameter(alias='-nor')] = 1
+    'Number of repeats for outer cross-validation.'
+
+    n_inner_splits: Annotated[int, Parameter(alias='-nis')] = 5
+    "Number of splits for inner cross-validation, used when aggregate='stack'."
+
+    n_inner_repeats: Annotated[int, Parameter(alias='-nir')] = 1
+    "Number of repeats for inner cross-validation, used when aggregate='stack'."
 
     device_id: Annotated[int, Parameter(alias='-i')] = 0
     'Device ID for training. Default is 0.'
@@ -95,6 +103,8 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     log_dir: Annotated[Directory, Parameter(parse=False)] = Path('logs')
 
     ith_kfold: Annotated[int, Parameter(parse=False)] = 0
+
+    cur_name: Annotated[str, Parameter(parse=False)] = ''
 
     base_pos: Annotated[str, Parameter(parse=False)] = ''
 
@@ -152,21 +162,14 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     @property
     def ref_name_str(self) -> str:
-        if self.ref_names is not None:
-            ref_names = ', '.join(self.ref_names)
-            if self.true_ref:
-                description = f'ref {ref_names}, keep {self.keep}'
-            else:
-                description = f'of {ref_names}, keep {self.keep}'
-        else:
-            description = f'keep {self.keep}'
+        description = f'keep {self.keep}'
         if self.label_name is not None:
             description = f'{description}, on {self.label_name}'
         return description
 
     @property
     def n_folds(self) -> int:
-        return self.n_splits * self.n_repeats
+        return self.n_outer_splits * self.n_outer_repeats
 
     @property
     def num_class(self) -> int:
@@ -183,3 +186,11 @@ For discrete RRL, validation set is used for optimization when val_size is set.
             # HACK: Disable ROC plot for multiclass classification
             self.plot_roc = False
         self.set_groups()
+
+    @contextmanager
+    def logging(self, name: str) -> Generator[None, None, None]:
+        handler = add_file_handler(self.log_dir / f'{name}.log')
+        try:
+            yield
+        finally:
+            remove_file_handler(handler)

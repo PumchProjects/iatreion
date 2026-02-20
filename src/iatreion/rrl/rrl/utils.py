@@ -80,32 +80,19 @@ def read_csv(
 
 def read_data(
     dataset: DatasetConfig, train: TrainConfig, *, shuffle: bool = False
-) -> tuple[pd.DataFrame, pd.Series, pd.Series, pd.DataFrame]:
+) -> tuple[list[pd.DataFrame], list[pd.Series], pd.Series, list[pd.DataFrame]]:
     X_df, y_df, f_list = read_csv(dataset.names[0], dataset, train)
+    ref_y_df = y_df
+    X_dfs, y_dfs, f_dfs = [X_df], [y_df], [pd.DataFrame(f_list)]
     for name in dataset.names[1:]:
-        child_X_df, child_y_df, child_f_list = read_csv(name, dataset, train)
-        X_df = X_df.merge(child_X_df, how='outer', left_index=True, right_index=True)
-        merge_y_df = pd.merge(
-            y_df.to_frame('left'),
-            child_y_df.to_frame('right'),
-            how='outer',
-            left_index=True,
-            right_index=True,
-        )
-        y_df = merge_y_df['left'].combine_first(merge_y_df['right'])
-        f_list += child_f_list
-    y_df = y_df[X_df.index]
-    f_df = pd.DataFrame(f_list)
-    if train.ref_names is not None:
-        _, ref_y_df, _ = read_csv(train.ref_names[0], dataset, train)
-        for name in train.ref_names[1:]:
-            _, child_y_df, _ = read_csv(name, dataset, train)
-            ref_y_df = ref_y_df[ref_y_df.index.intersection(child_y_df.index)]
-    else:
-        ref_y_df = y_df
+        X_df, y_df, f_list = read_csv(name, dataset, train)
+        ref_y_df = ref_y_df[ref_y_df.index.intersection(y_df.index)]
+        X_dfs.append(X_df)
+        y_dfs.append(y_df)
+        f_dfs.append(pd.DataFrame(f_list))
     if shuffle:
         ref_y_df = ref_y_df.sample(frac=1, random_state=0)
-    return X_df, y_df, ref_y_df, f_df
+    return X_dfs, y_dfs, ref_y_df, f_dfs
 
 
 class DBEncoder:
@@ -298,7 +285,6 @@ type Samples = tuple[
     NDArray | None,
     NDArray,
     NDArray,
-    NDArray,
 ]
 type RawSamples = tuple[
     pd.DataFrame,
@@ -311,73 +297,55 @@ type RawSamples = tuple[
 
 
 def get_train_test(
-    config: TrainConfig, X_df: pd.DataFrame, ref_y: pd.Series
-) -> Generator[tuple[NDArray, NDArray | None, NDArray], None, None]:
-    if config.final:
-        train_arr = np.arange(len(X_df))
-        val_arr: NDArray | None = None
-        if config.val_size is not None:
-            train_arr, val_arr = train_test_split(
-                train_arr, test_size=config.val_size, random_state=42
-            )
-        yield train_arr, val_arr, train_arr
+    config: TrainConfig, ref_y: pd.Series
+) -> Generator[tuple[pd.Index, pd.Index], None, None]:
+    kf = RepeatedStratifiedKFold(
+        n_splits=config.n_outer_splits,
+        n_repeats=config.n_outer_repeats,
+        random_state=36851234,
+    )
+    for train, test in kf.split(ref_y, ref_y):
+        yield ref_y.index[train], ref_y.index[test]
 
-    else:
-        kf = RepeatedStratifiedKFold(
-            n_splits=config.n_splits, n_repeats=config.n_repeats, random_state=36851234
+
+def get_train_val(
+    config: TrainConfig, y_df: pd.Series, train_index: pd.Index, test_index: pd.Index
+) -> tuple[pd.Index, pd.Index | None]:
+    if not config.true_ref:
+        train_index = y_df.index.difference(test_index)
+    val_index: pd.Index | None = None
+    if config.val_size is not None:
+        train_index, val_index = train_test_split(
+            train_index,
+            test_size=config.val_size,
+            random_state=42,
+            stratify=y_df[train_index],
         )
-        for train, test in kf.split(ref_y, ref_y):
-            test_index = ref_y.index[test]
-            val_index: pd.Index | None = None
-            val_test_index = test_index
-            if config.val_size is not None:
-                train, val = train_test_split(
-                    train,
-                    test_size=config.val_size,
-                    random_state=42,
-                    stratify=ref_y.iloc[train],
-                )
-                val_index = ref_y.index[val]
-                val_test_index = val_index.union(test_index)
-            if config.true_ref:
-                train_index = ref_y.index[train]
-            else:
-                train_index = X_df.index.difference(val_test_index)
-
-            X_index = X_df.reset_index().iloc[:, 0]
-            train_arr = X_index.index[X_index.isin(train_index)].to_numpy()
-            val_arr = (
-                None
-                if val_index is None
-                else X_index.index[X_index.isin(val_index)].to_numpy()
-            )
-            test_arr = X_index.index[X_index.isin(test_index)].to_numpy()
-
-            yield train_arr, val_arr, test_arr
+    return train_index, val_index
 
 
 def get_samples(
     dataset: DatasetConfig, train: TrainConfig
 ) -> Generator[Samples, None, None]:
-    X_df, y_df, ref_y_df, f_df = read_data(dataset, train, shuffle=True)
+    X_dfs, y_dfs, ref_y_df, f_dfs = read_data(dataset, train, shuffle=True)
 
-    db_enc = DBEncoder(train, f_df)
+    for train_, test_index in get_train_test(train, ref_y_df):
+        for X_df, y_df, f_df in zip(X_dfs, y_dfs, f_dfs, strict=True):
+            train_index, val_index = get_train_val(train, y_df, train_, test_index)
+            X_train = X_df.loc[train_index]
+            y_train = y_df.loc[train_index]
+            X_val = None if val_index is None else X_df.loc[val_index]
+            y_val = None if val_index is None else y_df.loc[val_index]
+            X_test = X_df.loc[test_index]
+            y_test = y_df.loc[test_index]
 
-    for train_arr, val_arr, test_arr in get_train_test(train, X_df, ref_y_df):
-        X_train = X_df.iloc[train_arr]
-        y_train = y_df.iloc[train_arr]
-        X_val = None if val_arr is None else X_df.iloc[val_arr]
-        y_val = None if val_arr is None else y_df.iloc[val_arr]
-        X_test = X_df.iloc[test_arr]
-        y_test = y_df.iloc[test_arr]
-
-        yield (
-            db_enc,
-            *db_enc.fit_transform(X_train, y_train),
-            *db_enc.transform(X_val, y_val),
-            *db_enc.transform(X_test, y_test),
-            X_df.index[test_arr].to_numpy(),
-        )
+            db_enc = DBEncoder(train, f_df)
+            yield (
+                db_enc,
+                *db_enc.fit_transform(X_train, y_train),
+                *db_enc.transform(X_val, y_val),
+                *db_enc.transform(X_test, y_test),
+            )
 
 
 def get_raw_samples(

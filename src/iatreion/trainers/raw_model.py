@@ -34,7 +34,7 @@ class RawModelTrainer(Trainer):
         else:
             y_true = y_test.map(self.group_mapping).to_numpy()
             y_score, complexity = self.model.predict(X_test, y_test)
-        return training_time, y_true, y_score, X_test.index.to_numpy(), complexity
+        return training_time, y_true, y_score, complexity
 
     @override
     def train_final(self) -> None:
