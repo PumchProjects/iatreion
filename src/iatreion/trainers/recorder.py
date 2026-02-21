@@ -208,17 +208,20 @@ class Recorder:
         ]
         return ''.join(result_lines)
 
-    def record_from(self, recorders: Iterable[Self]) -> str:
+    def record_from(
+        self, recorders: Iterable[Self], weights: list[float] | None = None
+    ) -> str:
         time_list = []
         y_score_list = []
         for recorder in recorders:
             time_list.append(recorder.result.time[-1])
             y_score_list.append(recorder.y_score_all[-1])
             y_true = recorder.y_true_all[-1]
-        results = (sum(time_list), y_true, np.mean(y_score_list, axis=0), {})
-        return self.record(results)
+        time = sum(time_list)
+        y_score = np.average(y_score_list, axis=0, weights=weights)
+        return self.record((time, y_true, y_score, {}))
 
-    def finish(self) -> str:
+    def finish(self) -> tuple[str, Record[float]]:
         complexity: dict[str, tuple[float, str]] = {}
         width = 4
         for key, (values, fmt) in self.result.complexity.items():
@@ -258,4 +261,4 @@ class Recorder:
             ),
             f'AVG {"Time":{width}} {final.time:.3f}s',
         ]
-        return ''.join(result_lines)
+        return ''.join(result_lines), final

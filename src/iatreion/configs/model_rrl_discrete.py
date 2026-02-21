@@ -6,7 +6,7 @@ from cyclopts import Parameter
 
 from .dataset import DatasetConfig
 from .train import TrainConfig
-from .utils import get_exp_root, get_rrl_file, register_log_dir
+from .utils import get_exp_root, register_log_dir
 
 
 @Parameter(name='*')
@@ -34,6 +34,3 @@ class DiscreteRrlConfig:
 
     def get_exp_roots(self) -> list[Path]:
         return [get_exp_root(name, self.train) for name in self.dataset.names]
-
-    def get_rrl_file(self, exp_root: Path) -> Path:
-        return get_rrl_file(exp_root, self.train)

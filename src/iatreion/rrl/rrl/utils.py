@@ -1,4 +1,6 @@
 from collections.abc import Generator
+from dataclasses import dataclass
+from itertools import chain
 
 import numpy as np
 import pandas as pd
@@ -277,6 +279,19 @@ class DBEncoder:
         return np.hstack(data), y
 
 
+@dataclass
+class TrainStepContext:
+    outer_fold: int
+    inner_fold: int
+    last: bool
+    name: str
+
+    db_enc: DBEncoder
+    train_data: tuple[NDArray, NDArray]
+    val_data: tuple[NDArray | None, NDArray | None]
+    test_data: tuple[NDArray, NDArray]
+
+
 type Samples = tuple[
     DBEncoder,
     NDArray,
@@ -297,11 +312,11 @@ type RawSamples = tuple[
 
 
 def get_train_test(
-    config: TrainConfig, ref_y: pd.Series
+    n_splits: int, n_repeats: int, ref_y: pd.Series
 ) -> Generator[tuple[pd.Index, pd.Index], None, None]:
     kf = RepeatedStratifiedKFold(
-        n_splits=config.n_outer_splits,
-        n_repeats=config.n_outer_repeats,
+        n_splits=n_splits,
+        n_repeats=n_repeats,
         random_state=36851234,
     )
     for train, test in kf.split(ref_y, ref_y):
@@ -346,6 +361,61 @@ def get_samples(
                 *db_enc.transform(X_val, y_val),
                 *db_enc.transform(X_test, y_test),
             )
+
+
+def get_train_iterator(
+    dataset: DatasetConfig, train: TrainConfig
+) -> Generator[TrainStepContext, None, None]:
+    X_dfs, y_dfs, ref_y_df, f_dfs = read_data(dataset, train, shuffle=True)
+
+    outer_splitter = get_train_test(
+        train.n_outer_splits, train.n_outer_repeats, ref_y_df
+    )
+
+    for outer_fold, (train_outer, test_outer) in enumerate(outer_splitter):
+        match train.aggregate:
+            case 'average':
+                inner_splitter = [(train_outer, test_outer)]
+            case 'stack':
+                inner_splitter = chain(
+                    get_train_test(
+                        train.n_inner_splits,
+                        train.n_inner_repeats,
+                        ref_y_df[train_outer],
+                    ),
+                    [(train_outer, test_outer)],
+                )
+
+        for inner_fold, (train_inner, test_inner) in enumerate(inner_splitter):
+            last = (
+                train.aggregate != 'stack'
+                or inner_fold == train.n_inner_splits * train.n_inner_repeats
+            )
+
+            for index, name in enumerate(dataset.names):
+                X_df, y_df, f_df = X_dfs[index], y_dfs[index], f_dfs[index]
+                test_union = test_inner.union(test_outer)
+                train_final, val_final = get_train_val(
+                    train, y_df, train_inner, test_union
+                )
+                X_train = X_df.loc[train_final]
+                y_train = y_df.loc[train_final]
+                X_val = None if val_final is None else X_df.loc[val_final]
+                y_val = None if val_final is None else y_df.loc[val_final]
+                X_test = X_df.loc[test_inner]
+                y_test = y_df.loc[test_inner]
+
+                db_enc = DBEncoder(train, f_df)
+                yield TrainStepContext(
+                    outer_fold=outer_fold,
+                    inner_fold=inner_fold,
+                    last=last,
+                    name=name,
+                    db_enc=db_enc,
+                    train_data=db_enc.fit_transform(X_train, y_train),
+                    val_data=db_enc.transform(X_val, y_val),
+                    test_data=db_enc.transform(X_test, y_test),
+                )
 
 
 def get_raw_samples(

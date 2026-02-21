@@ -12,11 +12,13 @@ from iatreion.configs import RrlConfig
 from iatreion.utils import logger
 
 from .rrl.models import RRL
-from .rrl.utils import Samples
+from .rrl.utils import TrainStepContext
 
 
-def get_data_loader(args: RrlConfig, samples: Samples, pin_memory=False):
-    db_enc, X_train, y_train, X_val, y_val, X_test, y_test = samples
+def get_data_loader(args: RrlConfig, ctx: TrainStepContext, pin_memory=False):
+    X_train, y_train = ctx.train_data
+    X_val, y_val = ctx.val_data
+    X_test, y_test = ctx.test_data
 
     train_set = TensorDataset(torch.tensor(X_train.astype(np.float32)), torch.tensor(y_train))
     valid_set = (
@@ -34,7 +36,7 @@ def get_data_loader(args: RrlConfig, samples: Samples, pin_memory=False):
     )
     test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, pin_memory=pin_memory)
 
-    return db_enc, train_loader, valid_loader, test_loader
+    return ctx.db_enc, train_loader, valid_loader, test_loader
 
 
 def load_model(save_model_callback: Callable[..., tuple[RRL, dict[str, Any], tuple[float, ...]]]) -> tuple[RRL, tuple[float, ...]]:
@@ -43,10 +45,10 @@ def load_model(save_model_callback: Callable[..., tuple[RRL, dict[str, Any], tup
     return rrl, metrics
 
 
-def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, dict[str, Any], tuple[float, ...]]], samples: Samples):
+def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, dict[str, Any], tuple[float, ...]]], ctx: TrainStepContext):
     writer = SummaryWriter(args.folder_path)
 
-    db_enc, train_loader, valid_loader, _ = get_data_loader(args, samples, pin_memory=True)
+    db_enc, train_loader, valid_loader, _ = get_data_loader(args, ctx, pin_memory=True)
 
     y_fname = db_enc.y_fname
     discrete_flen = db_enc.discrete_flen
@@ -64,7 +66,7 @@ def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, d
               gamma=args.gamma,
               temperature=args.temp)
     
-    y_true = samples[2]
+    y_true = ctx.train_data[1]
     class_weights_array = compute_class_weight(
         'balanced',
         classes=np.unique(y_true),
@@ -86,16 +88,16 @@ def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, d
     
     if args.train.final and args.print_rule:
         rrl, metrics = load_model(save_model_callback)
-        with open(args.rrl_file, 'w') as rrl_file:
+        with open(args.train.log_dir / f'{ctx.name}.tsv', 'w') as rrl_file:
             rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std, metrics=metrics)
 
 
-def test_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, dict[str, Any], tuple[float, ...]]], samples: Samples):
+def test_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, dict[str, Any], tuple[float, ...]]], ctx: TrainStepContext):
     rrl, metrics = load_model(save_model_callback)
-    db_enc, train_loader, _, test_loader = get_data_loader(args, samples)
+    db_enc, train_loader, _, test_loader = get_data_loader(args, ctx)
     y_score, _, _ = rrl.test(test_loader=test_loader, set_name='Test')
     if args.print_rule:
-        with open(args.rrl_file, 'w') as rrl_file:
+        with open(args.train.log_dir / f'{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.tsv', 'w') as rrl_file:
             rule2weights = rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std, metrics=metrics)
     else:
         rule2weights = rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, mean=db_enc.mean, std=db_enc.std, metrics=metrics, display=False)

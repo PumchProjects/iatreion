@@ -104,8 +104,6 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     ith_kfold: Annotated[int, Parameter(parse=False)] = 0
 
-    cur_name: Annotated[str, Parameter(parse=False)] = ''
-
     base_pos: Annotated[str, Parameter(parse=False)] = ''
 
     label_pos: Annotated[str, Parameter(parse=False)] = 'group_encrypted'
@@ -169,7 +167,15 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     @property
     def n_folds(self) -> int:
-        return self.n_outer_splits * self.n_outer_repeats
+        # HACK: Coupled with get_train_iterator()
+        if self.aggregate == 'stack':
+            return (
+                self.n_outer_splits
+                * self.n_outer_repeats
+                * (self.n_inner_splits * self.n_inner_repeats + 1)
+            )
+        else:
+            return self.n_outer_splits * self.n_outer_repeats
 
     @property
     def num_class(self) -> int:

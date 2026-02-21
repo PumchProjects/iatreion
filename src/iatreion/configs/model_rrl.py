@@ -5,7 +5,7 @@ from cyclopts import Parameter
 
 from .dataset import DatasetConfig
 from .train import TrainConfig
-from .utils import get_rrl_file, register_log_dir
+from .utils import register_log_dir
 
 
 @Parameter(name='*')
@@ -91,7 +91,3 @@ class RrlConfig:
     @property
     def folder_path(self) -> str:
         return str(self.train.log_dir)
-
-    @property
-    def rrl_file(self) -> str:
-        return str(get_rrl_file(self.train.log_dir, self.train))
