@@ -1,4 +1,6 @@
 import logging
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from logging import FileHandler, Formatter, Logger, getLogger
 from pathlib import Path
 from types import MethodType
@@ -45,3 +47,17 @@ progress = Progress(
     TimeElapsedColumn(),
     MofNCompleteColumn(),
 )
+
+
+@contextmanager
+def task(
+    description: str, total: int, predicate: bool = True
+) -> Generator[Callable[[], None], None, None]:
+    if not predicate:
+        yield lambda: None
+        return
+    task_id = progress.add_task(description, total=total)
+    try:
+        yield lambda: progress.update(task_id, advance=1)
+    finally:
+        progress.remove_task(task_id)

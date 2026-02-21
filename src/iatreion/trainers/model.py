@@ -3,7 +3,7 @@ from typing import override
 
 from iatreion.configs import DatasetConfig, TrainConfig
 from iatreion.models import Model
-from iatreion.rrl import get_samples
+from iatreion.rrl import TrainStepContext
 
 from .base import Trainer, TrainerReturn
 
@@ -17,18 +17,16 @@ class ModelTrainer(Trainer):
     ) -> None:
         super().__init__(dataset_config, train_config)
         self.model = model
-        self.samples = get_samples(dataset_config, train_config)
 
     @override
-    def train_step(self) -> TrainerReturn:
+    def train_step(self, ctx: TrainStepContext) -> TrainerReturn:
         # HACK: Validation set is not used for other models
-        _, X_train, y_train, _, _, X_test, y_test = next(self.samples)
         start = perf_counter_ns()
-        self.model.fit(X_train, y_train)
+        self.model.fit(*ctx.train_data)
         end = perf_counter_ns()
         training_time = (end - start) / 1e9
-        y_score, complexity = self.model.predict(X_test, y_test)
-        return training_time, y_test, y_score, complexity
+        y_score, complexity = self.model.predict(*ctx.test_data)
+        return training_time, ctx.test_data[1], y_score, complexity
 
     @override
     def train_final(self) -> None:

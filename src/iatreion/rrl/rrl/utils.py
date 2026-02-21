@@ -1,5 +1,6 @@
 from collections.abc import Generator
 from dataclasses import dataclass
+from functools import reduce
 from itertools import chain
 
 import numpy as np
@@ -192,9 +193,12 @@ class DBEncoder:
         return X, y
 
     def fit_transform(self, X_df, y_df):
-        unordered_data, ordered_data, continuous_data = self.split_data_fine(X_df)
         # Encode string value to int index.
         y = self.label_enc.fit_transform(y_df)
+        if not self.train.preprocess:
+            return X_df.values, y
+
+        unordered_data, ordered_data, continuous_data = self.split_data_fine(X_df)
         self.y_fname = list(map(str, self.label_enc.classes_))
 
         if not unordered_data.empty:
@@ -246,9 +250,13 @@ class DBEncoder:
     def transform(self, X_df, y_df):
         if X_df is None or y_df is None:
             return None, None
-        unordered_data, ordered_data, continuous_data = self.split_data_fine(X_df)
+
         # Encode string value to int index.
         y = self.label_enc.transform(y_df)
+        if not self.train.preprocess:
+            return X_df.values, y
+
+        unordered_data, ordered_data, continuous_data = self.split_data_fine(X_df)
 
         if not unordered_data.empty:
             # Use most frequent value as missing value for unordered columns.
@@ -368,23 +376,38 @@ def get_train_iterator(
 ) -> Generator[TrainStepContext, None, None]:
     X_dfs, y_dfs, ref_y_df, f_dfs = read_data(dataset, train, shuffle=True)
 
+    def merge_X(a: pd.DataFrame, b: pd.DataFrame) -> pd.DataFrame:
+        return a.merge(b, how='outer', left_index=True, right_index=True)
+
+    def merge_y(a: pd.Series, b: pd.Series) -> pd.Series:
+        merged = pd.merge(
+            a.to_frame('left'),
+            b.to_frame('right'),
+            how='outer',
+            left_index=True,
+            right_index=True,
+        )
+        return merged['left'].combine_first(merged['right'])
+
+    if train.aggregate == 'concat':
+        X_dfs = [reduce(merge_X, X_dfs)]
+        y_dfs = [reduce(merge_y, y_dfs)]
+        f_dfs = [pd.concat(f_dfs, ignore_index=True)]
+
     outer_splitter = get_train_test(
         train.n_outer_splits, train.n_outer_repeats, ref_y_df
     )
 
     for outer_fold, (train_outer, test_outer) in enumerate(outer_splitter):
-        match train.aggregate:
-            case 'average':
-                inner_splitter = [(train_outer, test_outer)]
-            case 'stack':
-                inner_splitter = chain(
-                    get_train_test(
-                        train.n_inner_splits,
-                        train.n_inner_repeats,
-                        ref_y_df[train_outer],
-                    ),
-                    [(train_outer, test_outer)],
-                )
+        if train.aggregate == 'stack':
+            inner_splitter = chain(
+                get_train_test(
+                    train.n_inner_splits, train.n_inner_repeats, ref_y_df[train_outer]
+                ),
+                [(train_outer, test_outer)],
+            )
+        else:
+            inner_splitter = [(train_outer, test_outer)]
 
         for inner_fold, (train_inner, test_inner) in enumerate(inner_splitter):
             last = (
@@ -392,7 +415,11 @@ def get_train_iterator(
                 or inner_fold == train.n_inner_splits * train.n_inner_repeats
             )
 
-            for index, name in enumerate(dataset.names):
+            data_splitter = (
+                ['all_concat'] if train.aggregate == 'concat' else dataset.names
+            )
+
+            for index, name in enumerate(data_splitter):
                 X_df, y_df, f_df = X_dfs[index], y_dfs[index], f_dfs[index]
                 test_union = test_inner.union(test_outer)
                 train_final, val_final = get_train_val(

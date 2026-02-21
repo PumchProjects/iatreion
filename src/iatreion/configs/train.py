@@ -50,6 +50,9 @@ class TrainConfig:
 'stack': late fusion by stacking predictions of different modalities as features for a meta-classifier.
 """
 
+    preprocess: Annotated[bool, Parameter(negative='--no-pp')] = True
+    'Whether to preprocess the data (e.g., filling missing values, normalization).'
+
     true_ref: Annotated[bool, Parameter(alias='-tr', negative='')] = False
     'Align not only the test data, but also the training data to the reference data.'
 
