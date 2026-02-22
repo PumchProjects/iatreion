@@ -6,6 +6,7 @@ import xgboost as xgb
 from numpy.typing import NDArray
 
 from iatreion.configs import XgboostConfig
+from iatreion.rrl import TrainStepContext
 from iatreion.utils import decode_string, logger
 
 from .base import Model, ModelReturn
@@ -61,26 +62,31 @@ class XgboostModel(Model):
             verbose_eval=False,
             callbacks=callbacks,
         )
-        if len(self.config.dataset.names) > 1:
-            logger.warning(
-                '[bold yellow]Multiple datasets found,'
-                ' feature importance will use indices instead of names.',
-                extra={'markup': True},
-            )
-            score = self.bst.get_fscore()
-        else:
-            fmap = self.config.dataset.get_fmap(self.config.dataset.names[0])
-            score = self.bst.get_fscore(fmap)
-        score = {decode_string(f): v for f, v in score.items()}
-        with self.config.score_file.open('w', encoding='utf-8') as f:
+
+    def calc_importance(self, ctx: TrainStepContext) -> None:
+        fmap_file = (
+            self.config.train.log_dir
+            / f'fmap_{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.tsv'
+        )
+        with fmap_file.open('w', encoding='utf-8') as f:
+            for i, name in enumerate(ctx.db_enc.X_fname):
+                type = 'i' if i < ctx.db_enc.discrete_flen else 'q'
+                f.write(f'{i}\t{name}\t{type}\n')
+        score = {decode_string(f): v for f, v in self.bst.get_fscore(fmap_file).items()}
+        score_file = (
+            self.config.train.log_dir
+            / f'{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.json'
+        )
+        with score_file.open('w', encoding='utf-8') as f:
             json.dump(score, f, ensure_ascii=False, indent=4)
 
     @override
-    def predict(self, X: NDArray, y: NDArray) -> ModelReturn:
+    def predict(self, ctx: TrainStepContext, X: NDArray, y: NDArray) -> ModelReturn:
         dtest = xgb.DMatrix(X, y)
         y_score = self.bst.predict(dtest)
         if self.num_class <= 2:
             y_score = np.stack([1 - y_score, y_score], axis=-1)
         else:
             y_score = y_score.reshape(X.shape[0], -1)
+        self.calc_importance(ctx)
         return y_score, {}

@@ -195,11 +195,12 @@ class DBEncoder:
     def fit_transform(self, X_df, y_df):
         # Encode string value to int index.
         y = self.label_enc.fit_transform(y_df)
+        self.y_fname = list(map(str, self.label_enc.classes_))
         if not self.train.preprocess:
+            self.X_fname = X_df.columns.to_list()
             return X_df.values, y
 
         unordered_data, ordered_data, continuous_data = self.split_data_fine(X_df)
-        self.y_fname = list(map(str, self.label_enc.classes_))
 
         if not unordered_data.empty:
             # Use most frequent value as missing value for unordered columns.
@@ -345,30 +346,6 @@ def get_train_val(
             stratify=y_df[train_index],
         )
     return train_index, val_index
-
-
-def get_samples(
-    dataset: DatasetConfig, train: TrainConfig
-) -> Generator[Samples, None, None]:
-    X_dfs, y_dfs, ref_y_df, f_dfs = read_data(dataset, train, shuffle=True)
-
-    for train_, test_index in get_train_test(train, ref_y_df):
-        for X_df, y_df, f_df in zip(X_dfs, y_dfs, f_dfs, strict=True):
-            train_index, val_index = get_train_val(train, y_df, train_, test_index)
-            X_train = X_df.loc[train_index]
-            y_train = y_df.loc[train_index]
-            X_val = None if val_index is None else X_df.loc[val_index]
-            y_val = None if val_index is None else y_df.loc[val_index]
-            X_test = X_df.loc[test_index]
-            y_test = y_df.loc[test_index]
-
-            db_enc = DBEncoder(train, f_df)
-            yield (
-                db_enc,
-                *db_enc.fit_transform(X_train, y_train),
-                *db_enc.transform(X_val, y_val),
-                *db_enc.transform(X_test, y_test),
-            )
 
 
 def get_train_iterator(

@@ -88,7 +88,7 @@ def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, d
     
     if args.train.final and args.print_rule:
         rrl, metrics = load_model(save_model_callback)
-        with open(args.train.log_dir / f'{ctx.name}.tsv', 'w') as rrl_file:
+        with open(args.train.log_dir / f'{ctx.name}.tsv', 'w', encoding='utf-8') as rrl_file:
             rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std, metrics=metrics)
 
 
@@ -97,7 +97,7 @@ def test_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, di
     db_enc, train_loader, _, test_loader = get_data_loader(args, ctx)
     y_score, _, _ = rrl.test(test_loader=test_loader, set_name='Test')
     if args.print_rule:
-        with open(args.train.log_dir / f'{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.tsv', 'w') as rrl_file:
+        with open(args.train.log_dir / f'{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.tsv', 'w', encoding='utf-8') as rrl_file:
             rule2weights = rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std, metrics=metrics)
     else:
         rule2weights = rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, mean=db_enc.mean, std=db_enc.std, metrics=metrics, display=False)

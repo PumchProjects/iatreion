@@ -6,6 +6,7 @@ import pandas as pd
 from numpy.typing import NDArray
 
 from iatreion.configs import LimiXConfig
+from iatreion.rrl import TrainStepContext
 from iatreion.utils import chdir
 
 from .base import Model, ModelReturn
@@ -53,7 +54,7 @@ class LimiXModel(Model):
         self.save_dataset(X, y, mode='train')
 
     @override
-    def predict(self, X: NDArray, y: NDArray) -> ModelReturn:
+    def predict(self, ctx: TrainStepContext, X: NDArray, y: NDArray) -> ModelReturn:
         self.save_dataset(X, y, mode='test')
         with chdir(self.config.repo_path):
             self.run_inference()

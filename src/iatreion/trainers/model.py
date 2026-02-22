@@ -20,7 +20,7 @@ class ModelTrainer(Trainer):
         self.model.fit(*ctx.train_data)
         end = perf_counter_ns()
         training_time = (end - start) / 1e9
-        y_score, complexity = self.model.predict(*ctx.test_data)
+        y_score, complexity = self.model.predict(ctx, *ctx.test_data)
         return training_time, ctx.test_data[1], y_score, complexity
 
     @override

@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Annotated
 
 from cyclopts import Parameter
@@ -20,10 +19,6 @@ class TabPFNConfig(ModelConfig):
 
     n_jobs: int = 4
     'Number of worker processes to use for the preprocessing. Default is 4.'
-
-    @property
-    def score_file(self) -> Path:
-        return self.train.log_dir / f'score_{self.train.ith_kfold}.json'
 
     def __post_init__(self) -> None:
         register_log_dir(self.dataset, self.train, 'tabpfn')

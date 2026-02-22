@@ -221,18 +221,6 @@ class Preprocessor(ABC):
             f.writelines(feature_names)
             for col in self.config.group_columns:
                 f.write(f'{col} label\n')
-        fmap: list[str] = []
-        for i, (name_, type_) in enumerate(augmented_vector_name):
-            name = encode_string(name_, ' ')
-            match type_:
-                case 'unordered' | 'ordered':
-                    fmap.append(f'{i}\t{name}\ti\n')
-                case 'continuous':
-                    fmap.append(f'{i}\t{name}\tq\n')
-                case _:
-                    raise ValueError(f'Unsupported type "{type_}" for "{name_}"')
-        with self.config.dataset.get_fmap(self.name).open('w', encoding='utf-8') as f:
-            f.writelines(fmap)
         data_file = self.config.dataset.get_data(self.name)
         data.to_csv(data_file, na_rep='<NA>', float_format='%.6f', header=False)
 

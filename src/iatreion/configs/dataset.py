@@ -84,6 +84,3 @@ For other models, features are concatenated.
 
     def get_info(self, name: DataName) -> Path:
         return self.prefix / f'{name}.info'
-
-    def get_fmap(self, name: DataName) -> Path:
-        return self.prefix / f'{name}.fmap'
