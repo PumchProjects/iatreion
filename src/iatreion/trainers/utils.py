@@ -1,14 +1,13 @@
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 
-from iatreion.configs import TrainConfig
 from iatreion.utils import logger
 
 from .recorder import Recorder
 
 
 def get_meta_model(
-    train_config: TrainConfig, fold: int, named_recorders: dict[str, Recorder]
+    fold: int, named_recorders: dict[str, Recorder]
 ) -> LogisticRegression:
     # HACK: Binary classification only
     width = 0
@@ -24,7 +23,7 @@ def get_meta_model(
 
     weights = meta_model.coef_[0]
     intercept = meta_model.intercept_[0]
-    with train_config.logging(f'stacking_{fold}'):
+    with recorder.config.logging(f'stacking_{fold}'):
         logger.info(f'Intercept (Bias): {intercept:.4f}')
         for idx, name in enumerate(named_recorders.keys()):
             logger.info(f'Weight for {f"{name}:":{width + 1}} {weights[idx]:.4f}')
@@ -56,14 +55,11 @@ def aggregate(
     return recorder.record((time, y_true, y_score, {}))
 
 
-def record_simple_average(
-    recorder: Recorder, outer_recorders: dict[str, Recorder]
-) -> None:
+def record_simple(recorder: Recorder, outer_recorders: dict[str, Recorder]) -> None:
     logger.info(aggregate(recorder, outer_recorders))
 
 
-def record_weighted_average(
-    train_config: TrainConfig,
+def record_weighted(
     fold: int,
     recorder: Recorder,
     inner_recorders: dict[str, Recorder],
@@ -71,19 +67,17 @@ def record_weighted_average(
 ) -> None:
     weights = []
     for name, child in inner_recorders.items():
-        result, final = child.finish()
-        weights.append(final.f1)
-        with train_config.logging(f'{name}_train_{fold}'):
-            logger.info(result)
+        finish = child.finish()
+        weights.append(finish.final.f1)
+        finish.log(f'{name}_train_{fold}')
     logger.info(aggregate(recorder, outer_recorders, weights=weights))
 
 
 def record_stacking(
-    train_config: TrainConfig,
     fold: int,
     recorder: Recorder,
     inner_recorders: dict[str, Recorder],
     outer_recorders: dict[str, Recorder],
 ) -> None:
-    meta_model = get_meta_model(train_config, fold, inner_recorders)
+    meta_model = get_meta_model(fold, inner_recorders)
     logger.info(aggregate(recorder, outer_recorders, meta_model=meta_model))

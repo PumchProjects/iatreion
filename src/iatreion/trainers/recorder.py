@@ -4,6 +4,7 @@ from typing import cast
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from numpy.typing import NDArray
 from sklearn.metrics import (
     RocCurveDisplay,
@@ -16,6 +17,7 @@ from sklearn.metrics import (
 )
 
 from iatreion.configs import TrainConfig
+from iatreion.utils import logger
 
 type TrainerReturn = tuple[
     float, NDArray, NDArray, dict[str, float | tuple[float, str]]
@@ -34,6 +36,20 @@ class Record[T]:
     specificity: T
     complexity: dict[str, tuple[T, str]] = field(default_factory=dict)
     cm: NDArray | None = None
+
+
+@dataclass
+class Finish:
+    config: TrainConfig
+    result: str
+    final: Record[float]
+    roc: Figure | None = None
+
+    def log(self, name: str) -> None:
+        with self.config.logging(name):
+            logger.info(self.result)
+        if self.roc is not None:
+            self.roc.savefig(self.config.get_roc_file(f'roc_{name}'), dpi=300)
 
 
 class RecordROC:
@@ -89,7 +105,7 @@ class RecordROC:
             return self.record_final(y_true, y_pos_score)
         return self.record_fold(y_true, y_pos_score, fold)
 
-    def finish(self) -> float:
+    def finish(self) -> tuple[float, Figure]:
         mean_tpr = np.nanmean(self.tprs, axis=0)
         mean_tpr[-1] = 1.0
         mean_auc = auc(self.mean_fpr, mean_tpr)
@@ -122,9 +138,8 @@ class RecordROC:
         )
         self.ax.legend(loc='lower right')
         self.fig.tight_layout()
-        self.fig.savefig(self.config.roc_file, dpi=300)
 
-        return mean_auc
+        return mean_auc, self.fig
 
 
 class Recorder:
@@ -207,7 +222,7 @@ class Recorder:
         ]
         return ''.join(result_lines)
 
-    def finish(self) -> tuple[str, Record[float]]:
+    def finish(self) -> Finish:
         complexity: dict[str, tuple[float, str]] = {}
         width = 4
         for key, (values, fmt) in self.result.complexity.items():
@@ -225,11 +240,10 @@ class Recorder:
             complexity,
             self.result.cm,
         )
+        auc, roc = self.roc.finish() if self.config.plot_roc else (0.0, None)
         result_lines = [
             f'Confusion matrix:\n{final.cm}\n',
-            f'INT {"AUC":{width}} {self.roc.finish():.2%}\n'
-            if self.config.plot_roc
-            else '',
+            f'INT {"AUC":{width}} {auc:.2%}\n' if self.config.plot_roc else '',
             f'AVG {"AUC":{width}} {final.auc:.2%}\n',
             f'AVG {"ACC":{width}} {final.acc:.2%}\n',
             f'AVG {"P":{width}} {final.precision:.2%}\n',
@@ -247,4 +261,4 @@ class Recorder:
             ),
             f'AVG {"Time":{width}} {final.time:.3f}s',
         ]
-        return ''.join(result_lines), final
+        return Finish(self.config, ''.join(result_lines), final, roc)

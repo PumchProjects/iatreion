@@ -184,10 +184,6 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     def num_class(self) -> int:
         return len(self.groups)
 
-    @property
-    def roc_file(self) -> Path:
-        return self.log_dir / 'roc.png'
-
     def __post_init__(self) -> None:
         set_device(self.device_id)
         set_seed(self.seed)
@@ -203,3 +199,6 @@ For discrete RRL, validation set is used for optimization when val_size is set.
             yield
         finally:
             remove_file_handler(handler)
+
+    def get_roc_file(self, name: str) -> Path:
+        return self.log_dir / f'{name}.png'
