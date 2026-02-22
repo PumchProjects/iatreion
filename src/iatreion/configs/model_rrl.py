@@ -3,18 +3,13 @@ from typing import Annotated
 
 from cyclopts import Parameter
 
-from .dataset import DatasetConfig
-from .train import TrainConfig
+from .model_base import ModelConfig
 from .utils import register_log_dir
 
 
 @Parameter(name='*')
 @dataclass(kw_only=True)
-class RrlConfig:
-    dataset: DatasetConfig
-
-    train: TrainConfig
-
+class RrlConfig(ModelConfig):
     epoch: Annotated[int, Parameter(alias='-e')] = 41
     'Set the total epoch.'
 

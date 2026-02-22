@@ -4,18 +4,13 @@ from typing import Annotated, Literal
 
 from cyclopts import Parameter
 
-from .dataset import DatasetConfig
-from .train import TrainConfig
+from .model_base import ModelConfig
 from .utils import get_exp_root, register_log_dir
 
 
 @Parameter(name='*')
 @dataclass(kw_only=True)
-class DiscreteRrlConfig:
-    dataset: DatasetConfig
-
-    train: TrainConfig
-
+class DiscreteRrlConfig(ModelConfig):
     weight: Annotated[
         Literal['uniform', 'train-f1', 'val-f1', 'train-adaboost', 'val-adaboost'],
         Parameter(alias='-w'),

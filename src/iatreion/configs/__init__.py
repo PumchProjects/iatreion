@@ -1,4 +1,5 @@
 from .dataset import DataName, DatasetConfig
+from .model_base import ModelConfig
 from .model_limix import LimiXConfig
 from .model_rf import RandomForestConfig
 from .model_rrl import RrlConfig

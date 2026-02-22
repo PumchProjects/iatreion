@@ -1,7 +1,7 @@
 from time import perf_counter_ns
 from typing import override
 
-from iatreion.configs import DatasetConfig, TrainConfig
+from iatreion.configs import ModelConfig
 from iatreion.models import RawModel
 from iatreion.rrl import get_raw_samples
 
@@ -9,16 +9,11 @@ from .base import Trainer, TrainerReturn
 
 
 class RawModelTrainer(Trainer):
-    def __init__(
-        self,
-        dataset_config: DatasetConfig,
-        train_config: TrainConfig,
-        model: RawModel,
-    ) -> None:
-        super().__init__(dataset_config, train_config)
+    def __init__(self, config: ModelConfig, model: RawModel) -> None:
+        super().__init__(config)
         self.model = model
-        self.samples = get_raw_samples(dataset_config, train_config)
-        self.group_mapping = train_config.get_group_index_mapping()
+        self.samples = get_raw_samples(config.dataset, config.train)
+        self.group_mapping = config.train.get_group_index_mapping()
 
     @override
     def train_step(self) -> TrainerReturn:

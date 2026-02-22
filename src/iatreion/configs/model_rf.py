@@ -3,18 +3,13 @@ from pathlib import Path
 
 from cyclopts import Parameter
 
-from .dataset import DatasetConfig
-from .train import TrainConfig
+from .model_base import ModelConfig
 from .utils import register_log_dir
 
 
 @Parameter(name='*')
 @dataclass(kw_only=True)
-class RandomForestConfig:
-    dataset: DatasetConfig
-
-    train: TrainConfig
-
+class RandomForestConfig(ModelConfig):
     n_estimators: int = 100
     'Number of trees in the forest.'
 

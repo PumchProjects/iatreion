@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from itertools import groupby
 
-from iatreion.configs import DatasetConfig, TrainConfig
+from iatreion.configs import ModelConfig
 from iatreion.rrl import TrainStepContext, get_train_iterator
 from iatreion.utils import logger, progress, task
 
@@ -11,11 +11,8 @@ from .utils import record_simple, record_stacking, record_weighted
 
 
 class Trainer(ABC):
-    def __init__(
-        self, dataset_config: DatasetConfig, train_config: TrainConfig
-    ) -> None:
-        self.dataset_config = dataset_config
-        self.train_config = train_config
+    def __init__(self, config: ModelConfig) -> None:
+        self.dataset_config, self.train_config = config.dataset, config.train
 
     @abstractmethod
     def train_step(self, ctx: TrainStepContext) -> TrainerReturn: ...

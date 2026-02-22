@@ -1,7 +1,7 @@
 from time import perf_counter_ns
 from typing import override
 
-from iatreion.configs import DatasetConfig, TrainConfig
+from iatreion.configs import ModelConfig
 from iatreion.models import Model
 from iatreion.rrl import TrainStepContext
 
@@ -9,13 +9,8 @@ from .base import Trainer, TrainerReturn
 
 
 class ModelTrainer(Trainer):
-    def __init__(
-        self,
-        dataset_config: DatasetConfig,
-        train_config: TrainConfig,
-        model: Model,
-    ) -> None:
-        super().__init__(dataset_config, train_config)
+    def __init__(self, config: ModelConfig, model: Model) -> None:
+        super().__init__(config)
         self.model = model
 
     @override

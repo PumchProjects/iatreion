@@ -5,18 +5,13 @@ from typing import Annotated
 from cyclopts import Parameter
 from cyclopts.types import ExistingFile
 
-from .dataset import DatasetConfig
-from .train import TrainConfig
+from .model_base import ModelConfig
 from .utils import register_log_dir
 
 
 @Parameter(name='*')
 @dataclass(kw_only=True)
-class TabPFNConfig:
-    dataset: DatasetConfig
-
-    train: TrainConfig
-
+class TabPFNConfig(ModelConfig):
     model_path: Annotated[ExistingFile, Parameter(alias='-mp')]
     'Path to the pretrained TabPFN model file.'
 

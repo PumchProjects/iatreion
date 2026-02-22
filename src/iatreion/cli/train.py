@@ -44,7 +44,7 @@ def xgboost(*, config: XgboostConfig, **param: Any) -> None:
     """
     config.param = param
     model = XgboostModel(config)
-    trainer = ModelTrainer(config.dataset, config.train, model)
+    trainer = ModelTrainer(config, model)
     trainer.train()
 
 
@@ -52,7 +52,7 @@ def xgboost(*, config: XgboostConfig, **param: Any) -> None:
 def random_forest(*, config: RandomForestConfig) -> None:
     """Train a Random Forest model."""
     model = RandomForestModel(config)
-    trainer = ModelTrainer(config.dataset, config.train, model)
+    trainer = ModelTrainer(config, model)
     trainer.train()
 
 
@@ -62,7 +62,7 @@ def tabpfn(*, config: TabPFNConfig) -> None:
     from iatreion.models.tabpfn import TabPFNModel
 
     model = TabPFNModel(config)
-    trainer = ModelTrainer(config.dataset, config.train, model)
+    trainer = ModelTrainer(config, model)
     trainer.train()
 
 
@@ -70,7 +70,7 @@ def tabpfn(*, config: TabPFNConfig) -> None:
 def limix(*, config: LimiXConfig) -> None:
     """Train a LimiX model."""
     model = LimiXModel(config)
-    trainer = ModelTrainer(config.dataset, config.train, model)
+    trainer = ModelTrainer(config, model)
     trainer.train()
 
 
@@ -78,5 +78,5 @@ def limix(*, config: LimiXConfig) -> None:
 def rrl_eval(*, config: DiscreteRrlConfig) -> None:
     """Evaluate trained RRL models."""
     model = DiscreteRrlModel(config)
-    trainer = RawModelTrainer(config.dataset, config.train, model)
+    trainer = RawModelTrainer(config, model)
     trainer.train()

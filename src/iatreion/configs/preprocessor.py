@@ -135,7 +135,6 @@ sequence_mapping: dict[DataName, list[DataName]] = {
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class PreprocessorConfig:
-    # TODO: Cyclopts supports dataclass inheritance now
     dataset: DatasetConfig
 
     input_prefix: Annotated[ExistingDirectory, Parameter(name=['--input', '-i'])]

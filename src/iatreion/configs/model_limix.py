@@ -4,18 +4,13 @@ from pathlib import Path
 from cyclopts import Parameter
 from cyclopts.types import Directory, ExistingDirectory, ExistingFile
 
-from .dataset import DatasetConfig
-from .train import TrainConfig
+from .model_base import ModelConfig
 from .utils import register_log_dir
 
 
 @Parameter(name='*')
 @dataclass(kw_only=True)
-class LimiXConfig:
-    dataset: DatasetConfig
-
-    train: TrainConfig
-
+class LimiXConfig(ModelConfig):
     data_root: Directory
     'Directory to store LimiX data files.'
 

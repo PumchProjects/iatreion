@@ -4,18 +4,13 @@ from typing import Annotated, Any
 
 from cyclopts import Parameter
 
-from .dataset import DatasetConfig
-from .train import TrainConfig
+from .model_base import ModelConfig
 from .utils import register_log_dir
 
 
 @Parameter(name='*')
 @dataclass(kw_only=True)
-class XgboostConfig:
-    dataset: DatasetConfig
-
-    train: TrainConfig
-
+class XgboostConfig(ModelConfig):
     param: Annotated[dict[str, Any], Parameter(parse=False)] = field(
         default_factory=dict[str, Any]
     )
