@@ -1,6 +1,5 @@
-from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Self, cast
+from typing import cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -207,19 +206,6 @@ class Recorder:
             f'{"Time":{width}} {training_time:.3f}s',
         ]
         return ''.join(result_lines)
-
-    def record_from(
-        self, recorders: Iterable[Self], weights: list[float] | None = None
-    ) -> str:
-        time_list = []
-        y_score_list = []
-        for recorder in recorders:
-            time_list.append(recorder.result.time[-1])
-            y_score_list.append(recorder.y_score_all[-1])
-            y_true = recorder.y_true_all[-1]
-        time = sum(time_list)
-        y_score = np.average(y_score_list, axis=0, weights=weights)
-        return self.record((time, y_true, y_score, {}))
 
     def finish(self) -> tuple[str, Record[float]]:
         complexity: dict[str, tuple[float, str]] = {}

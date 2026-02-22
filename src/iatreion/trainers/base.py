@@ -7,6 +7,7 @@ from iatreion.rrl import TrainStepContext, get_train_iterator
 from iatreion.utils import logger, progress, task
 
 from .recorder import Recorder, TrainerReturn
+from .utils import record_simple_average, record_stacking, record_weighted_average
 
 
 class Trainer(ABC):
@@ -26,6 +27,7 @@ class Trainer(ABC):
         iterator = get_train_iterator(self.dataset_config, self.train_config)
         simple_average_recorder = Recorder(self.train_config)
         weighted_average_recorder = Recorder(self.train_config)
+        stacking_recorder = Recorder(self.train_config)
         outer_recorders = defaultdict(lambda: Recorder(self.train_config))
         with progress, task('Fold:', self.train_config.n_folds) as fold_advance:
             for outer_fold, outer_group in groupby(
@@ -47,20 +49,21 @@ class Trainer(ABC):
                             data_advance()
                     fold_advance()
                 if self.train_config.aggregate != 'concat':
-                    logger.info(
-                        simple_average_recorder.record_from(outer_recorders.values())
-                    )
+                    record_simple_average(simple_average_recorder, outer_recorders)
                 if self.train_config.aggregate == 'stack':
-                    average_weights = []
-                    for name, inner_recorder in inner_recorders.items():
-                        result, final = inner_recorder.finish()
-                        average_weights.append(final.f1)
-                        with self.train_config.logging(f'{name}_{outer_fold}'):
-                            logger.info(result)
-                    logger.info(
-                        weighted_average_recorder.record_from(
-                            outer_recorders.values(), average_weights
-                        )
+                    record_weighted_average(
+                        self.train_config,
+                        outer_fold,
+                        weighted_average_recorder,
+                        inner_recorders,
+                        outer_recorders,
+                    )
+                    record_stacking(
+                        self.train_config,
+                        outer_fold,
+                        stacking_recorder,
+                        inner_recorders,
+                        outer_recorders,
                     )
         for name, outer_recorder in outer_recorders.items():
             with self.train_config.logging(name):
@@ -71,3 +74,5 @@ class Trainer(ABC):
         if self.train_config.aggregate == 'stack':
             with self.train_config.logging('all_weighted_average'):
                 logger.info(weighted_average_recorder.finish()[0])
+            with self.train_config.logging('all_stacking'):
+                logger.info(stacking_recorder.finish()[0])
