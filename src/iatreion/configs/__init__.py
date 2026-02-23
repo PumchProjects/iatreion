@@ -9,4 +9,3 @@ from .model_xgb import XgboostConfig
 from .preprocessor import PreprocessorConfig, name_data_mapping
 from .rrl_eval import RrlEvalConfig
 from .train import TrainConfig
-from .utils import register_log_dir

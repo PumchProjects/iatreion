@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from cyclopts import Parameter
 
 from .model_base import ModelConfig
-from .utils import register_log_dir
 
 
 @Parameter(name='*')
@@ -16,4 +15,4 @@ class RandomForestConfig(ModelConfig):
     'Number of jobs to run in parallel. Default is 4.'
 
     def __post_init__(self) -> None:
-        register_log_dir(self.dataset, self.train, 'random_forest')
+        self.register_log_dir('random_forest')

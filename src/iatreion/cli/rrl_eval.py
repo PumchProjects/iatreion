@@ -2,7 +2,7 @@ from rich import box
 from rich.table import Column, Table
 
 from iatreion.api import get_batched_result, get_eval_result, get_models, get_result
-from iatreion.configs import RrlEvalConfig, register_log_dir
+from iatreion.configs import RrlEvalConfig
 from iatreion.utils import logger
 
 from .common import console
@@ -66,11 +66,10 @@ def display_batched_result(config: RrlEvalConfig) -> None:
 
 def display_eval_result(config: RrlEvalConfig) -> None:
     result, fig, model_config = get_eval_result(config)
-    dataset, train = model_config.dataset, model_config.train
-    register_log_dir(dataset, train, 'rrl-eval', file_name='eval.log')
+    model_config.register_log_dir('rrl-eval', file_name='eval.log')
     logger.info(result)
     if fig is not None:
-        fig.savefig(train.roc_file, dpi=300)
+        fig.savefig(model_config.train.roc_file, dpi=300)
 
 
 def display_models(config: RrlEvalConfig) -> None:

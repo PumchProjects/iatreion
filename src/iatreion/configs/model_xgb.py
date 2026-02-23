@@ -4,7 +4,6 @@ from typing import Annotated, Any
 from cyclopts import Parameter
 
 from .model_base import ModelConfig
-from .utils import register_log_dir
 
 
 @Parameter(name='*')
@@ -18,4 +17,4 @@ class XgboostConfig(ModelConfig):
     'Set the number of boosting rounds.'
 
     def __post_init__(self) -> None:
-        register_log_dir(self.dataset, self.train, 'xgboost')
+        self.register_log_dir('xgboost')

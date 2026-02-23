@@ -5,7 +5,6 @@ from cyclopts import Parameter
 from cyclopts.types import ExistingFile
 
 from .model_base import ModelConfig
-from .utils import register_log_dir
 
 
 @Parameter(name='*')
@@ -21,4 +20,4 @@ class TabPFNConfig(ModelConfig):
     'Number of worker processes to use for the preprocessing. Default is 4.'
 
     def __post_init__(self) -> None:
-        register_log_dir(self.dataset, self.train, 'tabpfn')
+        self.register_log_dir('tabpfn')

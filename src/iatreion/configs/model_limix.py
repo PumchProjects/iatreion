@@ -5,7 +5,6 @@ from cyclopts import Parameter
 from cyclopts.types import Directory, ExistingDirectory, ExistingFile
 
 from .model_base import ModelConfig
-from .utils import register_log_dir
 
 
 @Parameter(name='*')
@@ -64,5 +63,5 @@ class LimiXConfig(ModelConfig):
         )
 
     def __post_init__(self) -> None:
-        register_log_dir(self.dataset, self.train, 'limix')
+        self.register_log_dir('limix')
         self.data_subdir.mkdir(parents=True, exist_ok=True)

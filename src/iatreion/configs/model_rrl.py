@@ -4,7 +4,6 @@ from typing import Annotated
 from cyclopts import Parameter
 
 from .model_base import ModelConfig
-from .utils import register_log_dir
 
 
 @Parameter(name='*')
@@ -81,7 +80,7 @@ class RrlConfig(ModelConfig):
                 f'_si{self.save_interval}_useNOT{self.use_not}_valSize{self.train.val_size}_useSkip{self.skip}'
                 f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
             )
-        register_log_dir(self.dataset, self.train, 'rrl', self.folder_name)
+        self.register_log_dir('rrl', folder_name=self.folder_name)
 
     @property
     def folder_path(self) -> str:
