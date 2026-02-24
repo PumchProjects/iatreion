@@ -303,12 +303,13 @@ class DiscreteRrlModel(Model):
     def get_model(self, ctx: TrainStepContext) -> Rrl:
         return Rrl(self.config.rrl_root / ctx.rrl_file, self.config.weight)
 
-    # HACK: Cannot bind models in __init__ because models change between folds
     def get_models(self) -> list[Rrl]:
+        # HACK: Coupled with TrainStepContext.rrl_file
+        # TODO: Unimplemented when TrainConfig.aggregate is 'concat'
         return [
-            Rrl(self.config.get_rrl_file(exp_root), self.config.weight, callback)
-            for exp_root, callback in zip(
-                self.config.exp_roots, self.callbacks, strict=True
+            Rrl(self.config.rrl_root / f'{name}.tsv', self.config.weight, callback)
+            for name, callback in zip(
+                self.config.dataset.names, self.callbacks, strict=True
             )
         ]
 

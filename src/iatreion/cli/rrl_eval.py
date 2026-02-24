@@ -69,7 +69,8 @@ def display_eval_result(config: RrlEvalConfig) -> None:
     model_config.register_log_dir('rrl-eval', file_name='eval.log')
     logger.info(result)
     if fig is not None:
-        fig.savefig(model_config.train.roc_file, dpi=300)
+        dataset, train = model_config.dataset, model_config.train
+        fig.savefig(train.get_roc_file(dataset.name_str), dpi=300)
 
 
 def display_models(config: RrlEvalConfig) -> None:

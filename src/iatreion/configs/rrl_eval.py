@@ -43,11 +43,10 @@ class RrlEvalConfig:
     ] = 'single'
     'Mode of RRL evaluation.'
 
-    keep: Annotated[Literal['all', 'first', 'last'], Parameter(alias='-k')] = 'all'
-    """Deduplication strategy for duplicated samples when in eval mode.
+    keep: Annotated[Literal['first', 'last'], Parameter(alias='-k')] = 'last'
+    """Deduplication strategy for duplicated samples.
 'first': keep the first sample of each patient.
 'last': keep the last sample of each patient.
-'all' (default): do not deduplicate samples.
 """
 
     suspected_case: Annotated[bool, Parameter(alias='-sc', negative='')] = False
