@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 
-import pandas as pd
 from numpy.typing import NDArray
 
 from iatreion.rrl import TrainStepContext
@@ -14,11 +13,3 @@ class Model(ABC):
 
     @abstractmethod
     def predict(self, ctx: TrainStepContext, X: NDArray, y: NDArray) -> ModelReturn: ...
-
-
-class RawModel(ABC):
-    @abstractmethod
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> None: ...
-
-    @abstractmethod
-    def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn: ...

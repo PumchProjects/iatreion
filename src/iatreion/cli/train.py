@@ -6,6 +6,7 @@ from cyclopts import App
 from iatreion.configs import (
     DiscreteRrlConfig,
     LimiXConfig,
+    ModelConfig,
     RandomForestConfig,
     RrlConfig,
     TabPFNConfig,
@@ -14,13 +15,18 @@ from iatreion.configs import (
 from iatreion.models import (
     DiscreteRrlModel,
     LimiXModel,
+    Model,
     RandomForestModel,
     XgboostModel,
 )
-from iatreion.trainers import ModelTrainer, RawModelTrainer
+from iatreion.trainers import ModelTrainer
 
 sub_app = App(name='train', help='Train a model.', sort_key=1)
 counter = count()
+
+
+def train(config: ModelConfig, model: Model) -> None:
+    ModelTrainer(config, model).train()
 
 
 @sub_app.command(sort_key=next(counter))
@@ -28,8 +34,7 @@ def rrl(*, config: RrlConfig) -> None:
     """Train an RRL model."""
     from iatreion.trainers.rrl import RrlTrainer
 
-    trainer = RrlTrainer(config)
-    trainer.train()
+    RrlTrainer(config).train()
 
 
 @sub_app.command(sort_key=next(counter))
@@ -43,17 +48,13 @@ def xgboost(*, config: XgboostConfig, **param: Any) -> None:
         for more details.
     """
     config.param = param
-    model = XgboostModel(config)
-    trainer = ModelTrainer(config, model)
-    trainer.train()
+    train(config, XgboostModel(config))
 
 
 @sub_app.command(sort_key=next(counter))
 def random_forest(*, config: RandomForestConfig) -> None:
     """Train a Random Forest model."""
-    model = RandomForestModel(config)
-    trainer = ModelTrainer(config, model)
-    trainer.train()
+    train(config, RandomForestModel(config))
 
 
 @sub_app.command(sort_key=next(counter))
@@ -61,22 +62,16 @@ def tabpfn(*, config: TabPFNConfig) -> None:
     """Train a TabPFN model."""
     from iatreion.models.tabpfn import TabPFNModel
 
-    model = TabPFNModel(config)
-    trainer = ModelTrainer(config, model)
-    trainer.train()
+    train(config, TabPFNModel(config))
 
 
 @sub_app.command(sort_key=next(counter))
 def limix(*, config: LimiXConfig) -> None:
     """Train a LimiX model."""
-    model = LimiXModel(config)
-    trainer = ModelTrainer(config, model)
-    trainer.train()
+    train(config, LimiXModel(config))
 
 
 @sub_app.command(sort_key=next(counter))
 def rrl_eval(*, config: DiscreteRrlConfig) -> None:
     """Evaluate trained RRL models."""
-    model = DiscreteRrlModel(config)
-    trainer = RawModelTrainer(config, model)
-    trainer.train()
+    train(config, DiscreteRrlModel(config))

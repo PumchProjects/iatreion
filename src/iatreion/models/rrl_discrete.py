@@ -7,13 +7,15 @@ from typing import Self, cast, override
 
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 from scipy.special import expit, softmax
 
 from iatreion.configs import DataName, DiscreteRrlConfig
 from iatreion.exceptions import IatreionException
+from iatreion.rrl import TrainStepContext
 from iatreion.utils import decode_string, logger
 
-from .base import ModelReturn, RawModel
+from .base import Model, ModelReturn
 
 
 @dataclass
@@ -210,7 +212,7 @@ class Rrl:
     label_template = re.compile(r'(?P<label>.*)\(b=(?P<bias>.*)\)')
 
     def __init__(
-        self, file: Path, weight: str, callback: Callable[[str], str] | None
+        self, file: Path, weight: str, callback: Callable[[str], str] | None = None
     ) -> None:
         with file.open('r', encoding='utf-8') as f:
             texts = f.readlines()
@@ -284,7 +286,7 @@ class Rrl:
         return softmax_result, confidence
 
 
-class DiscreteRrlModel(RawModel):
+class DiscreteRrlModel(Model):
     def __init__(
         self,
         config: DiscreteRrlConfig,
@@ -297,13 +299,17 @@ class DiscreteRrlModel(RawModel):
             if callbacks is not None
             else [None for _ in range(len(config.dataset.names))]
         )
-        self.exp_roots = config.get_exp_roots()
+
+    def get_model(self, ctx: TrainStepContext) -> Rrl:
+        return Rrl(self.config.exp_root / ctx.rrl_file, self.config.weight)
 
     # HACK: Cannot bind models in __init__ because models change between folds
     def get_models(self) -> list[Rrl]:
         return [
             Rrl(self.config.get_rrl_file(exp_root), self.config.weight, callback)
-            for exp_root, callback in zip(self.exp_roots, self.callbacks, strict=True)
+            for exp_root, callback in zip(
+                self.config.exp_roots, self.callbacks, strict=True
+            )
         ]
 
     def aggregate(
@@ -324,15 +330,14 @@ class DiscreteRrlModel(RawModel):
         return results, confidence
 
     @override
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> None:
+    def fit(self, X: NDArray, y: NDArray) -> None:
         pass
 
     @override
-    def predict(self, X: pd.DataFrame, y: pd.Series) -> ModelReturn:
-        models = self.get_models()
-        predictions = [model.eval(X) for model in models]
-        results, _ = self.aggregate(models, predictions)
-        return results.to_numpy(), {}
+    def predict(self, ctx: TrainStepContext, X: NDArray, y: NDArray) -> ModelReturn:
+        data = pd.DataFrame(X, columns=ctx.db_enc.X_fname)
+        result, _ = self.get_model(ctx).eval(data)
+        return result.to_numpy(), {}
 
     def eval(self, data: list[pd.DataFrame]) -> tuple[pd.DataFrame, pd.Series]:
         models = self.get_models()

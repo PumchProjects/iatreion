@@ -300,24 +300,9 @@ class TrainStepContext:
     val_data: tuple[NDArray | None, NDArray | None]
     test_data: tuple[NDArray, NDArray]
 
-
-type Samples = tuple[
-    DBEncoder,
-    NDArray,
-    NDArray,
-    NDArray | None,
-    NDArray | None,
-    NDArray,
-    NDArray,
-]
-type RawSamples = tuple[
-    pd.DataFrame,
-    pd.Series,
-    pd.DataFrame | None,
-    pd.Series | None,
-    pd.DataFrame,
-    pd.Series,
-]
+    @property
+    def rrl_file(self) -> str:
+        return f'{self.name}_{self.outer_fold}_{self.inner_fold}.tsv'
 
 
 def get_train_test(
@@ -420,19 +405,3 @@ def get_train_iterator(
                     val_data=db_enc.transform(X_val, y_val),
                     test_data=db_enc.transform(X_test, y_test),
                 )
-
-
-def get_raw_samples(
-    dataset: DatasetConfig, train: TrainConfig
-) -> Generator[RawSamples, None, None]:
-    X_df, y_df, ref_y_df, f_df = read_data(dataset, train, shuffle=True)
-
-    for train_arr, val_arr, test_arr in get_train_test(train, X_df, ref_y_df):
-        X_train = X_df.iloc[train_arr]
-        y_train = y_df.iloc[train_arr]
-        X_val = None if val_arr is None else X_df.iloc[val_arr]
-        y_val = None if val_arr is None else y_df.iloc[val_arr]
-        X_test = X_df.iloc[test_arr]
-        y_test = y_df.iloc[test_arr]
-
-        yield X_train, y_train, X_val, y_val, X_test, y_test

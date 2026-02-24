@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 
 from cyclopts import Parameter
@@ -31,6 +32,14 @@ class ModelConfig:
                 groups=self.train.group_name_str,
             )
         return groups_root
+
+    @cached_property
+    def exp_root(self) -> Path:
+        return self.get_exp_root(self.dataset.name_str)
+
+    @cached_property
+    def exp_roots(self) -> list[Path]:
+        return [self.get_exp_root(name) for name in self.dataset.names]
 
     def register_log_dir(
         self,
