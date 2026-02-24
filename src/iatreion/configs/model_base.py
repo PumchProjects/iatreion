@@ -17,29 +17,25 @@ class ModelConfig:
     dataset: DatasetConfig
     train: TrainConfig
 
-    def get_exp_root(self, name: str) -> Path:
-        groups_root = (
+    def get_exp_root(self, model_name: str) -> Path:
+        return (
             self.train.log_root
-            / name
+            / ('final' if self.train.final else self.dataset.name_str)
             / self.train.group_name_str
-            / 'rrl'
-            / ('final' if self.train.final else self.train.ref_name_str)
+            / model_name
+            / ('' if self.train.final else self.train.ref_name_str)
         )
-        if not groups_root.is_dir():
+
+    @cached_property
+    def rrl_root(self) -> Path:
+        exp_root = self.get_exp_root('rrl')
+        if not exp_root.is_dir():
             raise IatreionException(
                 'No experiment root found for $dataset and groups "$groups".',
-                dataset=name,
+                dataset='final' if self.train.final else self.dataset.name_str,
                 groups=self.train.group_name_str,
             )
-        return groups_root
-
-    @cached_property
-    def exp_root(self) -> Path:
-        return self.get_exp_root(self.dataset.name_str)
-
-    @cached_property
-    def exp_roots(self) -> list[Path]:
-        return [self.get_exp_root(name) for name in self.dataset.names]
+        return exp_root
 
     def register_log_dir(
         self,
@@ -48,13 +44,7 @@ class ModelConfig:
         folder_name: str | None = None,
         file_name: str = 'train.log',
     ) -> None:
-        self.train.log_dir = (
-            self.train.log_root
-            / self.dataset.name_str
-            / self.train.group_name_str
-            / model_name
-            / ('final' if self.train.final else self.train.ref_name_str)
-        )
+        self.train.log_dir = self.get_exp_root(model_name)
         if folder_name is not None and not self.train.final:
             self.train.log_dir /= folder_name
         add_file_handler(self.train.log_dir / file_name)

@@ -251,6 +251,8 @@ class DBEncoder:
     def transform(self, X_df, y_df):
         if X_df is None or y_df is None:
             return None, None
+        if X_df.empty or y_df.empty:
+            return np.empty((0, len(self.X_fname))), np.empty((0,), dtype=int)
 
         # Encode string value to int index.
         y = self.label_enc.transform(y_df)
@@ -302,7 +304,10 @@ class TrainStepContext:
 
     @property
     def rrl_file(self) -> str:
-        return f'{self.name}_{self.outer_fold}_{self.inner_fold}.tsv'
+        if self.db_enc.train.final:
+            return f'{self.name}.tsv'
+        else:
+            return f'rrl_{self.name}_{self.outer_fold}_{self.inner_fold}.tsv'
 
 
 def get_train_test(
@@ -356,12 +361,15 @@ def get_train_iterator(
         y_dfs = [reduce(merge_y, y_dfs)]
         f_dfs = [pd.concat(f_dfs, ignore_index=True)]
 
-    outer_splitter = get_train_test(
-        train.n_outer_splits, train.n_outer_repeats, ref_y_df
-    )
+    if train.final:
+        outer_splitter = [(ref_y_df.index, pd.Index([]))]
+    else:
+        outer_splitter = get_train_test(
+            train.n_outer_splits, train.n_outer_repeats, ref_y_df
+        )
 
     for outer_fold, (train_outer, test_outer) in enumerate(outer_splitter):
-        if train.aggregate == 'stack':
+        if train.aggregate == 'stack' and not train.final:
             inner_splitter = chain(
                 get_train_test(
                     train.n_inner_splits, train.n_inner_repeats, ref_y_df[train_outer]
@@ -377,9 +385,10 @@ def get_train_iterator(
                 or inner_fold == train.n_inner_splits * train.n_inner_repeats
             )
 
-            data_splitter = (
-                ['all_concat'] if train.aggregate == 'concat' else dataset.names
-            )
+            if train.aggregate == 'concat':
+                data_splitter = [dataset.name_str] if train.final else ['all_concat']
+            else:
+                data_splitter = dataset.names
 
             for index, name in enumerate(data_splitter):
                 X_df, y_df, f_df = X_dfs[index], y_dfs[index], f_dfs[index]

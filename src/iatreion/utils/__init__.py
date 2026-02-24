@@ -8,3 +8,4 @@ from .string import (
     name_to_stem,
     stem_to_name,
 )
+from .time import Timer

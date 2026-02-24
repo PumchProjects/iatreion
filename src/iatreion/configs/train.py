@@ -163,10 +163,13 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     @property
     def ref_name_str(self) -> str:
-        description = f'keep {self.keep}'
+        # HACK: Don't include `preprocess` here since RRL needs preprocessed data while discrete RRL doesn't
+        descriptions = [self.aggregate]
+        if self.true_ref:
+            descriptions.append('true-ref')
         if self.label_name is not None:
-            description = f'{description}, on {self.label_name}'
-        return description
+            descriptions.append(f'on {self.label_name}')
+        return ', '.join(descriptions)
 
     @property
     def n_folds(self) -> int:

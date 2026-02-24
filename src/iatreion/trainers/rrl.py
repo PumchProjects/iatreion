@@ -1,10 +1,9 @@
-from time import perf_counter_ns
 from typing import Any, override
 
 from iatreion.configs import RrlConfig
 from iatreion.rrl import TrainStepContext
 from iatreion.rrl.experiment import test_model, train_model
-from iatreion.utils import set_seed_torch
+from iatreion.utils import Timer, set_seed_torch
 
 from .base import Trainer, TrainerReturn
 
@@ -28,16 +27,13 @@ class RrlTrainer(Trainer):
     def train_step(self, ctx: TrainStepContext) -> TrainerReturn:
         # HACK: Reset the seed for each training step to ensure reproducibility
         set_seed_torch(self.train_config.seed)
-        start = perf_counter_ns()
-        train_model(self.config, self.save_model_callback, ctx)
-        end = perf_counter_ns()
-        training_time = (end - start) / 1e9
+        with Timer() as timer:
+            train_model(self.config, self.save_model_callback, ctx)
         y_score, complexity = test_model(self.config, self.save_model_callback, ctx)
-        return training_time, ctx.test_data[1], y_score, {'Log#E': complexity}
+        return timer.duration, ctx.test_data[1], y_score, {'Log#E': complexity}
 
     @override
-    def train_final(self) -> None:
+    def train_final(self, ctx: TrainStepContext) -> None:
         # HACK: Ditto albeit with only one training step
         set_seed_torch(self.train_config.seed)
-        samples = next(self.samples)
-        train_model(self.config, self.save_model_callback, samples)
+        train_model(self.config, self.save_model_callback, ctx)

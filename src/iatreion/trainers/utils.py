@@ -23,7 +23,7 @@ def get_meta_model(
 
     weights = meta_model.coef_[0]
     intercept = meta_model.intercept_[0]
-    with recorder.config.logging(f'stacking_{fold}'):
+    with recorder.config.logging(f'weights_stacking_{fold}'):
         logger.info(f'Intercept (Bias): {intercept:.4f}')
         for idx, name in enumerate(named_recorders.keys()):
             logger.info(f'Weight for {f"{name}:":{width + 1}} {weights[idx]:.4f}')

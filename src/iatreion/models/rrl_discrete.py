@@ -301,7 +301,7 @@ class DiscreteRrlModel(Model):
         )
 
     def get_model(self, ctx: TrainStepContext) -> Rrl:
-        return Rrl(self.config.exp_root / ctx.rrl_file, self.config.weight)
+        return Rrl(self.config.rrl_root / ctx.rrl_file, self.config.weight)
 
     # HACK: Cannot bind models in __init__ because models change between folds
     def get_models(self) -> list[Rrl]:
