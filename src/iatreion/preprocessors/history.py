@@ -12,7 +12,7 @@ from .base import Preprocessor
 
 
 class HistoryPreprocessor(Preprocessor):
-    unk_pattern = re.compile(r'^.*(?:undefined|不详).*$')
+    unk_pattern = re.compile(r'^.*(?:undefined|不详|其它).*$')
     val_pattern = re.compile(
         r"""
             ^                       # Start of string
@@ -55,20 +55,13 @@ class HistoryPreprocessor(Preprocessor):
 
     def parse_column_values(
         self, data: pd.DataFrame, column: str
-    ) -> tuple[pd.Series, list[tuple[int, str]]]:
+    ) -> tuple[pd.Series, pd.Series]:
         values = data[column]
-        val_map = self.process_info(dict[str, str], column)
-        if not self.config.final:
-            for val in values.unique():
-                if not pd.isna(val) and (val_match := self.val_pattern.match(val)):
-                    value = val_match.group('value')
-                    name = val_match.group('name')
-                    val_map[value] = name
+        names = values.replace(regex=self.val_pattern, value=r'\g<name>')
         values = values.replace(regex=self.val_pattern, value=r'\g<value>').astype(
             'Int64'
         )
-        val_list = sorted((int(value), name) for value, name in val_map.items())
-        return values, val_list
+        return values, names
 
     def parse_column_codes(
         self, data: pd.DataFrame, column: str
@@ -86,31 +79,11 @@ class HistoryPreprocessor(Preprocessor):
         code_list = sorted(code_map.items())
         return codes, code_list
 
-    def binarize_single_choice(
+    def process_single_choice(
         self, data: pd.DataFrame, column: str, *, ordered: bool = True
     ) -> pd.DataFrame:
-        values, val_list = self.parse_column_values(data, column)
-        data = data.drop(columns=[column])
-        if ordered:
-            value, name = val_list[-1]
-            if name == '其它':
-                val_list = val_list[:-1]
-                data[f'{column} = {name}'] = (values == value).astype('Int8')
-                values[
-                    values == value
-                ] = -1  # Temporarily set to -1 to avoid interference
-            value, name = val_list[0]
-            data[f'{column} = {name}'] = (values == value).astype('Int8')
-            for value, name in val_list[1:-1]:
-                data[f'{column} <= {name}'] = (
-                    (values <= value) & (values >= 0)
-                ).astype('Int8')
-                data[f'{column} >= {name}'] = (values >= value).astype('Int8')
-            value, name = val_list[-1]
-            data[f'{column} = {name}'] = (values == value).astype('Int8')
-        else:
-            for value, name in val_list:
-                data[f'{column} = {name}'] = (values == value).astype('Int8')
+        values, names = self.parse_column_values(data, column)
+        data[column] = values if ordered else names
         return data
 
     def binarize_multiple_choice(self, data: pd.DataFrame, column: str) -> pd.DataFrame:
@@ -118,23 +91,6 @@ class HistoryPreprocessor(Preprocessor):
         data = data.drop(columns=[column])
         for code, name in code_list:
             data[f'{column} = {name}'] = codes.str.contains(code).astype('Int8')
-        return data
-
-    def binarize_onset_data(self, data: pd.DataFrame, column: str) -> pd.DataFrame:
-        col = pd.to_numeric(data[column]).astype('Float64')
-        data = data.drop(columns=[column])
-        data[f'{column} = 无'] = (col < 0).astype('Int8')
-        if self.config.final:
-            min_age = self.process_info(int, column, 'min')
-            max_age = self.process_info(int, column, 'max')
-        else:
-            min_age, max_age = int(col[col >= 0].min()), int(col.max())
-            self.process_info[column, 'min'] = min_age
-            self.process_info[column, 'max'] = max_age
-        for th in range(min_age // 5 * 5 + 4, max_age, 5):
-            data[f'{column} <= {th}岁'] = ((col <= th) & (col >= 0)).astype('Int8')
-        for th in range(min_age // 5 * 5 + 5, max_age + 1, 5):
-            data[f'{column} >= {th}岁'] = (col >= th).astype('Int8')
         return data
 
     def process_data(
@@ -148,14 +104,12 @@ class HistoryPreprocessor(Preprocessor):
         columns = data.columns.to_list()
         multiple_choice_columns = multiple_choice_columns or []
         for col in columns:
-            if col == 'V14':
-                data = self.binarize_onset_data(data, col)
-            elif col in multiple_choice_columns:
+            if col in multiple_choice_columns:
                 data = self.binarize_multiple_choice(data, col)
             elif col in unordered_columns:
-                data = self.binarize_single_choice(data, col, ordered=False)
+                data = self.process_single_choice(data, col, ordered=False)
             elif is_string_dtype(data[col]):
-                data = self.binarize_single_choice(data, col)
+                data = self.process_single_choice(data, col)
             # Keep continuous columns as is
 
         if not self.config.final:
@@ -237,9 +191,11 @@ class HistoryPreprocessor(Preprocessor):
     def get_symptom_data(self, data: pd.DataFrame) -> pd.DataFrame:
         data = self.select_columns(data, [14] + list(range(312, 394)))
 
+        # Convert V14 to Float64
+        data['V14'] = pd.to_numeric(data['V14'], errors='coerce').astype('Float64')
+
         # Fill data for normal people
         fill_values = {col: '0(a=无)' for col in data.columns}
-        fill_values['V14'] = '-1'
         fill_values['V312'] = '4(n=无)'
         data.replace('无', fill_values, inplace=True)
 
