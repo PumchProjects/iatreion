@@ -1,6 +1,6 @@
 import sys
 
-from cyclopts import App
+from cyclopts import App, Parameter
 from cyclopts.config import Toml
 from rich.console import Console
 
@@ -10,6 +10,7 @@ console = Console()
 app = App(
     name='iatreion',
     help='An interpretable dementia diagnoser.',
+    default_parameter=Parameter(negative='', parse=r'^(?!_)'),
     config=Toml(get_config_path()),
     console=console,
     help_on_error=True,

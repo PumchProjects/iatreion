@@ -148,27 +148,21 @@ class PreprocessorConfig:
     ] = None
     'Group columns in the data files. If not set, use default group columns.'
 
-    vmri_data_path_: Annotated[Path | None, Parameter(parse=False)] = None
+    _vmri_data_path: Path | None = None
 
-    vmri_change_path_: Annotated[Path | None, Parameter(parse=False)] = None
+    _vmri_change_path: Path | None = None
 
-    data_paths: Annotated[dict[str, Path] | None, Parameter(parse=False)] = None
+    _data_paths: dict[str, Path] | None = None
 
-    process_info_path_: Annotated[Path | None, Parameter(parse=False)] = None
+    _process_info_path: Path | None = None
 
-    final: Annotated[bool, Parameter(parse=False)] = False
+    _final: bool = False
 
-    data: Annotated[dict[str, pd.DataFrame], Parameter(parse=False)] = field(
-        default_factory=dict[str, pd.DataFrame]
-    )
+    _data: dict[str, pd.DataFrame] = field(default_factory=dict[str, pd.DataFrame])
 
-    final_indices: Annotated[list[pd.DataFrame], Parameter(parse=False)] = field(
-        default_factory=list[pd.DataFrame]
-    )
+    _final_indices: list[pd.DataFrame] = field(default_factory=list[pd.DataFrame])
 
-    process_info_dict_: Annotated[
-        dict[str, dict[str, Any]] | None, Parameter(parse=False)
-    ] = None
+    _process_info_dict: dict[str, dict[str, Any]] | None = None
 
     # TODO: Add more parameters for the preprocessor, e.g. filling missing values
 
@@ -179,7 +173,7 @@ class PreprocessorConfig:
     def index_name(self) -> str:
         if self.index_name_ is not None:
             return self.index_name_
-        if self.final:
+        if self._final:
             raise IatreionException('$index_name must be set', index_name='Index name')
         return 'serial_num'
 
@@ -193,20 +187,20 @@ class PreprocessorConfig:
 
     @property
     def vmri_data_path(self) -> Path:
-        if self.vmri_data_path_ is not None:
-            if not self.vmri_data_path_.is_file():
+        if self._vmri_data_path is not None:
+            if not self._vmri_data_path.is_file():
                 raise IatreionException('$vmri file is not found', vmri='VMRI')
-            return self.vmri_data_path_
+            return self._vmri_data_path
         return self.input_prefix / 'Vmri_mean_sd.xlsx'
 
     @property
     def vmri_change_path(self) -> Path:
-        if self.vmri_change_path_ is not None:
-            if not self.vmri_change_path_.is_file():
+        if self._vmri_change_path is not None:
+            if not self._vmri_change_path.is_file():
                 raise IatreionException(
                     '$vmri_change file is not found', vmri_change='VMRI change'
                 )
-            return self.vmri_change_path_
+            return self._vmri_change_path
         return self.input_prefix / '表头变化202510.xlsx'
 
     @staticmethod
@@ -214,13 +208,13 @@ class PreprocessorConfig:
         return name_data_mapping[name]
 
     def get_data_path(self, data_name: str) -> tuple[Path, int | str]:
-        if self.data_paths is not None:
-            if data_name not in self.data_paths:
+        if self._data_paths is not None:
+            if data_name not in self._data_paths:
                 raise IatreionException(
                     'Data name "$data_name" not found in data paths.',
                     data_name=data_name,
                 )
-            return self.data_paths[data_name], 0
+            return self._data_paths[data_name], 0
         file_name = data_file_mapping[data_name].rsplit('@', maxsplit=1)
         sheet_name = file_name[1] if len(file_name) == 2 else 0
         return self.input_prefix / file_name[0], sheet_name
@@ -232,7 +226,7 @@ class PreprocessorConfig:
     @property
     def contains_group_columns(self) -> bool:
         contains = self.group_columns_ is not None
-        if self.final and not contains:
+        if self._final and not contains:
             raise IatreionException(
                 '$label_name must be set in eval mode', label_name='Label name'
             )
@@ -250,12 +244,12 @@ class PreprocessorConfig:
 
     @property
     def process_info_path(self) -> Path:
-        if self.process_info_path_ is not None:
-            if not self.process_info_path_.is_file():
+        if self._process_info_path is not None:
+            if not self._process_info_path.is_file():
                 raise IatreionException(
                     '$process_info file is not found', process_info='Processing info'
                 )
-            return self.process_info_path_
+            return self._process_info_path
         return self.dataset.prefix / 'process_info.toml'
 
     @staticmethod
@@ -267,11 +261,11 @@ class PreprocessorConfig:
 
     @property
     def process_info_dict(self) -> dict[str, dict[str, Any]]:
-        if self.process_info_dict_ is None:
-            self.process_info_dict_ = load_dict(self.process_info_path)
-        return self.process_info_dict_
+        if self._process_info_dict is None:
+            self._process_info_dict = load_dict(self.process_info_path)
+        return self._process_info_dict
 
     def save_process_info_dict(self) -> None:
-        if self.process_info_dict_ is not None:
+        if self._process_info_dict is not None:
             logger.info('[bold green]Saving processing info...', extra={'markup': True})
-            save_dict(self.process_info_dict_, self.process_info_path)
+            save_dict(self._process_info_dict, self.process_info_path)

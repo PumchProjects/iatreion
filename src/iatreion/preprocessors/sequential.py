@@ -20,7 +20,7 @@ class SequentialPreprocessor(Preprocessor):
         child = self.children[0]
         data = child.get_data_outer()
         # HACK: Propagate data to parents to get group names
-        self.config.data[self.data_name] = self.config.data[child.data_name].copy()
+        self.config._data[self.data_name] = self.config._data[child.data_name].copy()
         logger.info(f'Got "{child.name}" data!')
         for child in self.children[1:]:
             child_data = child.get_data_outer()

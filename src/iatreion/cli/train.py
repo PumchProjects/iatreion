@@ -47,7 +47,7 @@ def xgboost(*, config: XgboostConfig, **param: Any) -> None:
         Parameters for XGBoost. See https://xgboost.readthedocs.io/en/stable/parameter.html
         for more details.
     """
-    config.param = param
+    config._param = param
     train(config, XgboostModel(config))
 
 

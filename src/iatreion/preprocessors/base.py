@@ -23,7 +23,7 @@ class Preprocessor(ABC):
     @property
     def process_info(self) -> ProcessInfo:
         if self.process_info_ is None:
-            if self.config.final:
+            if self.config._final:
                 if self.name not in self.config.process_info_dict:
                     raise IatreionException(
                         'No processing info found for "$dataset"',
@@ -43,15 +43,15 @@ class Preprocessor(ABC):
 
     def get_group_names(self) -> pd.DataFrame:
         if self.config.contains_group_columns:
-            return self.config.data[self.data_name][self.config.group_columns].copy()
-        if 'group_names' not in self.config.data:
+            return self.config._data[self.data_name][self.config.group_columns].copy()
+        if 'group_names' not in self.config._data:
             data = pd.read_excel(
                 self.config.group_data_path,
                 index_col='serial_num',
                 dtype_backend='numpy_nullable',
             )
-            self.config.data['group_names'] = data[self.config.group_columns]
-        return self.config.data['group_names'].copy()
+            self.config._data['group_names'] = data[self.config.group_columns]
+        return self.config._data['group_names'].copy()
 
     def merge_group_names(self, data: pd.DataFrame) -> pd.DataFrame:
         group_names = self.get_group_names()
@@ -64,21 +64,21 @@ class Preprocessor(ABC):
         return data
 
     def get_basic_data(self) -> pd.DataFrame:
-        if 'basic_data' not in self.config.data:
+        if 'basic_data' not in self.config._data:
             data = pd.read_excel(
                 self.config.basic_data_path,
                 index_col='serial_num',
                 dtype_backend='numpy_nullable',
             )
             data.rename(columns={'实际出生日期': 'date of birth'}, inplace=True)
-            self.config.data['basic_data'] = data
-        return self.config.data['basic_data'].copy()
+            self.config._data['basic_data'] = data
+        return self.config._data['basic_data'].copy()
 
     def get_basic_info(
         self, data: pd.DataFrame, columns: list[str], *, force_final: bool = False
     ) -> pd.DataFrame:
         # HACK: Use the information included in the data when in final mode
-        if self.config.final or force_final:
+        if self.config._final or force_final:
             for col in columns:
                 if col not in data.columns:
                     raise IatreionException(
@@ -140,7 +140,7 @@ class Preprocessor(ABC):
         columns: list[str] | None = None,
         additional_columns: list[str] | None = None,
     ) -> pd.DataFrame:
-        if self.config.final:
+        if self.config._final:
             if columns is not None:
                 data = data.drop(columns=columns)
         else:
@@ -148,7 +148,7 @@ class Preprocessor(ABC):
         return data
 
     def read_data(self) -> pd.DataFrame:
-        if self.data_name not in self.config.data:
+        if self.data_name not in self.config._data:
             data_path, sheet_name = self.config.get_data_path(self.data_name)
             data = pd.read_excel(
                 data_path,
@@ -158,17 +158,17 @@ class Preprocessor(ABC):
                 na_values=['/', '#NUM!'],
                 dtype_backend='numpy_nullable',
             )
-            self.config.data[self.data_name] = data
+            self.config._data[self.data_name] = data
             if indices_names := self.config.get_indices_names(self.data_name):
-                self.config.final_indices.append(data[indices_names].astype(str))
-        return self.config.data[self.data_name].copy()
+                self.config._final_indices.append(data[indices_names].astype(str))
+        return self.config._data[self.data_name].copy()
 
     @abstractmethod
     def get_data(self) -> pd.DataFrame: ...
 
     def get_data_outer(self) -> pd.DataFrame:
         data = self.get_data()
-        if self.config.final:
+        if self.config._final:
             data.rename(columns=encode_string, inplace=True)
         else:
             self.save_process_info()

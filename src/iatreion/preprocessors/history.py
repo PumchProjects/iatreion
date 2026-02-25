@@ -68,7 +68,7 @@ class HistoryPreprocessor(Preprocessor):
     ) -> tuple[pd.Series, list[tuple[str, str]]]:
         codes = data[column]
         code_map = self.process_info(dict[str, str], column)
-        if not self.config.final:
+        if not self.config._final:
             for code in codes.unique():
                 if not pd.isna(code):
                     for code_match in self.code_pattern.finditer(code):
@@ -112,7 +112,7 @@ class HistoryPreprocessor(Preprocessor):
                 data = self.process_single_choice(data, col)
             # Keep continuous columns as is
 
-        if not self.config.final:
+        if not self.config._final:
             # Drop columns with less than `threshold` non-NaN values
             thresh = int(len(data) * threshold)
             data = data.dropna(axis=1, thresh=thresh)

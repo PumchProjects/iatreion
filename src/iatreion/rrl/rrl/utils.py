@@ -42,8 +42,8 @@ def make_data_labels(
     *,
     shuffle: bool = False,
 ) -> tuple[pd.DataFrame, pd.Series]:
-    base_pos = train.base_pos
-    label_pos = train.label_pos
+    base_pos = train._base_pos
+    label_pos = train._label_pos
 
     D = D[~D.index.duplicated(keep=train.keep)]
     if shuffle:

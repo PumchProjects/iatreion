@@ -49,7 +49,7 @@ class RrlEvalConfig:
 'last': keep the last sample of each patient.
 """
 
-    suspected_case: Annotated[bool, Parameter(alias='-sc', negative='')] = False
+    suspected_case: Annotated[bool, Parameter(alias='-sc')] = False
     'Whether to include suspected cases in evaluation.'
 
     index_name: Annotated[str, Parameter(alias='-in')] = ''
@@ -58,7 +58,7 @@ class RrlEvalConfig:
     label_name: Annotated[str, Parameter(alias='-ln')] = ''
     'Label column name in the data files. If not set, determined automatically.'
 
-    debug: Annotated[bool, Parameter(alias='-D', negative='')] = False
+    debug: Annotated[bool, Parameter(alias='-D')] = False
     'Whether to enable debug mode.'
 
     def make_configs(self) -> tuple[PreprocessorConfig, DiscreteRrlConfig]:
@@ -78,11 +78,11 @@ class RrlEvalConfig:
             input_prefix=Path(),
             index_name_=self.index_name or None,
             group_columns_=[self.label_name] if self.label_name else None,
-            vmri_data_path_=Path(self.vmri),
-            vmri_change_path_=Path(self.vmri_change),
-            data_paths={name: Path(path) for name, path in self.data.items()},
-            process_info_path_=Path(self.process),
-            final=True,
+            _vmri_data_path=Path(self.vmri),
+            _vmri_change_path=Path(self.vmri_change),
+            _data_paths={name: Path(path) for name, path in self.data.items()},
+            _process_info_path=Path(self.process),
+            _final=True,
         )
         rrl_config = DiscreteRrlConfig(dataset=dataset, train=train)
         return process_config, rrl_config

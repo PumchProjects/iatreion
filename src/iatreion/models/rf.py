@@ -33,7 +33,7 @@ class RandomForestModel(Model):
             for i, name in enumerate(ctx.db_enc.X_fname)
         }
         score_file = (
-            self.config.train.log_dir
+            self.config.train._log_dir
             / f'{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.json'
         )
         with score_file.open('w', encoding='utf-8') as f:

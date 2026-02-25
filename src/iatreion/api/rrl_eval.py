@@ -87,7 +87,7 @@ def get_data_model(
     callbacks = [
         preprocessor.get_stem_to_name_callback() for preprocessor in preprocessors
     ]
-    additional_data = process_config.final_indices
+    additional_data = process_config._final_indices
     group_names = preprocessors[0].get_group_names() if config.mode == 'eval' else None
     model = DiscreteRrlModel(rrl_config, callbacks)
     return data, additional_data, group_names, model

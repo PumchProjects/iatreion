@@ -41,7 +41,7 @@ class TabPFNModel(Model):
         importances = shap_values[:, :, 0].abs.mean(0).values
         score = {name: importances[i].item() for i, name in enumerate(feature_names)}
         score_file = (
-            self.config.train.log_dir
+            self.config.train._log_dir
             / f'{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.json'
         )
         with score_file.open('w', encoding='utf-8') as f:

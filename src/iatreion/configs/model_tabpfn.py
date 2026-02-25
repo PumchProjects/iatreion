@@ -13,7 +13,7 @@ class TabPFNConfig(ModelConfig):
     model_path: Annotated[ExistingFile, Parameter(alias='-mp')]
     'Path to the pretrained TabPFN model file.'
 
-    calc_importance: Annotated[bool, Parameter(alias='-ci', negative='')] = False
+    calc_importance: Annotated[bool, Parameter(alias='-ci')] = False
     'Whether to calculate feature importance.'
 
     n_jobs: int = 4

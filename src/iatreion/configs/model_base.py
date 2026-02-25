@@ -44,7 +44,7 @@ class ModelConfig:
         folder_name: str | None = None,
         file_name: str = 'train.log',
     ) -> None:
-        self.train.log_dir = self.get_exp_root(model_name)
+        self.train._log_dir = self.get_exp_root(model_name)
         if folder_name is not None and not self.train.final:
-            self.train.log_dir /= folder_name
-        add_file_handler(self.train.log_dir / file_name)
+            self.train._log_dir /= folder_name
+        add_file_handler(self.train._log_dir / file_name)

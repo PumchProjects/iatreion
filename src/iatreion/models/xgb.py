@@ -30,7 +30,7 @@ class XgboostModel(Model):
         super().__init__()
         self.config = config
         self.num_class = config.train.num_class
-        self.param = config.param
+        self.param = config._param
         self.update_param()
 
     def update_param(self) -> None:
@@ -65,7 +65,7 @@ class XgboostModel(Model):
 
     def calc_importance(self, ctx: TrainStepContext) -> None:
         fmap_file = (
-            self.config.train.log_dir
+            self.config.train._log_dir
             / f'fmap_{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.tsv'
         )
         with fmap_file.open('w', encoding='utf-8') as f:
@@ -74,7 +74,7 @@ class XgboostModel(Model):
                 f.write(f'{i}\t{name}\t{type}\n')
         score = {decode_string(f): v for f, v in self.bst.get_fscore(fmap_file).items()}
         score_file = (
-            self.config.train.log_dir
+            self.config.train._log_dir
             / f'{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.json'
         )
         with score_file.open('w', encoding='utf-8') as f:
