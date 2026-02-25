@@ -105,8 +105,6 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     # TODO: why cannot use field(init=False) here?
     log_dir: Annotated[Directory, Parameter(parse=False)] = Path('logs')
 
-    ith_kfold: Annotated[int, Parameter(parse=False)] = 0
-
     base_pos: Annotated[str, Parameter(parse=False)] = ''
 
     label_pos: Annotated[str, Parameter(parse=False)] = 'group_encrypted'

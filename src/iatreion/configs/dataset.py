@@ -72,9 +72,6 @@ For discrete RRL, separate models are evaluated and then aggregated.
 For other models, features are concatenated.
 """
 
-    simple: Annotated[bool, Parameter(parse=False)] = False
-    'Whether to use the simple (non-binarized) version of the dataset.'
-
     @property
     def name_str(self) -> str:
         return ', '.join(self.names)
