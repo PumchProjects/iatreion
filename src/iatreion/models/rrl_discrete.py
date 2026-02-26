@@ -301,13 +301,13 @@ class DiscreteRrlModel(Model):
         )
 
     def get_model(self, ctx: TrainStepContext) -> Rrl:
-        return Rrl(self.config.rrl_root / ctx.rrl_file, self.config.weight)
+        return Rrl(self.config.rrl_root / ctx.rrl_file, self.config._weight)
 
     def get_models(self) -> list[Rrl]:
         # HACK: Coupled with TrainStepContext.rrl_file
         # TODO: Unimplemented when TrainConfig.aggregate is 'concat'
         return [
-            Rrl(self.config.rrl_root / f'{name}.tsv', self.config.weight, callback)
+            Rrl(self.config.rrl_root / f'{name}.tsv', self.config._weight, callback)
             for name, callback in zip(
                 self.config.dataset.names, self.callbacks, strict=True
             )

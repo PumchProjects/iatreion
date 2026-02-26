@@ -34,7 +34,7 @@ class RandomForestModel(Model):
         }
         score_file = (
             self.config.train._log_dir
-            / f'{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.json'
+            / f'score_{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.json'
         )
         with score_file.open('w', encoding='utf-8') as f:
             json.dump(score, f, ensure_ascii=False, indent=4)

@@ -9,7 +9,7 @@ from .model_base import ModelConfig
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class DiscreteRrlConfig(ModelConfig):
-    weight: Annotated[
+    _weight: Annotated[
         Literal['uniform', 'train-f1', 'val-f1', 'train-adaboost', 'val-adaboost'],
         Parameter(alias='-w'),
     ] = 'uniform'

@@ -46,7 +46,7 @@ class Finish:
     roc: Figure | None = None
 
     def log(self, name: str) -> None:
-        with self.config.logging(name):
+        with self.config.logging(f'train_{name}'):
             logger.info(self.result)
         if self.roc is not None:
             self.roc.savefig(self.config.get_roc_file(f'roc_{name}'), dpi=300)

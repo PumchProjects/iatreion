@@ -46,7 +46,7 @@ def load_model(save_model_callback: Callable[..., tuple[RRL, dict[str, Any], tup
 
 
 def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, dict[str, Any], tuple[float, ...]]], ctx: TrainStepContext):
-    writer = SummaryWriter(args.folder_path)
+    writer = SummaryWriter(str(args.folder_path))
 
     db_enc, train_loader, valid_loader, _ = get_data_loader(args, ctx, pin_memory=True)
 

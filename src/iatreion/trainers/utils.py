@@ -69,7 +69,7 @@ def record_weighted(
     for name, child in inner_recorders.items():
         finish = child.finish()
         weights.append(finish.final.f1)
-        finish.log(f'{name}_train_{fold}')
+        finish.log(f'{name}_{fold}')
     logger.info(aggregate(recorder, outer_recorders, weights=weights))
 
 

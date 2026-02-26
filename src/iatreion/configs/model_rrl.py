@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated
 
 from cyclopts import Parameter
@@ -71,6 +72,10 @@ class RrlConfig(ModelConfig):
 
     _folder_name: str | None = None
 
+    @property
+    def folder_path(self) -> Path:
+        return self.train._log_dir / 'events'
+
     def __post_init__(self) -> None:
         if self.debug:
             over_sampler = str(self.train.over_sampler).upper()
@@ -81,7 +86,4 @@ class RrlConfig(ModelConfig):
                 f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
             )
         self.register_log_dir('rrl', folder_name=self._folder_name)
-
-    @property
-    def folder_path(self) -> str:
-        return str(self.train._log_dir)
+        self.folder_path.mkdir(parents=True, exist_ok=True)
