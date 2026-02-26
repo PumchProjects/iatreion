@@ -196,7 +196,7 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     @contextmanager
     def logging(self, name: str) -> Generator[None, None, None]:
-        handler = add_file_handler(self._log_dir / f'{name}.log')
+        handler = add_file_handler(self._log_dir / f'{name}.log', format=False)
         try:
             yield
         finally:

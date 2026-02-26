@@ -36,6 +36,8 @@ class Record[T]:
     specificity: T
     complexity: dict[str, tuple[T, str]] = field(default_factory=dict)
     cm: NDArray | None = None
+    weights: list[T] | None = None
+    bias: T | None = None
 
 
 @dataclass
@@ -50,6 +52,11 @@ class Finish:
             logger.info(self.result)
         if self.roc is not None:
             self.roc.savefig(self.config.get_roc_file(f'roc_{name}'), dpi=300)
+        if self.final.weights is not None and self.final.bias is not None:
+            with self.config.logging(f'weights_{name}'):
+                for weight in self.final.weights:
+                    logger.info(f'{weight:.4f}')
+                logger.info(f'{self.final.bias:.4f}')
 
 
 class RecordROC:
@@ -225,6 +232,14 @@ class Recorder:
         ]
         return ''.join(result_lines)
 
+    def record_weights_and_bias(self, weights: list[float], bias: float) -> None:
+        if self.result.weights is None:
+            self.result.weights = []
+        if self.result.bias is None:
+            self.result.bias = []
+        self.result.weights.append(weights)
+        self.result.bias.append(bias)
+
     def finish(self) -> Finish:
         complexity: dict[str, tuple[float, str]] = {}
         width = 4
@@ -242,6 +257,10 @@ class Recorder:
             np.nanmean(self.result.specificity).item(),
             complexity,
             self.result.cm,
+            None
+            if self.result.weights is None
+            else np.mean(self.result.weights, axis=0).tolist(),
+            None if self.result.bias is None else np.mean(self.result.bias).item(),
         )
         auc, roc = self.roc.finish() if self.config.plot_roc else (0.0, None)
         result_lines = [

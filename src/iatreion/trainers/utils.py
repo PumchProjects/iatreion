@@ -24,9 +24,9 @@ def get_meta_model(
     weights = meta_model.coef_[0]
     intercept = meta_model.intercept_[0]
     with recorder.config.logging(f'weights_stacking_{fold}'):
-        logger.info(f'Intercept (Bias): {intercept:.4f}')
         for idx, name in enumerate(named_recorders.keys()):
             logger.info(f'Weight for {f"{name}:":{width + 1}} {weights[idx]:.4f}')
+        logger.info(f'Intercept (Bias): {intercept:.4f}')
 
     return meta_model
 
@@ -50,8 +50,16 @@ def aggregate(
         y_score = meta_model.predict_proba(
             np.hstack([score[:, [1]] for score in y_score_list])
         )
+        norm_weights, bias = meta_model.coef_[0], meta_model.intercept_[0].item()
     else:
         y_score = np.average(y_score_list, axis=0, weights=weights)
+        if weights is not None:
+            norm_weights = np.array(weights) / sum(weights)
+        else:
+            n_total = len(y_score_list)
+            norm_weights = np.full(n_total, 1 / n_total)
+        bias = 0
+    recorder.record_weights_and_bias(norm_weights.tolist(), bias)
     return recorder.record((time, y_true, y_score, {}))
 
 

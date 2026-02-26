@@ -28,10 +28,11 @@ logger.setLevel(logging.DEBUG)
 logger.addHandler(RichHandler(logging.INFO))
 
 
-def add_file_handler(filename: Path, mode: str = 'w') -> FileHandler:
+def add_file_handler(filename: Path, *, format: bool = True) -> FileHandler:
     filename.parent.mkdir(parents=True, exist_ok=True)
-    file_handler = FileHandler(filename, mode=mode, encoding='utf-8')
-    file_handler.setFormatter(Formatter('%(asctime)s %(levelname)-8s %(message)s'))
+    file_handler = FileHandler(filename, mode='w', encoding='utf-8')
+    if format:
+        file_handler.setFormatter(Formatter('%(asctime)s %(levelname)-8s %(message)s'))
     logger.addHandler(file_handler)
     return file_handler
 
