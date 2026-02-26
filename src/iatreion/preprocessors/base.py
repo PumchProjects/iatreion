@@ -131,7 +131,7 @@ class Preprocessor(ABC):
     ) -> pd.DataFrame:
         col: pd.Series = (data[column] >= threshold).astype('Int8')
         data = data.drop(columns=[column])
-        data[name] = col.map({1: ge_name, 0: lt_name})
+        data[name] = col.map({1: ge_name, 0: lt_name}).astype('string')
         return data
 
     def drop_columns(

@@ -216,7 +216,7 @@ class DBEncoder:
             )
         if not continuous_data.empty:
             self.mean = continuous_data.mean()
-            self.std = continuous_data.std()
+            self.std = continuous_data.std() + 1e-8
             # Use mean as missing value for continuous columns if do not discretize them.
             continuous_data = pd.DataFrame(
                 self.continuous_imp.fit_transform(continuous_data.values),
