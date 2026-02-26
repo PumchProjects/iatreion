@@ -37,7 +37,9 @@ class Trainer(ABC):
             for outer_fold, outer_group in groupby(
                 iterator, lambda ctx: ctx.outer_fold
             ):
-                inner_recorders = defaultdict(lambda: Recorder(self.train_config))
+                inner_recorders = defaultdict(
+                    lambda: Recorder(self.train_config, is_inner=True)
+                )
 
                 for _, inner_group in groupby(outer_group, lambda ctx: ctx.inner_fold):
                     with task(

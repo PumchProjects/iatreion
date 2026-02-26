@@ -306,8 +306,7 @@ class TrainStepContext:
     def rrl_file(self) -> str:
         if self.db_enc.train.final:
             return f'{self.name}.tsv'
-        else:
-            return f'rrl_{self.name}_{self.outer_fold}_{self.inner_fold}.tsv'
+        return f'rrl_{self.name}_{self.outer_fold}_{self.inner_fold}.tsv'
 
 
 def get_train_test(

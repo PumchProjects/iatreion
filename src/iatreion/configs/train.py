@@ -168,16 +168,19 @@ For discrete RRL, validation set is used for optimization when val_size is set.
         return ', '.join(descriptions)
 
     @property
+    def n_outer_folds(self) -> int:
+        return self.n_outer_splits * self.n_outer_repeats
+
+    @property
+    def n_inner_folds(self) -> int:
+        return self.n_inner_splits * self.n_inner_repeats
+
+    @property
     def n_folds(self) -> int:
         # HACK: Coupled with get_train_iterator()
         if self.aggregate == 'stack':
-            return (
-                self.n_outer_splits
-                * self.n_outer_repeats
-                * (self.n_inner_splits * self.n_inner_repeats + 1)
-            )
-        else:
-            return self.n_outer_splits * self.n_outer_repeats
+            return self.n_outer_folds * (self.n_inner_folds + 1)
+        return self.n_outer_folds
 
     @property
     def num_class(self) -> int:

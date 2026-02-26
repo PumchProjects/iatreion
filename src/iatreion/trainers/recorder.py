@@ -53,23 +53,26 @@ class Finish:
 
 
 class RecordROC:
-    def __init__(self, config: TrainConfig) -> None:
+    def __init__(self, config: TrainConfig, *, is_inner: bool = False) -> None:
         self.config = config
+        self.n_folds = config.n_inner_folds if is_inner else config.n_outer_folds
+        self.show_legends = self.n_folds <= 5
         self.tprs: list[NDArray] = []
         self.aucs: list[float] = []
         self.mean_fpr = np.linspace(0, 1, 100)
         self.fig, ax = plt.subplots(figsize=(6, 6))
         self.ax = cast(Axes, ax)
 
-    def record_fold(self, y_true: NDArray, y_pos_score: NDArray, fold: int) -> float:
+    def record_fold(self, y_true: NDArray, y_pos_score: NDArray) -> float:
+        fold = len(self.aucs) + 1
         viz = RocCurveDisplay.from_predictions(
             y_true,
             y_pos_score,
-            name=f'_ROC fold {fold}',
+            name=f'{"" if self.show_legends else "_"}ROC fold {fold}',
             alpha=0.1,
             lw=1,
             ax=self.ax,
-            plot_chance_level=(fold == self.config.n_folds),
+            plot_chance_level=(fold == self.n_folds),
         )
         interp_tpr = np.interp(self.mean_fpr, viz.fpr, viz.tpr)
         interp_tpr[0] = 0.0
@@ -100,10 +103,10 @@ class RecordROC:
         self.aucs.append(viz.roc_auc)
         return viz.roc_auc
 
-    def record(self, y_true: NDArray, y_pos_score: NDArray, fold: int) -> float:
+    def record(self, y_true: NDArray, y_pos_score: NDArray) -> float:
         if self.config.final:
             return self.record_final(y_true, y_pos_score)
-        return self.record_fold(y_true, y_pos_score, fold)
+        return self.record_fold(y_true, y_pos_score)
 
     def finish(self) -> tuple[float, Figure]:
         mean_tpr = np.nanmean(self.tprs, axis=0)
@@ -143,10 +146,10 @@ class RecordROC:
 
 
 class Recorder:
-    def __init__(self, config: TrainConfig) -> None:
+    def __init__(self, config: TrainConfig, *, is_inner: bool = False) -> None:
         self.config = config
         self.result = Record[list[float]](*([] for _ in range(8)))  # type: ignore
-        self.roc = RecordROC(config)
+        self.roc = RecordROC(config, is_inner=is_inner)
         self.calc_sen_and_spc = config.num_class == 2
         self.y_true_all: list[NDArray] = []
         self.y_score_all: list[NDArray] = []
@@ -165,7 +168,7 @@ class Recorder:
             self.result.cm += cm
         y_pos_score = y_score[:, 1] if y_score.shape[1] >= 2 else y_score.squeeze()
         self.result.auc.append(
-            self.roc.record(y_true, y_pos_score, len(self.result.auc) + 1)
+            self.roc.record(y_true, y_pos_score)
             if self.config.plot_roc
             else roc_auc_score(
                 y_true,
