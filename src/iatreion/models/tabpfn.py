@@ -6,7 +6,6 @@ from tabpfn import TabPFNClassifier
 
 from iatreion.configs import TabPFNConfig
 from iatreion.rrl import TrainStepContext
-from iatreion.utils import decode_string
 
 from .base import Model, ModelReturn
 
@@ -29,7 +28,7 @@ class TabPFNModel(Model):
     def calc_importance(self, ctx: TrainStepContext, X: NDArray) -> None:
         from tabpfn_extensions import interpretability
 
-        feature_names = [decode_string(name) for name in ctx.db_enc.X_fname]
+        feature_names = ctx.db_enc.X_fname
         shap_values = interpretability.shap.get_shap_values(
             estimator=self.model,
             test_x=X,

@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 
 from iatreion.configs import XgboostConfig
 from iatreion.rrl import TrainStepContext
-from iatreion.utils import decode_string, logger
+from iatreion.utils import decode_string, encode_string, logger
 
 from .base import Model, ModelReturn
 
@@ -71,7 +71,7 @@ class XgboostModel(Model):
         with fmap_file.open('w', encoding='utf-8') as f:
             for i, name in enumerate(ctx.db_enc.X_fname):
                 type = 'i' if i < ctx.db_enc.discrete_flen else 'q'
-                f.write(f'{i}\t{name}\t{type}\n')
+                f.write(f'{i}\t{encode_string(name, " ")}\t{type}\n')
         score = {decode_string(f): v for f, v in self.bst.get_fscore(fmap_file).items()}
         score_file = (
             self.config.train._log_dir

@@ -77,6 +77,7 @@ class RrlConfig(ModelConfig):
         return self.train._log_dir / 'events'
 
     def __post_init__(self) -> None:
+        self.train._encode = True
         if self.debug:
             over_sampler = str(self.train.over_sampler).upper()
             self._folder_name = (

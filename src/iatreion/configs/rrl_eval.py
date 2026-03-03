@@ -16,7 +16,7 @@ class RrlEvalConfig:
     names: Annotated[list[DataName], Parameter(alias='-n', consume_multiple=True)] = (
         field(default_factory=list)
     )
-    'Name of the data file.'
+    'Names of the data files.'
 
     groups: Annotated[list[str], Parameter(alias='-g', consume_multiple=True)] = field(
         default_factory=list
@@ -62,7 +62,7 @@ class RrlEvalConfig:
     'Whether to enable debug mode.'
 
     def make_configs(self) -> tuple[PreprocessorConfig, DiscreteRrlConfig]:
-        # HACK: Empty prefix, set simple to False implicitly
+        # HACK: Empty prefix
         dataset = DatasetConfig(prefix=Path(), names=self.names)
         train = TrainConfig(
             group_names=self.groups,
@@ -71,6 +71,7 @@ class RrlEvalConfig:
             suspected_case=self.suspected_case,
             label_name=self.label_name or None,
             log_root=Path(self.thesaurus),
+            _shuffle=False,
         )
         # HACK: Empty input prefix
         process_config = PreprocessorConfig(

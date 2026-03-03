@@ -16,5 +16,6 @@ class DiscreteRrlConfig(ModelConfig):
     'Mode of model weight calculation.'
 
     def __post_init__(self) -> None:
+        self.train._encode = True
         if not self.train.final:
             self.register_log_dir('rrl-discrete', file_name='test.log')

@@ -36,17 +36,13 @@ def read_info(info_path) -> list[list[str]]:
 
 
 def make_data_labels(
-    D: pd.DataFrame,
-    train: TrainConfig,
-    group_columns: list[str],
-    *,
-    shuffle: bool = False,
+    D: pd.DataFrame, train: TrainConfig, group_columns: list[str]
 ) -> tuple[pd.DataFrame, pd.Series]:
     base_pos = train._base_pos
     label_pos = train._label_pos
 
     D = D[~D.index.duplicated(keep=train.keep)]
-    if shuffle:
+    if train._shuffle:
         D = D.sample(frac=1, random_state=0)
     group_mapping = train.get_name_group_mapping()
     if base_pos:
@@ -61,7 +57,7 @@ def make_data_labels(
 
 
 def read_csv(
-    name: DataName, dataset: DatasetConfig, train: TrainConfig, *, shuffle: bool = False
+    name: DataName, dataset: DatasetConfig, train: TrainConfig
 ) -> tuple[pd.DataFrame, pd.Series, list[list[str]]]:
     data_path = dataset.get_data(name)
     info_path = dataset.get_info(name)
@@ -72,17 +68,18 @@ def read_csv(
     names = [f[0] for f in f_list]
     dtype = {col: str for col in group_columns}
     D = pd.read_csv(data_path, names=names, index_col=0, dtype=dtype)
-    X_df, y_df = make_data_labels(D, train, group_columns, shuffle=shuffle)
+    X_df, y_df = make_data_labels(D, train, group_columns)
     f_list = f_list[1 : -len(group_columns)]
 
-    X_df.rename(columns=encode_string, inplace=True)
-    f_list = [[encode_string(name), type] for name, type in f_list]
+    if train._encode:
+        X_df.rename(columns=encode_string, inplace=True)
+        f_list = [[encode_string(name), type] for name, type in f_list]
 
     return X_df, y_df, f_list
 
 
 def read_data(
-    dataset: DatasetConfig, train: TrainConfig, *, shuffle: bool = False
+    dataset: DatasetConfig, train: TrainConfig
 ) -> tuple[list[pd.DataFrame], list[pd.Series], pd.Series, list[pd.DataFrame]]:
     X_df, y_df, f_list = read_csv(dataset.names[0], dataset, train)
     ref_y_df = y_df
@@ -93,7 +90,7 @@ def read_data(
         X_dfs.append(X_df)
         y_dfs.append(y_df)
         f_dfs.append(pd.DataFrame(f_list))
-    if shuffle:
+    if train._shuffle:
         ref_y_df = ref_y_df.sample(frac=1, random_state=0)
     return X_dfs, y_dfs, ref_y_df, f_dfs
 
@@ -309,6 +306,28 @@ class TrainStepContext:
         return f'rrl_{self.name}_{self.outer_fold}_{self.inner_fold}.tsv'
 
 
+def merge_data(
+    X_dfs: list[pd.DataFrame], y_dfs: list[pd.Series], f_dfs: list[pd.DataFrame]
+) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
+    def merge_X(a: pd.DataFrame, b: pd.DataFrame) -> pd.DataFrame:
+        return a.merge(b, how='outer', left_index=True, right_index=True)
+
+    def merge_y(a: pd.Series, b: pd.Series) -> pd.Series:
+        merged = pd.merge(
+            a.to_frame('left'),
+            b.to_frame('right'),
+            how='outer',
+            left_index=True,
+            right_index=True,
+        )
+        return merged['left'].combine_first(merged['right'])
+
+    X_df = reduce(merge_X, X_dfs)
+    y_df = reduce(merge_y, y_dfs)
+    f_df = pd.concat(f_dfs, ignore_index=True)
+    return X_df, y_df, f_df
+
+
 def get_train_test(
     n_splits: int, n_repeats: int, ref_y: pd.Series
 ) -> Generator[tuple[pd.Index, pd.Index], None, None]:
@@ -340,25 +359,11 @@ def get_train_val(
 def get_train_iterator(
     dataset: DatasetConfig, train: TrainConfig
 ) -> Generator[TrainStepContext, None, None]:
-    X_dfs, y_dfs, ref_y_df, f_dfs = read_data(dataset, train, shuffle=True)
-
-    def merge_X(a: pd.DataFrame, b: pd.DataFrame) -> pd.DataFrame:
-        return a.merge(b, how='outer', left_index=True, right_index=True)
-
-    def merge_y(a: pd.Series, b: pd.Series) -> pd.Series:
-        merged = pd.merge(
-            a.to_frame('left'),
-            b.to_frame('right'),
-            how='outer',
-            left_index=True,
-            right_index=True,
-        )
-        return merged['left'].combine_first(merged['right'])
+    X_dfs, y_dfs, ref_y_df, f_dfs = read_data(dataset, train)
 
     if train.aggregate == 'concat':
-        X_dfs = [reduce(merge_X, X_dfs)]
-        y_dfs = [reduce(merge_y, y_dfs)]
-        f_dfs = [pd.concat(f_dfs, ignore_index=True)]
+        X_df, y_df, f_df = merge_data(X_dfs, y_dfs, f_dfs)
+        X_dfs, y_dfs, f_dfs = [X_df], [y_df], [f_df]
 
     if train.final:
         outer_splitter = [(ref_y_df.index, pd.Index([]))]

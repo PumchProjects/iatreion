@@ -111,6 +111,10 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     _groups: list[list[str]] = field(default_factory=list[list[str]])
 
+    _shuffle: bool = True
+
+    _encode: bool = False
+
     def set_groups(self) -> None:
         if not self.group_names:
             raise ValueError('No valid groups found.')

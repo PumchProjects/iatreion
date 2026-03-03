@@ -6,7 +6,6 @@ from sklearn.ensemble import RandomForestClassifier
 
 from iatreion.configs import RandomForestConfig
 from iatreion.rrl import TrainStepContext
-from iatreion.utils import decode_string
 
 from .base import Model, ModelReturn
 
@@ -29,8 +28,7 @@ class RandomForestModel(Model):
     def calc_importance(self, ctx: TrainStepContext) -> None:
         importances = self.forest.feature_importances_
         score = {
-            decode_string(name): importances[i].item()
-            for i, name in enumerate(ctx.db_enc.X_fname)
+            name: importances[i].item() for i, name in enumerate(ctx.db_enc.X_fname)
         }
         score_file = (
             self.config.train._log_dir
