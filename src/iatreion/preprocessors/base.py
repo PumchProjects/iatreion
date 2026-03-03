@@ -50,6 +50,7 @@ class Preprocessor(ABC):
                 index_col='serial_num',
                 dtype_backend='numpy_nullable',
             )
+            data = data[~data.index.duplicated()]
             self.config._data['group_names'] = data[self.config.group_columns]
         return self.config._data['group_names'].copy()
 
