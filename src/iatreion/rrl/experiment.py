@@ -101,6 +101,8 @@ def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, d
         save_interval=args.save_interval,
         early_stop_patience=args.early_stop_patience,
         early_stop_min_delta=args.early_stop_min_delta,
+        label_smoothing=args.label_smoothing,
+        max_grad_norm=args.max_grad_norm,
     )
     
     if args.train.final and args.print_rule:

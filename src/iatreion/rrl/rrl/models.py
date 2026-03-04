@@ -143,7 +143,7 @@ class RRL:
 
     def train_model(self, data_loader=None, valid_loader=None, epoch=50, lr=0.01, lr_decay_epoch=100, 
                     lr_decay_rate=0.75, weight_decay=0.0, class_weights=None, log_iter=50, save_interval=100,
-                    early_stop_patience=None, early_stop_min_delta=0.0):
+                    early_stop_patience=None, early_stop_min_delta=0.0, label_smoothing=0.0, max_grad_norm=5.0):
 
         if data_loader is None:
             raise Exception("Data loader is unavailable!")
@@ -151,7 +151,10 @@ class RRL:
         accuracy_b = []
         f1_score_b = []
 
-        criterion = nn.CrossEntropyLoss(weight=class_weights).to(self.device)
+        criterion = nn.CrossEntropyLoss(
+            weight=class_weights,
+            label_smoothing=label_smoothing,
+        ).to(self.device)
         optimizer = torch.optim.Adam(self.net.parameters(), lr=lr, weight_decay=0.0)
 
         cnt = -1
@@ -187,6 +190,8 @@ class RRL:
                 avg_batch_loss_rrl += ba_loss_rrl
                 
                 loss_rrl.backward()
+                if max_grad_norm is not None and max_grad_norm > 0:
+                    torch.nn.utils.clip_grad_norm_(self.net.parameters(), max_grad_norm)
 
                 cnt += 1
                 with torch.no_grad():
@@ -206,12 +211,16 @@ class RRL:
 
                 if valid_loader is not None and cnt > 0 and cnt % save_interval == 0:
                     _, acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation')
+                    avg_epoch_loss_rrl = epoch_loss_rrl / max(ba_cnt, 1)
                     improved = (f1_b - self.best_f1) > early_stop_min_delta
-                    same_f1_better_loss = np.abs(f1_b - self.best_f1) <= early_stop_min_delta and self.best_loss > epoch_loss_rrl
+                    same_f1_better_loss = (
+                        np.abs(f1_b - self.best_f1) <= early_stop_min_delta
+                        and self.best_loss > avg_epoch_loss_rrl
+                    )
                     if improved or same_f1_better_loss:
                         logger.info(f'[bold yellow]New best model found! {self.best_f1:.2%} -> {f1_b:.2%}', extra={'markup': True})
                         self.best_f1 = f1_b
-                        self.best_loss = epoch_loss_rrl
+                        self.best_loss = avg_epoch_loss_rrl
                         self.save_model(1.0 - acc_b, f1_b)
                         no_improve_checks = 0
                     elif use_early_stop:
@@ -236,9 +245,10 @@ class RRL:
             logger.info('epoch: {}, loss_rrl: {}'.format(epo, epoch_loss_rrl))
             if valid_loader is None and epo % save_interval == 0:  # use the data_loader as the valid loader
                 _, acc_b, f1_b = self.test(test_loader=data_loader, set_name='Training')
-                if epoch_loss_rrl < best_loss:
+                avg_epoch_loss_rrl = epoch_loss_rrl / max(ba_cnt, 1)
+                if avg_epoch_loss_rrl < best_loss:
                     logger.info('[bold green]New best model found!', extra={'markup': True})
-                    best_loss = epoch_loss_rrl
+                    best_loss = avg_epoch_loss_rrl
                     self.save_model(1.0 - acc_b, f1_b)
                 
                 accuracy_b.append(acc_b)
@@ -259,7 +269,7 @@ class RRL:
         if valid_loader is not None and self.best_f1 < 0:
             _, acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation')
             self.best_f1 = f1_b
-            self.best_loss = epoch_loss_rrl
+            self.best_loss = epoch_loss_rrl / max(ba_cnt, 1)
             self.save_model(1.0 - acc_b, f1_b)
 
         progress.remove_task(epoch_task)

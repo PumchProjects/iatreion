@@ -40,6 +40,12 @@ class RrlConfig(ModelConfig):
     early_stop_min_delta: Annotated[float, Parameter(alias='-esd')] = 0.0
     'Minimum required increase in validation F1 to reset early-stopping patience.'
 
+    label_smoothing: Annotated[float, Parameter(alias='-ls')] = 0.0
+    'Label smoothing factor for cross-entropy loss.'
+
+    max_grad_norm: Annotated[float | None, Parameter(alias='-mgn')] = 5.0
+    'Max gradient norm for clipping. Disabled when None or <= 0.'
+
     nlaf: bool = False
     'Use novel logical activation functions to take less time and GPU memory usage. We recommend trying (alpha, beta, gamma) in {(0.999, 8, 1), (0.999, 8, 3), (0.9, 3, 3)}'
 
@@ -91,6 +97,7 @@ class RrlConfig(ModelConfig):
                 f'_lr{self.learning_rate}_lrdr{self.lr_decay_rate}_lrde{self.lr_decay_epoch}_wd{self.weight_decay}'
                 f'_si{self.save_interval}_useNOT{self.use_not}_valSize{self.train.val_size}_useSkip{self.skip}'
                 f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
+                f'_esp{self.early_stop_patience}_esd{self.early_stop_min_delta}_ls{self.label_smoothing}_mgn{self.max_grad_norm}'
             )
         self.register_log_dir('rrl', folder_name=self._folder_name)
         self.folder_path.mkdir(parents=True, exist_ok=True)
