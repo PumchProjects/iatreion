@@ -21,6 +21,7 @@ app['--version'].group = 'Admin'
 app.command('iatreion.cli.process:process', sort_key=0)
 app.command('iatreion.cli.train:sub_app', name='train')
 app.command('iatreion.cli.rrl_eval:rrl_eval', sort_key=2)
+app.command('iatreion.cli.show:sub_app', name='show')
 
 
 def main() -> None:

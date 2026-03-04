@@ -12,6 +12,8 @@ dependencies = [
     "matplotlib>=3.10.1",
     "tomli>=2.2.1",
     "tomli-w>=1.2.0",
+    "tableone>=0.9.6",
+    "seaborn>=0.13.2",
 ]
 
 [project.optional-dependencies]

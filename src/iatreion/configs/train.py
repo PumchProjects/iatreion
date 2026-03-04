@@ -111,6 +111,8 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     _groups: list[list[str]] = field(default_factory=list[list[str]])
 
+    _group_names: list[str] = field(default_factory=list[str])
+
     _shuffle: bool = True
 
     _encode: bool = False
@@ -138,6 +140,7 @@ For discrete RRL, validation set is used for optimization when val_size is set.
                     names.append(group[i])
                     i += 1
             self._groups.append(sorted(names))
+        self._group_names = [''.join(group) for group in self._groups]
         self._groups.sort(key=lambda x: x[0])
         if self.label_name is not None:
             self._base_pos = ''

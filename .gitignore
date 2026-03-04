@@ -185,3 +185,6 @@ logs/
 # Custom scripts
 scripts/
 test.py
+
+# Figures and tables
+figures/

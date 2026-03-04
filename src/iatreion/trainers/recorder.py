@@ -1,9 +1,7 @@
 from dataclasses import dataclass, field
-from typing import cast
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from numpy.typing import NDArray
 from sklearn.metrics import (
@@ -67,8 +65,7 @@ class RecordROC:
         self.tprs: list[NDArray] = []
         self.aucs: list[float] = []
         self.mean_fpr = np.linspace(0, 1, 100)
-        self.fig, ax = plt.subplots(figsize=(6, 6))
-        self.ax = cast(Axes, ax)
+        self.fig, self.ax = plt.subplots(figsize=(6, 6), layout='constrained')
 
     def record_fold(self, y_true: NDArray, y_pos_score: NDArray) -> float:
         fold = len(self.aucs) + 1
@@ -105,7 +102,6 @@ class RecordROC:
             title='ROC curve',
         )
         self.ax.legend(loc='lower right')
-        self.fig.tight_layout()
 
         self.aucs.append(viz.roc_auc)
         return viz.roc_auc
