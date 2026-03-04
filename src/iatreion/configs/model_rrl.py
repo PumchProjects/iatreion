@@ -34,6 +34,12 @@ class RrlConfig(ModelConfig):
     save_interval: Annotated[int, Parameter(alias='-si')] = 100
     'The number of epochs to save the model based on training loss (when val_size=None), or the number of iterations (batches) to save the model based on validation F1 (when val_size is set).'
 
+    early_stop_patience: Annotated[int | None, Parameter(alias='-esp')] = None
+    'Number of validation checks with no sufficient F1 improvement before early stopping. Disabled when None or <= 0.'
+
+    early_stop_min_delta: Annotated[float, Parameter(alias='-esd')] = 0.0
+    'Minimum required increase in validation F1 to reset early-stopping patience.'
+
     nlaf: bool = False
     'Use novel logical activation functions to take less time and GPU memory usage. We recommend trying (alpha, beta, gamma) in {(0.999, 8, 1), (0.999, 8, 3), (0.9, 3, 3)}'
 

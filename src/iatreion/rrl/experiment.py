@@ -28,13 +28,24 @@ def get_data_loader(args: RrlConfig, ctx: TrainStepContext, pin_memory=False):
     )
     test_set = TensorDataset(torch.tensor(X_test.astype(np.float32)), torch.tensor(y_test))
 
-    train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=False, pin_memory=pin_memory)
-    valid_loader = (
-        None
-        if valid_set is None
-        else DataLoader(valid_set, batch_size=args.batch_size, shuffle=False, pin_memory=pin_memory)
+    train_loader = DataLoader(
+        train_set,
+        batch_size=args.batch_size,
+        shuffle=True,
+        pin_memory=pin_memory,
     )
-    test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, pin_memory=pin_memory)
+    valid_loader = None if valid_set is None else DataLoader(
+        valid_set,
+        batch_size=args.batch_size,
+        shuffle=False,
+        pin_memory=pin_memory
+    )
+    test_loader = DataLoader(
+        test_set,
+        batch_size=args.batch_size,
+        shuffle=False,
+        pin_memory=pin_memory
+    )
 
     return ctx.db_enc, train_loader, valid_loader, test_loader
 
@@ -67,12 +78,15 @@ def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, d
               temperature=args.temp)
     
     y_true = ctx.train_data[1]
-    class_weights_array = compute_class_weight(
-        'balanced',
-        classes=np.unique(y_true),
-        y=y_true
-    )
-    class_weights = torch.tensor(class_weights_array, dtype=torch.float)
+    class_weights = None
+    if args.weighted:
+        class_weights_array = compute_class_weight(
+            'balanced',
+            classes=np.unique(y_true),
+            y=y_true,
+        )
+        class_weights = torch.tensor(class_weights_array, dtype=torch.float)
+        logger.info(f'Using class weights: {class_weights.tolist()}')
 
     rrl.train_model(
         data_loader=train_loader,
@@ -84,7 +98,10 @@ def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, d
         weight_decay=args.weight_decay,
         class_weights=class_weights,
         log_iter=args.log_iter,
-        save_interval=args.save_interval)
+        save_interval=args.save_interval,
+        early_stop_patience=args.early_stop_patience,
+        early_stop_min_delta=args.early_stop_min_delta,
+    )
     
     if args.train.final and args.print_rule:
         rrl, metrics = load_model(save_model_callback)

@@ -220,6 +220,7 @@ class DBEncoder:
                 columns=continuous_data.columns,
             )
             continuous_data = (continuous_data - self.mean) / self.std
+            self.continuous_flen = continuous_data.shape[1]
 
         X = self.concat_data(unordered_data, ordered_data, continuous_data)
         categorical = [
@@ -241,7 +242,6 @@ class DBEncoder:
         if not continuous_data.empty:
             data.append(continuous_data.values)
             self.X_fname += continuous_data.columns.to_list()
-            self.continuous_flen = continuous_data.shape[1]
 
         return np.hstack(data), y
 

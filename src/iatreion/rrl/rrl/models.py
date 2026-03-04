@@ -142,7 +142,8 @@ class RRL:
         return optimizer
 
     def train_model(self, data_loader=None, valid_loader=None, epoch=50, lr=0.01, lr_decay_epoch=100, 
-                    lr_decay_rate=0.75, weight_decay=0.0, class_weights=None, log_iter=50, save_interval=100):
+                    lr_decay_rate=0.75, weight_decay=0.0, class_weights=None, log_iter=50, save_interval=100,
+                    early_stop_patience=None, early_stop_min_delta=0.0):
 
         if data_loader is None:
             raise Exception("Data loader is unavailable!")
@@ -157,6 +158,9 @@ class RRL:
         avg_batch_loss_rrl = 0.0
         epoch_histc = defaultdict(list)
         best_loss = 1e20 # NOTE: Please distinguish this from self.best_loss 
+        no_improve_checks = 0
+        use_early_stop = valid_loader is not None and early_stop_patience is not None and early_stop_patience > 0
+        early_stopped = False
         epoch_task = progress.add_task('Epoch:', total=epoch)
         for epo in range(epoch):
             optimizer = self.exp_lr_scheduler(optimizer, epo, init_lr=lr, lr_decay_rate=lr_decay_rate,
@@ -200,22 +204,42 @@ class RRL:
                     abs_gradient_avg += torch.sum(torch.abs(param.grad)) / (param.grad.numel())
                 self.clip()
 
-            logger.info('epoch: {}, loss_rrl: {}'.format(epo, epoch_loss_rrl))
-            if epo % save_interval == 0:
-                if valid_loader is not None:
+                if valid_loader is not None and cnt > 0 and cnt % save_interval == 0:
                     _, acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation')
-                    if f1_b > self.best_f1 or (np.abs(f1_b - self.best_f1) < 1e-10 and self.best_loss > epoch_loss_rrl):
+                    improved = (f1_b - self.best_f1) > early_stop_min_delta
+                    same_f1_better_loss = np.abs(f1_b - self.best_f1) <= early_stop_min_delta and self.best_loss > epoch_loss_rrl
+                    if improved or same_f1_better_loss:
                         logger.info(f'[bold yellow]New best model found! {self.best_f1:.2%} -> {f1_b:.2%}', extra={'markup': True})
                         self.best_f1 = f1_b
                         self.best_loss = epoch_loss_rrl
                         self.save_model(1.0 - acc_b, f1_b)
+                        no_improve_checks = 0
+                    elif use_early_stop:
+                        no_improve_checks += 1
+                        if no_improve_checks >= early_stop_patience:
+                            logger.info(
+                                f'[bold yellow]Early stopping triggered at epoch {epo}, step {cnt}: '
+                                f'no validation F1 improvement > {early_stop_min_delta} '
+                                f'for {early_stop_patience} checks.',
+                                extra={'markup': True},
+                            )
+                            early_stopped = True
 
-                else: # use the data_loader as the valid loader
-                    _, acc_b, f1_b = self.test(test_loader=data_loader, set_name='Training')
-                    if epoch_loss_rrl < best_loss:
-                        logger.info('[bold green]New best model found!', extra={'markup': True})
-                        best_loss = epoch_loss_rrl
-                        self.save_model(1.0 - acc_b, f1_b)
+                    accuracy_b.append(acc_b)
+                    f1_score_b.append(f1_b)
+                    if self.writer is not None:
+                        self.writer.add_scalar('Accuracy_RRL', acc_b, cnt // save_interval)
+                        self.writer.add_scalar('F1_Score_RRL', f1_b, cnt // save_interval)
+                    if early_stopped:
+                        break
+
+            logger.info('epoch: {}, loss_rrl: {}'.format(epo, epoch_loss_rrl))
+            if valid_loader is None and epo % save_interval == 0:  # use the data_loader as the valid loader
+                _, acc_b, f1_b = self.test(test_loader=data_loader, set_name='Training')
+                if epoch_loss_rrl < best_loss:
+                    logger.info('[bold green]New best model found!', extra={'markup': True})
+                    best_loss = epoch_loss_rrl
+                    self.save_model(1.0 - acc_b, f1_b)
                 
                 accuracy_b.append(acc_b)
                 f1_score_b.append(f1_b)
@@ -229,6 +253,14 @@ class RRL:
                 self.writer.add_scalar('Abs_Gradient_Avg', abs_gradient_avg / ba_cnt, epo)
 
             progress.update(epoch_task, advance=1)
+            if early_stopped:
+                break
+
+        if valid_loader is not None and self.best_f1 < 0:
+            _, acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation')
+            self.best_f1 = f1_b
+            self.best_loss = epoch_loss_rrl
+            self.save_model(1.0 - acc_b, f1_b)
 
         progress.remove_task(epoch_task)
         return epoch_histc
