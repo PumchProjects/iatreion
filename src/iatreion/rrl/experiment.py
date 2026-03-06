@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 
 from iatreion.configs import RrlConfig
-from iatreion.utils import logger
+from iatreion.utils import logger, task
 
 from .rrl.models import RRL
 from .rrl.utils import TrainStepContext
@@ -88,22 +88,24 @@ def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, d
         class_weights = torch.tensor(class_weights_array, dtype=torch.float)
         logger.info(f'Using class weights: {class_weights.tolist()}')
 
-    rrl.train_model(
-        data_loader=train_loader,
-        valid_loader=valid_loader,
-        lr=args.learning_rate,
-        epoch=args.epoch,
-        lr_decay_rate=args.lr_decay_rate,
-        lr_decay_epoch=args.lr_decay_epoch,
-        weight_decay=args.weight_decay,
-        class_weights=class_weights,
-        log_iter=args.log_iter,
-        save_interval=args.save_interval,
-        early_stop_patience=args.early_stop_patience,
-        early_stop_min_delta=args.early_stop_min_delta,
-        label_smoothing=args.label_smoothing,
-        max_grad_norm=args.max_grad_norm,
-    )
+    with task('Epoch:', args.epoch) as epoch_advance:
+        rrl.train_model(
+            epoch_advance=epoch_advance,
+            data_loader=train_loader,
+            valid_loader=valid_loader,
+            lr=args.learning_rate,
+            epoch=args.epoch,
+            lr_decay_rate=args.lr_decay_rate,
+            lr_decay_epoch=args.lr_decay_epoch,
+            weight_decay=args.weight_decay,
+            class_weights=class_weights,
+            log_iter=args.log_iter,
+            save_interval=args.save_interval,
+            early_stop_patience=args.early_stop_patience,
+            early_stop_min_delta=args.early_stop_min_delta,
+            label_smoothing=args.label_smoothing,
+            max_grad_norm=args.max_grad_norm,
+        )
     
     if args.train.final and args.print_rule:
         rrl, metrics = load_model(save_model_callback)

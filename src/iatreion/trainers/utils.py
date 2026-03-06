@@ -18,7 +18,7 @@ def get_meta_model(
     y_true = np.concatenate(recorder.y_true_all)
 
     meta_model = LogisticRegression(
-        C=0.5, l1_ratio=0, random_state=42, solver='lbfgs'
+        penalty='l2', C=0.5, random_state=42, solver='lbfgs'
     ).fit(np.hstack(y_score_list), y_true)
 
     weights = meta_model.coef_[0]
@@ -63,7 +63,10 @@ def aggregate(
     return recorder.record((time, y_true, y_score, {}))
 
 
-def record_simple(recorder: Recorder, outer_recorders: dict[str, Recorder]) -> None:
+def record_simple(
+    fold: int, recorder: Recorder, outer_recorders: dict[str, Recorder]
+) -> None:
+    logger.info(f'[bold green]Simple Average (Fold {fold}):', extra={'markup': True})
     logger.info(aggregate(recorder, outer_recorders))
 
 
@@ -75,9 +78,10 @@ def record_weighted(
 ) -> None:
     weights = []
     for name, child in inner_recorders.items():
-        finish = child.finish()
+        finish = child.finish(calc_ci=False)
         weights.append(finish.final.f1)
         finish.log(f'{name}_{fold}')
+    logger.info(f'[bold green]Weighted Average (Fold {fold}):', extra={'markup': True})
     logger.info(aggregate(recorder, outer_recorders, weights=weights))
 
 
@@ -88,4 +92,5 @@ def record_stacking(
     outer_recorders: dict[str, Recorder],
 ) -> None:
     meta_model = get_meta_model(fold, inner_recorders)
+    logger.info(f'[bold green]Stacking (Fold {fold}):', extra={'markup': True})
     logger.info(aggregate(recorder, outer_recorders, meta_model=meta_model))

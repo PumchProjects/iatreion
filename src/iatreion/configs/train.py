@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from cyclopts import Parameter
-from cyclopts.types import Directory
+from cyclopts.types import Directory, PositiveInt
+from cyclopts.validators import Number
 
 from iatreion.utils import (
     add_file_handler,
@@ -98,6 +99,14 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     plot_roc: Annotated[bool, Parameter(negative=None)] = True
     'Plot ROC curve.'
+
+    bootstrap_samples: Annotated[PositiveInt, Parameter(alias='-nbs')] = 1000
+    'Number of bootstrap resamples used to estimate confidence intervals.'
+
+    ci_level: Annotated[
+        float, Parameter(validator=Number(gt=0, lt=1), alias='-cil')
+    ] = 0.95
+    'Confidence level in (0, 1) for bootstrap confidence intervals.'
 
     log_root: Directory = Path('logs')
     'Root directory for logs.'

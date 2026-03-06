@@ -4,7 +4,7 @@ from itertools import groupby
 
 from iatreion.configs import ModelConfig
 from iatreion.rrl import TrainStepContext, get_train_iterator
-from iatreion.utils import logger, progress, task
+from iatreion.utils import logger, task
 
 from .recorder import Recorder, TrainerReturn
 from .utils import record_simple, record_stacking, record_weighted
@@ -28,12 +28,9 @@ class Trainer(ABC):
         stacking_recorder = Recorder(self.train_config)
         outer_recorders = defaultdict(lambda: Recorder(self.train_config))
 
-        with (
-            progress,
-            task(
-                'Fold:', self.train_config.n_folds, not self.train_config.final
-            ) as fold_advance,
-        ):
+        with task(
+            'Fold:', self.train_config.n_folds, not self.train_config.final
+        ) as fold_advance:
             for outer_fold, outer_group in groupby(
                 iterator, lambda ctx: ctx.outer_fold
             ):
@@ -65,7 +62,7 @@ class Trainer(ABC):
                 if self.train_config.final:
                     continue
                 if self.train_config.aggregate != 'concat':
-                    record_simple(simple_recorder, outer_recorders)
+                    record_simple(outer_fold, simple_recorder, outer_recorders)
                 if self.train_config.aggregate == 'stack':
                     record_weighted(
                         outer_fold, weighted_recorder, inner_recorders, outer_recorders
@@ -75,8 +72,10 @@ class Trainer(ABC):
                     )
 
         if not self.train_config.final:
-            for name, outer_recorder in outer_recorders.items():
-                outer_recorder.finish().log(name)
+            with task('Data:', len(outer_recorders)) as outer_advance:
+                for name, outer_recorder in outer_recorders.items():
+                    outer_recorder.finish().log(name)
+                    outer_advance()
             if self.train_config.aggregate != 'concat':
                 simple_recorder.finish().log('all_simple_average')
             if self.train_config.aggregate == 'stack':

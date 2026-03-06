@@ -5,7 +5,7 @@ import torch.nn as nn
 from sklearn import metrics
 from collections import defaultdict
 
-from iatreion.utils import logger, progress
+from iatreion.utils import logger
 
 from .components import BinarizeLayer
 from .components import UnionLayer, LRLayer
@@ -141,7 +141,7 @@ class RRL:
             param_group['lr'] = lr
         return optimizer
 
-    def train_model(self, data_loader=None, valid_loader=None, epoch=50, lr=0.01, lr_decay_epoch=100, 
+    def train_model(self, epoch_advance=None, data_loader=None, valid_loader=None, epoch=50, lr=0.01, lr_decay_epoch=100, 
                     lr_decay_rate=0.75, weight_decay=0.0, class_weights=None, log_iter=50, save_interval=100,
                     early_stop_patience=None, early_stop_min_delta=0.0, label_smoothing=0.0, max_grad_norm=5.0):
 
@@ -164,7 +164,6 @@ class RRL:
         no_improve_checks = 0
         use_early_stop = valid_loader is not None and early_stop_patience is not None and early_stop_patience > 0
         early_stopped = False
-        epoch_task = progress.add_task('Epoch:', total=epoch)
         for epo in range(epoch):
             optimizer = self.exp_lr_scheduler(optimizer, epo, init_lr=lr, lr_decay_rate=lr_decay_rate,
                                               lr_decay_epoch=lr_decay_epoch)
@@ -262,7 +261,7 @@ class RRL:
                 self.writer.add_scalar('Abs_Gradient_Max', abs_gradient_max, epo)
                 self.writer.add_scalar('Abs_Gradient_Avg', abs_gradient_avg / ba_cnt, epo)
 
-            progress.update(epoch_task, advance=1)
+            epoch_advance()
             if early_stopped:
                 break
 
@@ -272,7 +271,6 @@ class RRL:
             self.best_loss = epoch_loss_rrl / max(ba_cnt, 1)
             self.save_model(1.0 - acc_b, f1_b)
 
-        progress.remove_task(epoch_task)
         return epoch_histc
 
     @torch.no_grad()

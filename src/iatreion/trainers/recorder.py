@@ -1,3 +1,4 @@
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 import matplotlib.pyplot as plt
@@ -15,7 +16,7 @@ from sklearn.metrics import (
 )
 
 from iatreion.configs import TrainConfig
-from iatreion.utils import logger
+from iatreion.utils import logger, task
 
 type TrainerReturn = tuple[
     float, NDArray, NDArray, dict[str, float | tuple[float, str]]
@@ -23,34 +24,77 @@ type TrainerReturn = tuple[
 
 
 @dataclass
-class Record[T]:
-    time: T
-    auc: T
-    acc: T
-    precision: T
-    recall: T
-    f1: T
-    sensitivity: T
-    specificity: T
-    complexity: dict[str, tuple[T, str]] = field(default_factory=dict)
+class RunningRecord:
+    time: list[float] = field(default_factory=list)
+    metrics: defaultdict[str, list[float]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
+    complexity: dict[str, tuple[list[float], str]] = field(default_factory=dict)
     cm: NDArray | None = None
-    weights: list[T] | None = None
-    bias: T | None = None
+    weights: list[list[float]] | None = None
+    bias: list[float] | None = None
+
+
+@dataclass
+class FinalRecord:
+    time: float
+    metrics: dict[str, float]
+    complexity: dict[str, tuple[float, str]]
+    cm: NDArray | None = None
+    weights: list[float] | None = None
+    bias: float | None = None
+
+    @property
+    def auc(self) -> float:
+        return self.metrics['AUC']
+
+    @property
+    def acc(self) -> float:
+        return self.metrics['ACC']
+
+    @property
+    def precision(self) -> float:
+        return self.metrics['P']
+
+    @property
+    def recall(self) -> float:
+        return self.metrics['R']
+
+    @property
+    def f1(self) -> float:
+        return self.metrics['F1']
+
+    @property
+    def sensitivity(self) -> float:
+        return self.metrics.get('SEN', np.nan)
+
+    @property
+    def specificity(self) -> float:
+        return self.metrics.get('SPC', np.nan)
 
 
 @dataclass
 class Finish:
     config: TrainConfig
     result: str
-    final: Record[float]
+    ci_result: str
+    final: FinalRecord
     roc: Figure | None = None
 
     def log(self, name: str) -> None:
-        with self.config.logging(f'train_{name}'):
+        display_name = name.removeprefix('all_').replace('_', ' ').title()
+        if display_name[-1].isdigit():
+            prefix, fold = display_name.rsplit(maxsplit=1)
+            display_name = f'{prefix} (Fold {fold})'
+        logger.info(f'[bold green]Finished {display_name}:', extra={'markup': True})
+        with self.config.logging(f'train_avg_{name}'):
             logger.info(self.result)
+        with self.config.logging(f'train_ci_{name}'):
+            logger.info(self.ci_result)
         if self.roc is not None:
             self.roc.savefig(self.config.get_roc_file(f'roc_{name}'), dpi=300)
         if self.final.weights is not None and self.final.bias is not None:
+            logger.info('[bold green]Weights & Bias:', extra={'markup': True})
             with self.config.logging(f'weights_{name}'):
                 for weight in self.final.weights:
                     logger.info(f'{weight:.4f}')
@@ -143,90 +187,302 @@ class RecordROC:
             title='Mean ROC curve with cross validation',
         )
         self.ax.legend(loc='lower right')
-        self.fig.tight_layout()
 
         return mean_auc, self.fig
+
+
+class RecordFormatter:
+    @staticmethod
+    def _format_percentage(value: float) -> str:
+        return 'nan' if np.isnan(value) else f'{value:.2%}'
+
+    def _format_metrics(self, metrics: dict[str, float], width: int) -> list[str]:
+        return [
+            f'{metric:{width}} {self._format_percentage(value)}\n'
+            for metric, value in metrics.items()
+        ]
+
+    @staticmethod
+    def _format_complexity(
+        complexity: dict[str, tuple[float, str]], width: int
+    ) -> list[str]:
+        return [
+            f'{key:{width}} {value:{fmt}}\n' for key, (value, fmt) in complexity.items()
+        ]
+
+    def _format_mean_std(
+        self, mean_std: dict[str, tuple[float, float]], width: int
+    ) -> list[str]:
+        return [
+            f'{metric:{width}} {self._format_percentage(mean)} '
+            f'± {self._format_percentage(std)}\n'
+            for metric, (mean, std) in mean_std.items()
+        ]
+
+    def _format_bootstrap_ci(
+        self, ci: dict[str, tuple[float, float, float]], width: int
+    ) -> list[str]:
+        return [
+            f'{metric:{width}} {self._format_percentage(point)} '
+            f'[{self._format_percentage(lower)}, {self._format_percentage(upper)}]\n'
+            for metric, (point, lower, upper) in ci.items()
+        ]
+
+    def _format_time(self, time: float, width: int) -> str:
+        return f'{"Time":{width}} {time:.3f}s'
+
+    def _format(
+        self,
+        cm: NDArray,
+        complexity: dict[str, tuple[float, str]],
+        training_time: float,
+        width: int,
+        *metrics_lines: str,
+    ) -> str:
+        result_lines = [
+            f'Confusion matrix:\n{cm}\n',
+            *metrics_lines,
+            *self._format_complexity(complexity, width),
+            self._format_time(training_time, width),
+        ]
+        return ''.join(result_lines)
+
+    def format_fold(
+        self,
+        *,
+        cm: NDArray,
+        metrics: dict[str, float],
+        complexity: dict[str, tuple[float, str]],
+        training_time: float,
+        width: int,
+    ) -> str:
+        return self._format(
+            cm, complexity, training_time, width, *self._format_metrics(metrics, width)
+        )
+
+    def format_final_avg(
+        self,
+        *,
+        final: FinalRecord,
+        mean_std: dict[str, tuple[float, float]],
+        auc: float | None,
+        width: int,
+    ) -> str:
+        return self._format(
+            final.cm,
+            final.complexity,
+            final.time,
+            width,
+            '' if auc is None else f'Interpolated AUC {self._format_percentage(auc)}\n',
+            *self._format_mean_std(mean_std, width),
+        )
+
+    def format_final_ci(
+        self,
+        *,
+        final: FinalRecord,
+        ci: dict[str, tuple[float, float, float]],
+        width: int,
+    ) -> str:
+        return self._format(
+            final.cm,
+            final.complexity,
+            final.time,
+            width,
+            *self._format_bootstrap_ci(ci, width),
+        )
+
+    def format_final_metrics(self, *, final: FinalRecord, width: int) -> str:
+        return self._format(
+            final.cm,
+            final.complexity,
+            final.time,
+            width,
+            *self._format_metrics(final.metrics, width),
+        )
 
 
 class Recorder:
     def __init__(self, config: TrainConfig, *, is_inner: bool = False) -> None:
         self.config = config
-        self.result = Record[list[float]](*([] for _ in range(8)))  # type: ignore
         self.roc = RecordROC(config, is_inner=is_inner)
         self.calc_sen_and_spc = config.num_class == 2
+        self.result = RunningRecord()
+        self.formatter = RecordFormatter()
         self.y_true_all: list[NDArray] = []
         self.y_score_all: list[NDArray] = []
 
-    def record(self, results: TrainerReturn) -> str:
-        training_time, y_true, y_score, complexity = results
-        self.y_true_all.append(y_true)
-        self.y_score_all.append(y_score)
-        self.result.time.append(training_time)
+    def _get_labels(self) -> list[int]:
+        return list(range(self.config.num_class))
+
+    @staticmethod
+    def _predict_from_score(y_score: NDArray) -> tuple[NDArray, NDArray]:
         y_pred = y_score.argmax(axis=1)
-        labels = list(range(self.config.num_class))
-        cm = confusion_matrix(y_true, y_pred, labels=labels)
-        if self.result.cm is None:
-            self.result.cm = cm
-        else:
-            self.result.cm += cm
         y_pos_score = y_score[:, 1] if y_score.shape[1] >= 2 else y_score.squeeze()
-        self.result.auc.append(
-            self.roc.record(y_true, y_pos_score)
-            if self.config.plot_roc
-            else roc_auc_score(
+        return y_pred, y_pos_score
+
+    def _calc_auc(
+        self, y_true: NDArray, y_score: NDArray, y_pos_score: NDArray, labels: list[int]
+    ) -> float:
+        try:
+            return roc_auc_score(
                 y_true,
                 y_pos_score if self.config.num_class <= 2 else y_score,
                 average='macro',
                 multi_class='ovr',
                 labels=labels,
             )
-        )
-        self.result.acc.append(accuracy_score(y_true, y_pred))
+        except ValueError:
+            return np.nan
+
+    def _calc_metrics(
+        self, y_true: NDArray, y_pred: NDArray, auc: float, labels: list[int]
+    ) -> dict[str, float]:
         precision, recall, f1, _ = precision_recall_fscore_support(
             y_true, y_pred, labels=labels, average='macro', zero_division=np.nan
         )
-        self.result.precision.append(precision)
-        self.result.recall.append(recall)
-        self.result.f1.append(f1)
+        metrics = {
+            'AUC': auc,
+            'ACC': accuracy_score(y_true, y_pred),
+            'P': precision,
+            'R': recall,
+            'F1': f1,
+        }
         if self.calc_sen_and_spc:
-            self.result.sensitivity.append(
-                recall_score(
-                    y_true, y_pred, labels=labels, pos_label=0, zero_division=np.nan
-                )
+            metrics['SEN'] = recall_score(
+                y_true, y_pred, labels=labels, pos_label=0, zero_division=np.nan
             )
-            self.result.specificity.append(
-                recall_score(
-                    y_true, y_pred, labels=labels, pos_label=1, zero_division=np.nan
-                )
+            metrics['SPC'] = recall_score(
+                y_true, y_pred, labels=labels, pos_label=1, zero_division=np.nan
             )
+        return metrics
+
+    def _calc_metrics_from_prediction(
+        self, y_true: NDArray, y_score: NDArray
+    ) -> dict[str, float]:
+        labels = self._get_labels()
+        y_pred, y_pos_score = self._predict_from_score(y_score)
+        auc = self._calc_auc(y_true, y_score, y_pos_score, labels)
+        return self._calc_metrics(y_true, y_pred, auc, labels)
+
+    def _append_fold_metrics(self, metrics: dict[str, float]) -> None:
+        for metric, value in metrics.items():
+            self.result.metrics[metric].append(value)
+
+    def _record_complexity(
+        self, complexity: dict[str, float | tuple[float, str]]
+    ) -> tuple[dict[str, tuple[float, str]], int]:
         width = 4
-        for key, value in complexity.items():
-            if isinstance(value, tuple):
-                value, fmt = value
-            else:
-                fmt = '.4f'
+        com = {
+            key: value if isinstance(value, tuple) else (value, '.4f')
+            for key, value in complexity.items()
+        }
+        for key, (value, fmt) in com.items():
             self.result.complexity.setdefault(key, ([], fmt))[0].append(value)
             width = max(width, len(key))
-        result_lines = [
-            f'Confusion matrix:\n{cm}\n',
-            f'{"AUC":{width}} {self.result.auc[-1]:.2%}\n',
-            f'{"ACC":{width}} {self.result.acc[-1]:.2%}\n',
-            f'{"P":{width}} {self.result.precision[-1]:.2%}\n',
-            f'{"R":{width}} {self.result.recall[-1]:.2%}\n',
-            f'{"F1":{width}} {self.result.f1[-1]:.2%}\n',
-            f'{"SEN":{width}} {self.result.sensitivity[-1]:.2%}\n'
-            if self.calc_sen_and_spc
-            else '',
-            f'{"SPC":{width}} {self.result.specificity[-1]:.2%}\n'
-            if self.calc_sen_and_spc
-            else '',
-            *(
-                f'{key:{width}} {values[-1]:{fmt}}\n'
-                for key, (values, fmt) in self.result.complexity.items()
-            ),
-            f'{"Time":{width}} {training_time:.3f}s',
-        ]
-        return ''.join(result_lines)
+        return com, width
+
+    def _update_confusion_matrix(self, cm: NDArray) -> None:
+        if self.result.cm is None:
+            self.result.cm = cm
+        else:
+            self.result.cm += cm
+
+    def _summarize_complexity(self) -> tuple[dict[str, tuple[float, str]], int]:
+        complexity: dict[str, tuple[float, str]] = {}
+        width = 4
+        for key, (values, fmt) in self.result.complexity.items():
+            complexity[key] = (np.nanmean(values).item(), fmt)
+            width = max(width, len(key))
+        return complexity, width
+
+    def _summarize_fold_metrics(self) -> dict[str, tuple[float, float]]:
+        mean_std: dict[str, tuple[float, float]] = {}
+        for metric, values in self.result.metrics.items():
+            arr = np.asarray(values, dtype=float)
+            mean_std[metric] = (np.nanmean(arr).item(), np.nanstd(arr).item())
+        return mean_std
+
+    def _build_final_record(
+        self,
+        complexity: dict[str, tuple[float, str]],
+        point_estimates: dict[str, float],
+    ) -> FinalRecord:
+        return FinalRecord(
+            np.mean(self.result.time).item(),
+            point_estimates,
+            complexity,
+            self.result.cm,
+            None
+            if self.result.weights is None
+            else np.mean(self.result.weights, axis=0).tolist(),
+            None if self.result.bias is None else np.mean(self.result.bias).item(),
+        )
+
+    def _calc_bootstrap_ci(
+        self, y_true: NDArray, y_score: NDArray, point_estimates: dict[str, float]
+    ) -> dict[str, tuple[float, float, float]]:
+        sample_count = y_true.shape[0]
+        if sample_count == 0:
+            return point_estimates, {
+                metric: (value, np.nan, np.nan)
+                for metric, value in point_estimates.items()
+            }
+
+        rng = np.random.default_rng(self.config.seed)
+        metric_samples = {metric: [] for metric in point_estimates}
+        index = np.arange(sample_count)
+        with task('Bootstrap:', self.config.bootstrap_samples) as bootstrap_advance:
+            for _ in range(self.config.bootstrap_samples):
+                sampled_index = rng.choice(index, size=sample_count, replace=True)
+                sampled_metrics = self._calc_metrics_from_prediction(
+                    y_true[sampled_index], y_score[sampled_index]
+                )
+                for metric, value in sampled_metrics.items():
+                    metric_samples[metric].append(value)
+                bootstrap_advance()
+
+        alpha = 1 - self.config.ci_level
+        q_lower = 100 * alpha / 2
+        q_upper = 100 * (1 - alpha / 2)
+        ci: dict[str, tuple[float, float, float]] = {}
+        for metric, point in point_estimates.items():
+            values = np.asarray(metric_samples[metric], dtype=float)
+            if np.isnan(values).all():
+                ci[metric] = (point, np.nan, np.nan)
+                continue
+            ci[metric] = (
+                point,
+                np.nanpercentile(values, q_lower).item(),
+                np.nanpercentile(values, q_upper).item(),
+            )
+        return ci
+
+    def record(self, results: TrainerReturn) -> str:
+        training_time, y_true, y_score, complexity = results
+        self.y_true_all.append(y_true)
+        self.y_score_all.append(y_score)
+        self.result.time.append(training_time)
+
+        labels = self._get_labels()
+        y_pred, y_pos_score = self._predict_from_score(y_score)
+        cm = confusion_matrix(y_true, y_pred, labels=labels)
+        self._update_confusion_matrix(cm)
+        fold_auc = (
+            self.roc.record(y_true, y_pos_score)
+            if self.config.plot_roc
+            else self._calc_auc(y_true, y_score, y_pos_score, labels)
+        )
+        metrics = self._calc_metrics(y_true, y_pred, fold_auc, labels)
+        self._append_fold_metrics(metrics)
+        com, width = self._record_complexity(complexity)
+        return self.formatter.format_fold(
+            cm=cm,
+            metrics=metrics,
+            complexity=com,
+            training_time=training_time,
+            width=width,
+        )
 
     def record_weights_and_bias(self, weights: list[float], bias: float) -> None:
         if self.result.weights is None:
@@ -236,47 +492,20 @@ class Recorder:
         self.result.weights.append(weights)
         self.result.bias.append(bias)
 
-    def finish(self) -> Finish:
-        complexity: dict[str, tuple[float, str]] = {}
-        width = 4
-        for key, (values, fmt) in self.result.complexity.items():
-            complexity[key] = (np.nanmean(values).item(), fmt)
-            width = max(width, len(key))
-        final = Record(
-            np.mean(self.result.time).item(),
-            np.nanmean(self.result.auc).item(),
-            np.mean(self.result.acc).item(),
-            np.nanmean(self.result.precision).item(),
-            np.nanmean(self.result.recall).item(),
-            np.nanmean(self.result.f1).item(),
-            np.nanmean(self.result.sensitivity).item(),
-            np.nanmean(self.result.specificity).item(),
-            complexity,
-            self.result.cm,
-            None
-            if self.result.weights is None
-            else np.mean(self.result.weights, axis=0).tolist(),
-            None if self.result.bias is None else np.mean(self.result.bias).item(),
+    def finish(self, *, calc_ci: bool = True) -> Finish:
+        complexity, width = self._summarize_complexity()
+        mean_std = self._summarize_fold_metrics()
+        y_true_all = np.concatenate(self.y_true_all)
+        y_score_all = np.concatenate(self.y_score_all)
+        point_estimates = self._calc_metrics_from_prediction(y_true_all, y_score_all)
+        final = self._build_final_record(complexity, point_estimates)
+        auc, roc = self.roc.finish() if self.config.plot_roc else (None, None)
+        result = self.formatter.format_final_avg(
+            final=final, mean_std=mean_std, auc=auc, width=width
         )
-        auc, roc = self.roc.finish() if self.config.plot_roc else (0.0, None)
-        result_lines = [
-            f'Confusion matrix:\n{final.cm}\n',
-            f'INT {"AUC":{width}} {auc:.2%}\n' if self.config.plot_roc else '',
-            f'AVG {"AUC":{width}} {final.auc:.2%}\n',
-            f'AVG {"ACC":{width}} {final.acc:.2%}\n',
-            f'AVG {"P":{width}} {final.precision:.2%}\n',
-            f'AVG {"R":{width}} {final.recall:.2%}\n',
-            f'AVG {"F1":{width}} {final.f1:.2%}\n',
-            f'AVG {"SEN":{width}} {final.sensitivity:.2%}\n'
-            if self.calc_sen_and_spc
-            else '',
-            f'AVG {"SPC":{width}} {final.specificity:.2%}\n'
-            if self.calc_sen_and_spc
-            else '',
-            *(
-                f'AVG {key:{width}} {value:{fmt}}\n'
-                for key, (value, fmt) in complexity.items()
-            ),
-            f'AVG {"Time":{width}} {final.time:.3f}s',
-        ]
-        return Finish(self.config, ''.join(result_lines), final, roc)
+        if calc_ci:
+            ci = self._calc_bootstrap_ci(y_true_all, y_score_all, point_estimates)
+            ci_result = self.formatter.format_final_ci(final=final, ci=ci, width=width)
+        else:
+            ci_result = self.formatter.format_final_metrics(final=final, width=width)
+        return Finish(self.config, result, ci_result, final, roc)

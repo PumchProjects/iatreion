@@ -20,13 +20,15 @@ from iatreion.models import (
     XgboostModel,
 )
 from iatreion.trainers import ModelTrainer
+from iatreion.utils import progress
 
 sub_app = App(name='train', help='Train a model.', sort_key=1)
 counter = count()
 
 
 def train(config: ModelConfig, model: Model) -> None:
-    ModelTrainer(config, model).train()
+    with progress:
+        ModelTrainer(config, model).train()
 
 
 @sub_app.command(sort_key=next(counter))
@@ -34,7 +36,8 @@ def rrl(*, config: RrlConfig) -> None:
     """Train an RRL model."""
     from iatreion.trainers.rrl import RrlTrainer
 
-    RrlTrainer(config).train()
+    with progress:
+        RrlTrainer(config).train()
 
 
 @sub_app.command(sort_key=next(counter))
