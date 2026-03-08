@@ -291,7 +291,7 @@ class DBEncoder:
 class TrainStepContext:
     outer_fold: int
     inner_fold: int
-    last: bool
+    is_inner: bool
     name: str
 
     db_enc: DBEncoder
@@ -384,9 +384,9 @@ def get_train_iterator(
             inner_splitter = [(train_outer, test_outer)]
 
         for inner_fold, (train_inner, test_inner) in enumerate(inner_splitter):
-            last = (
-                train.aggregate != 'stack'
-                or inner_fold == train.n_inner_splits * train.n_inner_repeats
+            is_inner = (
+                train.aggregate == 'stack'
+                and inner_fold < train.n_inner_splits * train.n_inner_repeats
             )
 
             if train.aggregate == 'concat':
@@ -411,7 +411,7 @@ def get_train_iterator(
                 yield TrainStepContext(
                     outer_fold=outer_fold,
                     inner_fold=inner_fold,
-                    last=last,
+                    is_inner=is_inner,
                     name=name,
                     db_enc=db_enc,
                     train_data=db_enc.fit_transform(X_train, y_train),

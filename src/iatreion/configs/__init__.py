@@ -8,5 +8,7 @@ from .model_tabpfn import TabPFNConfig
 from .model_xgb import XgboostConfig
 from .preprocessor import PreprocessorConfig, name_data_mapping
 from .rrl_eval import RrlEvalConfig
-from .show import ShowConfig
+from .show_base import ShowConfig
+from .show_data import ShowDataConfig
+from .show_result import ShowResultConfig
 from .train import TrainConfig

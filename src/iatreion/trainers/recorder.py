@@ -26,6 +26,8 @@ type TrainerReturn = tuple[
 @dataclass
 class RunningRecord:
     time: list[float] = field(default_factory=list)
+    y_true_all: list[NDArray] = field(default_factory=list)
+    y_score_all: list[NDArray] = field(default_factory=list)
     metrics: defaultdict[str, list[float]] = field(
         default_factory=lambda: defaultdict(list)
     )
@@ -38,6 +40,8 @@ class RunningRecord:
 @dataclass
 class FinalRecord:
     time: float
+    y_true: NDArray
+    y_score: NDArray
     metrics: dict[str, float]
     complexity: dict[str, tuple[float, str]]
     cm: NDArray | None = None
@@ -78,6 +82,7 @@ class Finish:
     config: TrainConfig
     result: str
     ci_result: str
+    running: RunningRecord
     final: FinalRecord
     roc: Figure | None = None
 
@@ -87,18 +92,23 @@ class Finish:
             prefix, fold = display_name.rsplit(maxsplit=1)
             display_name = f'{prefix} (Fold {fold})'
         logger.info(f'[bold green]Finished {display_name}:', extra={'markup': True})
-        with self.config.logging(f'train_avg_{name}'):
+        with self.config.logging(self.config.get_avg_log_file(name)):
             logger.info(self.result)
-        with self.config.logging(f'train_ci_{name}'):
+        with self.config.logging(self.config.get_ci_log_file(name)):
             logger.info(self.ci_result)
+        np.savez_compressed(
+            self.config.get_results_file(name),
+            y_true=self.final.y_true,
+            y_score=self.final.y_score,
+            **{metric: np.array(vals) for metric, vals in self.running.metrics.items()},
+        )
         if self.roc is not None:
-            self.roc.savefig(self.config.get_roc_file(f'roc_{name}'), dpi=300)
+            self.roc.savefig(self.config.get_roc_file(name), dpi=300)
         if self.final.weights is not None and self.final.bias is not None:
-            logger.info('[bold green]Weights & Bias:', extra={'markup': True})
             with self.config.logging(f'weights_{name}'):
                 for weight in self.final.weights:
-                    logger.info(f'{weight:.4f}')
-                logger.info(f'{self.final.bias:.4f}')
+                    logger.debug(f'{weight:.4f}')
+                logger.debug(f'{self.final.bias:.4f}')
 
 
 class RecordROC:
@@ -309,8 +319,6 @@ class Recorder:
         self.calc_sen_and_spc = config.num_class == 2
         self.result = RunningRecord()
         self.formatter = RecordFormatter()
-        self.y_true_all: list[NDArray] = []
-        self.y_score_all: list[NDArray] = []
 
     def _get_labels(self) -> list[int]:
         return list(range(self.config.num_class))
@@ -406,10 +414,14 @@ class Recorder:
     def _build_final_record(
         self,
         complexity: dict[str, tuple[float, str]],
+        y_true: NDArray,
+        y_score: NDArray,
         point_estimates: dict[str, float],
     ) -> FinalRecord:
         return FinalRecord(
             np.mean(self.result.time).item(),
+            y_true,
+            y_score,
             point_estimates,
             complexity,
             self.result.cm,
@@ -424,7 +436,7 @@ class Recorder:
     ) -> dict[str, tuple[float, float, float]]:
         sample_count = y_true.shape[0]
         if sample_count == 0:
-            return point_estimates, {
+            return {
                 metric: (value, np.nan, np.nan)
                 for metric, value in point_estimates.items()
             }
@@ -460,8 +472,8 @@ class Recorder:
 
     def record(self, results: TrainerReturn) -> str:
         training_time, y_true, y_score, complexity = results
-        self.y_true_all.append(y_true)
-        self.y_score_all.append(y_score)
+        self.result.y_true_all.append(y_true)
+        self.result.y_score_all.append(y_score)
         self.result.time.append(training_time)
 
         labels = self._get_labels()
@@ -495,17 +507,17 @@ class Recorder:
     def finish(self, *, calc_ci: bool = True) -> Finish:
         complexity, width = self._summarize_complexity()
         mean_std = self._summarize_fold_metrics()
-        y_true_all = np.concatenate(self.y_true_all)
-        y_score_all = np.concatenate(self.y_score_all)
-        point_estimates = self._calc_metrics_from_prediction(y_true_all, y_score_all)
-        final = self._build_final_record(complexity, point_estimates)
+        y_true = np.concatenate(self.result.y_true_all)
+        y_score = np.concatenate(self.result.y_score_all)
+        point_estimates = self._calc_metrics_from_prediction(y_true, y_score)
+        final = self._build_final_record(complexity, y_true, y_score, point_estimates)
         auc, roc = self.roc.finish() if self.config.plot_roc else (None, None)
         result = self.formatter.format_final_avg(
             final=final, mean_std=mean_std, auc=auc, width=width
         )
         if calc_ci:
-            ci = self._calc_bootstrap_ci(y_true_all, y_score_all, point_estimates)
+            ci = self._calc_bootstrap_ci(y_true, y_score, point_estimates)
             ci_result = self.formatter.format_final_ci(final=final, ci=ci, width=width)
         else:
             ci_result = self.formatter.format_final_metrics(final=final, width=width)
-        return Finish(self.config, result, ci_result, final, roc)
+        return Finish(self.config, result, ci_result, self.result, final, roc)

@@ -211,12 +211,22 @@ For discrete RRL, validation set is used for optimization when val_size is set.
         self.set_groups()
 
     @contextmanager
-    def logging(self, name: str) -> Generator[None, None, None]:
-        handler = add_file_handler(self._log_dir / f'{name}.log', format=False)
+    def logging(self, name: str | Path) -> Generator[None, None, None]:
+        filename = name if isinstance(name, Path) else self._log_dir / f'{name}.log'
+        handler = add_file_handler(filename, format=False)
         try:
             yield
         finally:
             remove_file_handler(handler)
 
+    def get_avg_log_file(self, name: str) -> Path:
+        return self._log_dir / f'train_avg_{name}.log'
+
+    def get_ci_log_file(self, name: str) -> Path:
+        return self._log_dir / f'train_ci_{name}.log'
+
+    def get_results_file(self, name: str) -> Path:
+        return self._log_dir / f'results_{name}.npz'
+
     def get_roc_file(self, name: str) -> Path:
-        return self._log_dir / f'{name}.png'
+        return self._log_dir / f'roc_{name}.png'

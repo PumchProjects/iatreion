@@ -7,7 +7,7 @@ from iatreion.rrl import TrainStepContext, get_train_iterator
 from iatreion.utils import logger, task
 
 from .recorder import Recorder, TrainerReturn
-from .utils import record_simple, record_stacking, record_weighted
+from .utils import record_simple, record_weighted_and_stacking
 
 
 class Trainer(ABC):
@@ -50,10 +50,10 @@ class Trainer(ABC):
                                 continue
 
                             results = self.train_step(ctx)
-                            if ctx.last:
-                                logger.info(outer_recorders[ctx.name].record(results))
-                            else:
+                            if ctx.is_inner:
                                 logger.info(inner_recorders[ctx.name].record(results))
+                            else:
+                                logger.info(outer_recorders[ctx.name].record(results))
 
                             data_advance()
 
@@ -64,11 +64,12 @@ class Trainer(ABC):
                 if self.train_config.aggregate != 'concat':
                     record_simple(outer_fold, simple_recorder, outer_recorders)
                 if self.train_config.aggregate == 'stack':
-                    record_weighted(
-                        outer_fold, weighted_recorder, inner_recorders, outer_recorders
-                    )
-                    record_stacking(
-                        outer_fold, stacking_recorder, inner_recorders, outer_recorders
+                    record_weighted_and_stacking(
+                        outer_fold,
+                        weighted_recorder,
+                        stacking_recorder,
+                        inner_recorders,
+                        outer_recorders,
                     )
 
         if not self.train_config.final:

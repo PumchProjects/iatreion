@@ -5,7 +5,7 @@ import seaborn as sns
 from matplotlib.figure import Figure
 from tableone import TableOne
 
-from iatreion.configs import ShowConfig
+from iatreion.configs import ShowConfig, ShowDataConfig
 from iatreion.rrl import merge_data, read_data
 
 group_mapping: dict[str, str] = {
@@ -27,7 +27,7 @@ group_mapping: dict[str, str] = {
 color_mapping: dict[str, str] = {'Female': '#ff7fa7', 'Male': '#7fc4fc'}
 
 
-def get_data(config: ShowConfig) -> tuple[pd.DataFrame, list[str]]:
+def get_data(config: ShowDataConfig) -> tuple[pd.DataFrame, list[str]]:
     dataset, train = config.make_configs()
     X_dfs, y_dfs, _, f_dfs = read_data(dataset, train)
     X_df, y_df, _ = merge_data(X_dfs, y_dfs, f_dfs)
@@ -54,7 +54,7 @@ def get_data(config: ShowConfig) -> tuple[pd.DataFrame, list[str]]:
     return data, groups
 
 
-def make_table_1(config: ShowConfig) -> TableOne:
+def make_table_1(config: ShowDataConfig) -> TableOne:
     data, groups = get_data(config)
     table = TableOne(
         data,
@@ -77,7 +77,7 @@ def make_table_1(config: ShowConfig) -> TableOne:
     return table
 
 
-def violin(config: ShowConfig, name: str, title: str | None = None) -> Figure:
+def violin(config: ShowDataConfig, name: str, title: str | None = None) -> Figure:
     title = title or name
     data, groups = get_data(config)
     fig, ax = plt.subplots(figsize=(10, 6), layout='constrained')
@@ -101,7 +101,7 @@ def violin(config: ShowConfig, name: str, title: str | None = None) -> Figure:
 
 
 def bar(
-    config: ShowConfig, name: str, categories: list[str], title: str | None = None
+    config: ShowDataConfig, name: str, categories: list[str], title: str | None = None
 ) -> Figure:
     title = title or name
     data, groups = get_data(config)
@@ -119,7 +119,7 @@ def bar(
     return fig
 
 
-def radar_chart(df: pd.DataFrame) -> Figure:
+def _radar(df: pd.DataFrame) -> Figure:
     categories = list(df)
     N = len(categories)
 
@@ -155,11 +155,26 @@ def radar_chart(df: pd.DataFrame) -> Figure:
     return fig
 
 
-def radar(config: ShowConfig, domains: list[str]) -> Figure:
+def radar(config: ShowDataConfig, domains: list[str]) -> Figure:
     data, groups = get_data(config)
     df = data.groupby('Label')[domains].mean()
     df = df.reindex(index=groups)
     df_max, df_min = df.max(), df.min()
     df = (df - df_min) / (df_max - df_min)
-    fig = radar_chart(df)
+    fig = _radar(df)
     return fig
+
+
+def save(
+    config: ShowConfig,
+    table: TableOne | pd.DataFrame | None = None,
+    fig: Figure | None = None,
+    **kw,
+) -> str:
+    if fig is not None:
+        fig.savefig(config.get_output_path('png'), dpi=300)
+    elif isinstance(table, TableOne):
+        table.to_latex(config.get_output_path('tex'), escape=True)
+    elif isinstance(table, pd.DataFrame):
+        table.to_latex(config.get_output_path('tex'), index=False, escape=True)
+    return table.to_string(**kw) if isinstance(table, pd.DataFrame) else str(table)
