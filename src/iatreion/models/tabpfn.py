@@ -1,4 +1,3 @@
-import json
 from typing import override
 
 from numpy.typing import NDArray
@@ -7,13 +6,14 @@ from tabpfn import TabPFNClassifier
 from iatreion.configs import TabPFNConfig
 from iatreion.rrl import TrainStepContext
 
-from .base import Model, ModelReturn
+from .base import Model
+from .importance import ImportanceScore, sample_importance_data
 
 
 class TabPFNModel(Model):
     def __init__(self, config: TabPFNConfig) -> None:
         super().__init__()
-        self.config = config
+        self.config: TabPFNConfig = config
         self.model = TabPFNClassifier(
             model_path=config.model_path,
             memory_saving_mode=False,
@@ -22,33 +22,30 @@ class TabPFNModel(Model):
         )
 
     @override
-    def fit(self, X: NDArray, y: NDArray) -> None:
+    def _fit(self, X: NDArray, y: NDArray) -> None:
         self.model.fit(X, y)
 
-    def calc_importance(self, ctx: TrainStepContext, X: NDArray) -> None:
+    @override
+    def _predict_proba(self, X: NDArray, y: NDArray) -> NDArray:
+        return self.model.predict_proba(X)
+
+    @override
+    def _calc_shap_importance(self, ctx: TrainStepContext) -> ImportanceScore:
         from tabpfn_extensions import interpretability
 
+        X_sample, _ = sample_importance_data(
+            *ctx.test_data,
+            max_samples=self.config.importance_max_samples,
+            seed=self.config.train.seed,
+        )
         feature_names = ctx.db_enc.X_fname
         shap_values = interpretability.shap.get_shap_values(
             estimator=self.model,
-            test_x=X,
+            test_x=X_sample,
             attribute_names=feature_names,
             algorithm='permutation',
             max_evals=2 * len(feature_names) + 1,
             seed=0,
         )
         importances = shap_values[:, :, 0].abs.mean(0).values
-        score = {name: importances[i].item() for i, name in enumerate(feature_names)}
-        score_file = (
-            self.config.train._log_dir
-            / f'score_{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.json'
-        )
-        with score_file.open('w', encoding='utf-8') as f:
-            json.dump(score, f, ensure_ascii=False, indent=4)
-
-    @override
-    def predict(self, ctx: TrainStepContext, X: NDArray, y: NDArray) -> ModelReturn:
-        y_score = self.model.predict_proba(X)
-        if self.config.calc_importance:
-            self.calc_importance(ctx, X)
-        return y_score, {}
+        return {name: float(importances[i]) for i, name in enumerate(feature_names)}

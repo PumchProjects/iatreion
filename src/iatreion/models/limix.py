@@ -6,18 +6,18 @@ import pandas as pd
 from numpy.typing import NDArray
 
 from iatreion.configs import LimiXConfig
-from iatreion.rrl import TrainStepContext
 from iatreion.utils import chdir
 
-from .base import Model, ModelReturn
+from .base import Model
 
 
 class LimiXModel(Model):
     def __init__(self, config: LimiXConfig) -> None:
         super().__init__()
-        self.config = config
+        self.config: LimiXConfig = config
+        self.num_class = config.train.num_class
 
-    def save_dataset(
+    def _save_dataset(
         self, X: NDArray, y: NDArray, mode: Literal['train', 'test']
     ) -> None:
         data = np.concatenate([X, y.reshape(-1, 1)], axis=1)
@@ -29,7 +29,7 @@ class LimiXModel(Model):
             case 'test':
                 df.to_csv(self.config.test_file, index=False)
 
-    def run_inference(self) -> None:
+    def _run_inference(self) -> None:
         cmd = [
             str(self.config.python_path),
             str(self.config.script_path),
@@ -44,19 +44,18 @@ class LimiXModel(Model):
         ]
         subprocess.run(cmd, check=True)
 
-    def get_score(self) -> NDArray:
+    def _get_score(self) -> NDArray:
         result_df = pd.read_csv(self.config.result_file)
         y_score = result_df.iloc[:, 1:].to_numpy()
         return y_score
 
     @override
-    def fit(self, X: NDArray, y: NDArray) -> None:
-        self.save_dataset(X, y, mode='train')
+    def _fit(self, X: NDArray, y: NDArray) -> None:
+        self._save_dataset(X, y, mode='train')
 
     @override
-    def predict(self, ctx: TrainStepContext, X: NDArray, y: NDArray) -> ModelReturn:
-        self.save_dataset(X, y, mode='test')
+    def _predict_proba(self, X: NDArray, y: NDArray) -> NDArray:
+        self._save_dataset(X, y, mode='test')
         with chdir(self.config.repo_path):
-            self.run_inference()
-        y_score = self.get_score()
-        return y_score, {}
+            self._run_inference()
+        return self._get_score()

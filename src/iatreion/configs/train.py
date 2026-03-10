@@ -228,5 +228,10 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     def get_results_file(self, name: str) -> Path:
         return self._log_dir / f'results_{name}.npz'
 
+    def get_importance_file(
+        self, name: str, outer_fold: int, inner_fold: int, *, method: str
+    ) -> Path:
+        return self._log_dir / f'score_{method}_{name}_{outer_fold}_{inner_fold}.json'
+
     def get_roc_file(self, name: str) -> Path:
         return self._log_dir / f'roc_{name}.png'

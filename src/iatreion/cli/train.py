@@ -6,7 +6,6 @@ from cyclopts import App
 from iatreion.configs import (
     DiscreteRrlConfig,
     LimiXConfig,
-    ModelConfig,
     RandomForestConfig,
     RrlConfig,
     TabPFNConfig,
@@ -26,18 +25,17 @@ sub_app = App(name='train', help='Train a model.', sort_key=1)
 counter = count()
 
 
-def train(config: ModelConfig, model: Model) -> None:
+def train(model: Model) -> None:
     with progress:
-        ModelTrainer(config, model).train()
+        ModelTrainer(model).train()
 
 
 @sub_app.command(sort_key=next(counter))
 def rrl(*, config: RrlConfig) -> None:
     """Train an RRL model."""
-    from iatreion.trainers.rrl import RrlTrainer
+    from iatreion.models.rrl import RrlModel
 
-    with progress:
-        RrlTrainer(config).train()
+    train(RrlModel(config))
 
 
 @sub_app.command(sort_key=next(counter))
@@ -51,13 +49,13 @@ def xgboost(*, config: XgboostConfig, **param: Any) -> None:
         for more details.
     """
     config._param = param
-    train(config, XgboostModel(config))
+    train(XgboostModel(config))
 
 
 @sub_app.command(sort_key=next(counter))
 def random_forest(*, config: RandomForestConfig) -> None:
     """Train a Random Forest model."""
-    train(config, RandomForestModel(config))
+    train(RandomForestModel(config))
 
 
 @sub_app.command(sort_key=next(counter))
@@ -65,16 +63,16 @@ def tabpfn(*, config: TabPFNConfig) -> None:
     """Train a TabPFN model."""
     from iatreion.models.tabpfn import TabPFNModel
 
-    train(config, TabPFNModel(config))
+    train(TabPFNModel(config))
 
 
 @sub_app.command(sort_key=next(counter))
 def limix(*, config: LimiXConfig) -> None:
     """Train a LimiX model."""
-    train(config, LimiXModel(config))
+    train(LimiXModel(config))
 
 
 @sub_app.command(sort_key=next(counter))
 def rrl_eval(*, config: DiscreteRrlConfig) -> None:
     """Evaluate trained RRL models."""
-    train(config, DiscreteRrlModel(config))
+    train(DiscreteRrlModel(config))

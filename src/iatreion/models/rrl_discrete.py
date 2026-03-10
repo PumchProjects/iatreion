@@ -15,7 +15,7 @@ from iatreion.exceptions import IatreionException
 from iatreion.rrl import TrainStepContext
 from iatreion.utils import decode_string, logger
 
-from .base import Model, ModelReturn
+from .base import Model
 
 
 @dataclass
@@ -293,12 +293,13 @@ class DiscreteRrlModel(Model):
         callbacks: list[Callable[[str], str] | None] | None = None,
     ) -> None:
         super().__init__()
-        self.config = config
+        self.config: DiscreteRrlConfig = config
         self.callbacks: list[Callable[[str], str] | None] = (
             callbacks
             if callbacks is not None
             else [None for _ in range(len(config.dataset.names))]
         )
+        self.ctx: TrainStepContext | None = None
 
     def get_model(self, ctx: TrainStepContext) -> Rrl:
         return Rrl(self.config.rrl_root / ctx.rrl_file, self.config._weight)
@@ -331,14 +332,19 @@ class DiscreteRrlModel(Model):
         return results, confidence
 
     @override
-    def fit(self, X: NDArray, y: NDArray) -> None:
-        pass
+    def _fit(self, X: NDArray, y: NDArray) -> None:
+        raise NotImplementedError
 
     @override
-    def predict(self, ctx: TrainStepContext, X: NDArray, y: NDArray) -> ModelReturn:
-        data = pd.DataFrame(X, columns=ctx.db_enc.X_fname)
-        result, _ = self.get_model(ctx).eval(data)
-        return result.to_numpy(), {}
+    def fit(self, ctx: TrainStepContext) -> None:
+        self.ctx = ctx
+
+    @override
+    def _predict_proba(self, X: NDArray, y: NDArray) -> NDArray:
+        assert self.ctx is not None
+        data = pd.DataFrame(X, columns=self.ctx.db_enc.X_fname)
+        result, _ = self.get_model(self.ctx).eval(data)
+        return result.to_numpy()
 
     def eval(self, data: list[pd.DataFrame]) -> tuple[pd.DataFrame, pd.Series]:
         models = self.get_models()

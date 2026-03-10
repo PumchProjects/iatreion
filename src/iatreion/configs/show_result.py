@@ -7,7 +7,7 @@ from cyclopts import Parameter
 from cyclopts.types import Directory
 
 from .dataset import DatasetConfig
-from .model_base import ModelConfig
+from .model_base import ImportanceMethod, ImportanceScope, ModelConfig
 from .show_base import ShowConfig
 from .train import TrainConfig
 
@@ -47,6 +47,28 @@ class ShowResultConfig(ShowConfig):
     )
     'Metrics to include in the analysis.'
 
+    importance_methods: Annotated[
+        list[ImportanceMethod], Parameter(alias='-im', consume_multiple=True)
+    ] = field(default_factory=lambda: ['permutation'])
+    'Feature-importance methods to visualize.'
+
+    importance_scope: Annotated[ImportanceScope, Parameter(alias='-is')] = 'outer'
+    """Fold scope for importance aggregation.
+'outer': use one fold per outer split.
+'all': use all matched fold files.
+"""
+
+    importance_top_k: Annotated[int, Parameter(alias='-ik')] = 20
+    'Number of top features to display in bar/heatmap plots.'
+
+    importance_abs: Annotated[bool, Parameter(negative='--signed-importance')] = True
+    'Use absolute importance values before aggregation. Disable for signed values.'
+
+    importance_normalize: Annotated[
+        bool, Parameter(negative='--no-importance-norm')
+    ] = True
+    'Normalize each fold importance vector to sum 1 before aggregation.'
+
     log_root: Directory = Path('logs')
     'Root directory for logs.'
 
@@ -68,13 +90,19 @@ class ShowResultConfig(ShowConfig):
 
     def _pad_lists(self) -> None:
         max_len = self._max_len(
-            self.models, self.aggregates, self.true_refs, self.results, self.labels
+            self.models,
+            self.aggregates,
+            self.true_refs,
+            self.results,
+            self.labels,
+            self.importance_methods,
         )
         self.models = self._pad(self.models, max_len)
         self.aggregates = self._pad(self.aggregates, max_len)
         self.true_refs = self._pad(self.true_refs, max_len)
         self.results = self._pad(self.results, max_len)
         self.labels = self._pad(self.labels, max_len)
+        self.importance_methods = self._pad(self.importance_methods, max_len)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -88,17 +116,27 @@ class ShowResultConfig(ShowConfig):
         )
         return ModelConfig(dataset=dataset_config, train=train_config)
 
-    def make_configs(self) -> Generator[tuple[TrainConfig, str, str], None, None]:
+    def make_configs(
+        self,
+    ) -> Generator[tuple[TrainConfig, str, str, ImportanceMethod], None, None]:
         config = self._make_config()
-        for model_name, aggregate, true_ref, result_name, label in zip(
+        for (
+            model_name,
+            aggregate,
+            true_ref,
+            result_name,
+            label,
+            importance_method,
+        ) in zip(
             self.models,
             self.aggregates,
             self.true_refs,
             self.results,
             self.labels,
+            self.importance_methods,
             strict=True,
         ):
             config.train.aggregate = aggregate
             config.train.true_ref = true_ref
             config.train._log_dir = config.get_exp_root(model_name)
-            yield config.train, result_name, label
+            yield config.train, result_name, label, importance_method

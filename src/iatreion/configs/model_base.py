@@ -1,6 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
+from typing import Annotated, Literal
 
 from cyclopts import Parameter
 
@@ -10,12 +11,32 @@ from iatreion.utils import add_file_handler
 from .dataset import DatasetConfig
 from .train import TrainConfig
 
+type ImportanceMethod = Literal['native', 'permutation', 'shap']
+type ImportanceScope = Literal['outer', 'all']
+
 
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class ModelConfig:
     dataset: DatasetConfig
     train: TrainConfig
+
+    importance_methods: Annotated[
+        list[ImportanceMethod], Parameter(alias='-im', consume_multiple=True)
+    ] = field(default_factory=lambda: ['permutation'])
+    'Feature-importance methods to export. Available: native, permutation, shap.'
+
+    importance_scope: Annotated[ImportanceScope, Parameter(alias='-is')] = 'outer'
+    """Fold scope for importance calculation.
+'outer': only calculate importance for outer folds.
+'all': also calculate importance for inner folds.
+"""
+
+    importance_repeats: Annotated[int, Parameter(alias='-ir')] = 5
+    'Number of repeats for permutation importance.'
+
+    importance_max_samples: Annotated[int | None, Parameter(alias='-ims')] = 256
+    'Maximum number of test samples used for permutation/SHAP importance. Disable with None.'
 
     def get_exp_root(self, model_name: str) -> Path:
         return (

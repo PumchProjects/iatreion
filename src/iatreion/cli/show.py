@@ -10,6 +10,8 @@ from iatreion.show_helpers import (
     auc_wilcoxon_std_barplot,
     bar,
     delong_pvalue_heatmap,
+    feature_importance_barplot,
+    feature_importance_heatmap,
     make_ci_delong_table,
     make_mean_std_wilcoxon_table,
     make_table_1,
@@ -128,4 +130,18 @@ def bar_auc_wilcoxon_std(*, config: ShowResultConfig) -> None:
 def bar_acc_wilcoxon_std(*, config: ShowResultConfig) -> None:
     """Bar plot for ACC + Wilcoxon + fold std."""
     table, fig = acc_wilcoxon_std_barplot(config)
+    console.print(save(config, table, fig, index=False))
+
+
+@sub_app.command(group='Result', sort_key=next(counter))
+def bar_feature_importance(*, config: ShowResultConfig) -> None:
+    """Bar plot for aggregated feature importance."""
+    table, fig = feature_importance_barplot(config)
+    console.print(save(config, table, fig, index=False))
+
+
+@sub_app.command(group='Result', sort_key=next(counter))
+def heatmap_feature_importance(*, config: ShowResultConfig) -> None:
+    """Heatmap for aggregated feature importance."""
+    table, fig = feature_importance_heatmap(config)
     console.print(save(config, table, fig, index=False))

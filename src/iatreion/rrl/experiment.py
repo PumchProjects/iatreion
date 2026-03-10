@@ -4,6 +4,7 @@ from typing import Any
 
 import numpy as np
 import torch
+from numpy.typing import NDArray
 from sklearn.utils.class_weight import compute_class_weight
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
@@ -15,52 +16,25 @@ from .rrl.models import RRL
 from .rrl.utils import TrainStepContext
 
 
-def get_data_loader(args: RrlConfig, ctx: TrainStepContext, pin_memory=False):
-    X_train, y_train = ctx.train_data
-    X_val, y_val = ctx.val_data
-    X_test, y_test = ctx.test_data
-
-    train_set = TensorDataset(torch.tensor(X_train.astype(np.float32)), torch.tensor(y_train))
-    valid_set = (
-        None
-        if X_val is None or y_val is None
-        else TensorDataset(torch.tensor(X_val.astype(np.float32)), torch.tensor(y_val))
-    )
-    test_set = TensorDataset(torch.tensor(X_test.astype(np.float32)), torch.tensor(y_test))
-
-    train_loader = DataLoader(
-        train_set,
+def get_data_loader(args: RrlConfig, X: NDArray, y: NDArray, *, shuffle=False, pin_memory=False) -> DataLoader:
+    return DataLoader(
+        TensorDataset(torch.tensor(X.astype(np.float32)), torch.tensor(y)),
         batch_size=args.batch_size,
-        shuffle=True,
+        shuffle=shuffle,
         pin_memory=pin_memory,
     )
-    valid_loader = None if valid_set is None else DataLoader(
-        valid_set,
-        batch_size=args.batch_size,
-        shuffle=False,
-        pin_memory=pin_memory
-    )
-    test_loader = DataLoader(
-        test_set,
-        batch_size=args.batch_size,
-        shuffle=False,
-        pin_memory=pin_memory
-    )
-
-    return ctx.db_enc, train_loader, valid_loader, test_loader
 
 
-def load_model(save_model_callback: Callable[..., tuple[RRL, dict[str, Any], tuple[float, ...]]]) -> tuple[RRL, tuple[float, ...]]:
-    rrl, state_dict, metrics = save_model_callback()
-    rrl.net.load_state_dict(state_dict)
-    return rrl, metrics
-
-
-def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, dict[str, Any], tuple[float, ...]]], ctx: TrainStepContext):
+def train_model(args: RrlConfig, save_model_callback: Callable[..., None], ctx: TrainStepContext):
     writer = SummaryWriter(str(args.folder_path))
 
-    db_enc, train_loader, valid_loader, _ = get_data_loader(args, ctx, pin_memory=True)
+    train_loader = get_data_loader(args, *ctx.train_data, shuffle=True, pin_memory=True)
+    if ctx.val_data[0] is not None and ctx.val_data[1] is not None:
+        valid_loader = get_data_loader(args, *ctx.val_data, pin_memory=True)
+    else:
+        valid_loader = None
 
+    db_enc = ctx.db_enc
     y_fname = db_enc.y_fname
     discrete_flen = db_enc.discrete_flen
     continuous_flen = db_enc.continuous_flen
@@ -106,23 +80,26 @@ def train_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, d
             label_smoothing=args.label_smoothing,
             max_grad_norm=args.max_grad_norm,
         )
-    
-    if args.train.final and args.print_rule:
-        rrl, metrics = load_model(save_model_callback)
-        with open(args.train._log_dir / ctx.rrl_file, 'w', encoding='utf-8') as rrl_file:
-            rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std, metrics=metrics)
 
 
-def test_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, dict[str, Any], tuple[float, ...]]], ctx: TrainStepContext):
-    rrl, metrics = load_model(save_model_callback)
-    db_enc, train_loader, _, test_loader = get_data_loader(args, ctx)
-    y_score, _, _ = rrl.test(test_loader=test_loader, set_name='Test')
+def print_rules(args: RrlConfig, ctx: TrainStepContext, rrl: RRL, metrics: tuple[float, ...]) -> Any:
+    train_loader = get_data_loader(args, *ctx.train_data)
+    db_enc = ctx.db_enc
     if args.print_rule:
         with open(args.train._log_dir / ctx.rrl_file, 'w', encoding='utf-8') as rrl_file:
             rule2weights = rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std, metrics=metrics)
     else:
         rule2weights = rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, mean=db_enc.mean, std=db_enc.std, metrics=metrics, display=False)
-    
+    return rule2weights
+
+
+def test_model(args: RrlConfig, X: NDArray, y: NDArray, rrl: RRL):
+    test_loader = get_data_loader(args, X, y)
+    y_score, _, _ = rrl.test(test_loader=test_loader, set_name='Test')
+    return y_score
+
+
+def calc_complexity(rrl: RRL, rule2weights: Any) -> float:
     metric = 'Log(#Edges)'
     edge_cnt = 0
     connected_rid = defaultdict(lambda: set())
@@ -145,4 +122,4 @@ def test_model(args: RrlConfig, save_model_callback: Callable[..., tuple[RRL, di
                 connected_rid[ln - abs(rid[0])].add(rid[1])
     complexity = np.log(edge_cnt).item() if edge_cnt > 0 else np.nan
     logger.debug('\n\t{} of RRL  Model: {}'.format(metric, complexity))
-    return y_score, complexity
+    return complexity

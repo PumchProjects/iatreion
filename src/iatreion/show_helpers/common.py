@@ -142,7 +142,7 @@ def parse_ci_log(path: Path) -> CiMetrics:
 def parse_result_sources(config: ShowResultConfig) -> list[ResultSource]:
     sources: list[ResultSource] = []
     labels: set[str] = set()
-    for train, name, label in config.make_configs():
+    for train, name, label, _ in config.make_configs():
         result_file = train.get_results_file(name)
         if not result_file.is_file():
             raise IatreionException(

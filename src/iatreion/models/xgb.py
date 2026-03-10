@@ -1,4 +1,3 @@
-import json
 from typing import override
 
 import numpy as np
@@ -9,13 +8,11 @@ from iatreion.configs import XgboostConfig
 from iatreion.rrl import TrainStepContext
 from iatreion.utils import decode_string, encode_string, logger
 
-from .base import Model, ModelReturn
+from .base import Model
+from .importance import ImportanceScore, calc_tree_shap_importance
 
 
 class XgbLogging(xgb.callback.TrainingCallback):
-    def __init__(self):
-        pass
-
     def after_iteration(self, model, epoch, evals_log):
         log_list = [f'[{epoch}]']
         for data, metric in evals_log.items():
@@ -28,7 +25,7 @@ class XgbLogging(xgb.callback.TrainingCallback):
 class XgboostModel(Model):
     def __init__(self, config: XgboostConfig) -> None:
         super().__init__()
-        self.config = config
+        self.config: XgboostConfig = config
         self.num_class = config.train.num_class
         self.param = config._param
         self.update_param()
@@ -50,43 +47,39 @@ class XgboostModel(Model):
             )
 
     @override
-    def fit(self, X: NDArray, y: NDArray) -> None:
+    def _fit(self, X: NDArray, y: NDArray) -> None:
         dtrain = xgb.DMatrix(X, y)
-        evals = [(dtrain, 'train')]
-        callbacks = [XgbLogging()]
         self.bst = xgb.train(
             self.param,
             dtrain,
             self.config.num_round,
-            evals=evals,
+            evals=[(dtrain, 'train')],
             verbose_eval=False,
-            callbacks=callbacks,
+            callbacks=[XgbLogging()],
         )
 
-    def calc_importance(self, ctx: TrainStepContext) -> None:
+    @override
+    def _predict_proba(self, X: NDArray, y: NDArray) -> NDArray:
+        dtest = xgb.DMatrix(X, y)
+        y_score = self.bst.predict(dtest)
+        if self.num_class <= 2:
+            return np.stack([1 - y_score, y_score], axis=-1)
+        return y_score.reshape(X.shape[0], -1)
+
+    @override
+    def _calc_native_importance(self, ctx: TrainStepContext) -> ImportanceScore:
         fmap_file = (
             self.config.train._log_dir
             / f'fmap_{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.tsv'
         )
         with fmap_file.open('w', encoding='utf-8') as f:
             for i, name in enumerate(ctx.db_enc.X_fname):
-                type = 'i' if i < ctx.db_enc.discrete_flen else 'q'
-                f.write(f'{i}\t{encode_string(name, " ")}\t{type}\n')
-        score = {decode_string(f): v for f, v in self.bst.get_fscore(fmap_file).items()}
-        score_file = (
-            self.config.train._log_dir
-            / f'score_{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.json'
-        )
-        with score_file.open('w', encoding='utf-8') as f:
-            json.dump(score, f, ensure_ascii=False, indent=4)
+                ftype = 'i' if i < ctx.db_enc.discrete_flen else 'q'
+                f.write(f'{i}\t{encode_string(name, " ")}\t{ftype}\n')
+        raw_score = self.bst.get_score(str(fmap_file), importance_type='gain')
+        score = {decode_string(name): float(value) for name, value in raw_score.items()}
+        return {name: score.get(name, 0.0) for name in ctx.db_enc.X_fname}
 
     @override
-    def predict(self, ctx: TrainStepContext, X: NDArray, y: NDArray) -> ModelReturn:
-        dtest = xgb.DMatrix(X, y)
-        y_score = self.bst.predict(dtest)
-        if self.num_class <= 2:
-            y_score = np.stack([1 - y_score, y_score], axis=-1)
-        else:
-            y_score = y_score.reshape(X.shape[0], -1)
-        self.calc_importance(ctx)
-        return y_score, {}
+    def _calc_shap_importance(self, ctx: TrainStepContext) -> ImportanceScore:
+        return calc_tree_shap_importance(self.config, ctx, self.bst)

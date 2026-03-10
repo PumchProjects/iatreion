@@ -1,4 +1,3 @@
-import json
 from typing import override
 
 from numpy.typing import NDArray
@@ -7,13 +6,14 @@ from sklearn.ensemble import RandomForestClassifier
 from iatreion.configs import RandomForestConfig
 from iatreion.rrl import TrainStepContext
 
-from .base import Model, ModelReturn
+from .base import Model
+from .importance import ImportanceScore, calc_tree_shap_importance
 
 
 class RandomForestModel(Model):
     def __init__(self, config: RandomForestConfig) -> None:
         super().__init__()
-        self.config = config
+        self.config: RandomForestConfig = config
         self.num_class = config.train.num_class
         self.forest = RandomForestClassifier(
             config.n_estimators,
@@ -22,23 +22,20 @@ class RandomForestModel(Model):
         )
 
     @override
-    def fit(self, X: NDArray, y: NDArray) -> None:
+    def _fit(self, X: NDArray, y: NDArray) -> None:
         self.forest.fit(X, y)
 
-    def calc_importance(self, ctx: TrainStepContext) -> None:
-        importances = self.forest.feature_importances_
-        score = {
-            name: importances[i].item() for i, name in enumerate(ctx.db_enc.X_fname)
-        }
-        score_file = (
-            self.config.train._log_dir
-            / f'score_{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.json'
-        )
-        with score_file.open('w', encoding='utf-8') as f:
-            json.dump(score, f, ensure_ascii=False, indent=4)
+    @override
+    def _predict_proba(self, X: NDArray, y: NDArray) -> NDArray:
+        return self.forest.predict_proba(X)
 
     @override
-    def predict(self, ctx: TrainStepContext, X: NDArray, y: NDArray) -> ModelReturn:
-        y_score = self.forest.predict_proba(X)
-        self.calc_importance(ctx)
-        return y_score, {}
+    def _calc_native_importance(self, ctx: TrainStepContext) -> ImportanceScore:
+        importances = self.forest.feature_importances_
+        return {
+            name: float(importances[i]) for i, name in enumerate(ctx.db_enc.X_fname)
+        }
+
+    @override
+    def _calc_shap_importance(self, ctx: TrainStepContext) -> ImportanceScore:
+        return calc_tree_shap_importance(self.config, ctx, self.forest)
