@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from sklearn.metrics import roc_auc_score
 from statsmodels.stats.contingency_tables import mcnemar
 
-from iatreion.configs import ShowResultConfig
+from iatreion.configs import ShowPerformanceConfig
 from iatreion.exceptions import IatreionException
 
 type MeanStdMetrics = dict[str, tuple[float, float]]
@@ -139,10 +139,10 @@ def parse_ci_log(path: Path) -> CiMetrics:
     return {key: (values[0], values[1], values[2]) for key, values in parsed.items()}
 
 
-def parse_result_sources(config: ShowResultConfig) -> list[ResultSource]:
+def parse_result_sources(config: ShowPerformanceConfig) -> list[ResultSource]:
     sources: list[ResultSource] = []
     labels: set[str] = set()
-    for train, name, label, _ in config.make_configs():
+    for train, name, label in config.make_config():
         result_file = train.get_results_file(name)
         if not result_file.is_file():
             raise IatreionException(
@@ -398,7 +398,7 @@ def _validate_y_true_consistency(results: list[LoadedResult]) -> None:
 
 
 def _prepare_results(
-    config: ShowResultConfig,
+    config: ShowPerformanceConfig,
 ) -> tuple[list[LoadedResult], LoadedResult]:
     sources = parse_result_sources(config)
     results = [_load_result(source) for source in sources]

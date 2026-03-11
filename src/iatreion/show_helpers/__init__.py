@@ -9,3 +9,4 @@ from .heatmap import delong_pvalue_heatmap, wilcoxon_pvalue_heatmap
 from .importance import feature_importance_barplot, feature_importance_heatmap
 from .latex import make_ci_delong_table, make_mean_std_wilcoxon_table
 from .roc import roc_delong_comparison_plot
+from .shap import shap_dependence_plot, shap_summary_plot, shap_waterfall_plot

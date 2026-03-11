@@ -9,7 +9,7 @@ from iatreion.rrl import TrainStepContext
 from iatreion.utils import decode_string, encode_string, logger
 
 from .base import Model
-from .importance import ImportanceScore, calc_tree_shap_importance
+from .importance import ImportanceScore, calc_shap_importance
 
 
 class XgbLogging(xgb.callback.TrainingCallback):
@@ -82,4 +82,4 @@ class XgboostModel(Model):
 
     @override
     def _calc_shap_importance(self, ctx: TrainStepContext) -> ImportanceScore:
-        return calc_tree_shap_importance(self.config, ctx, self.bst)
+        return calc_shap_importance(self.config, ctx, model=self.bst)

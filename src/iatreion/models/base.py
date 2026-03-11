@@ -10,6 +10,7 @@ from iatreion.utils import logger
 from .importance import (
     ImportanceScore,
     calc_permutation_importance,
+    calc_shap_importance,
     save_importance_score,
 )
 
@@ -33,7 +34,7 @@ class Model(ABC):
         return calc_permutation_importance(self.config, ctx, self._predict_proba)
 
     def _calc_shap_importance(self, ctx: TrainStepContext) -> ImportanceScore:
-        raise NotImplementedError
+        return calc_shap_importance(self.config, ctx, self._predict_proba)
 
     @property
     def _importance_calculators(self) -> dict[ImportanceMethod, ImportanceCalculator]:
@@ -44,10 +45,10 @@ class Model(ABC):
         }
 
     def _calc_importance(self, ctx: TrainStepContext) -> None:
-        if self.config.importance_scope == 'outer' and ctx.is_inner:
+        if self.config.fold_scope == 'outer' and ctx.is_inner:
             return
 
-        for method in self.config.importance_methods:
+        for method in dict.fromkeys(self.config.importance_methods):
             calculator = self._importance_calculators.get(method)
             if calculator is None:
                 continue

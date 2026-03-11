@@ -3,9 +3,9 @@ import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
 
-from iatreion.configs import ShowResultConfig
+from iatreion.configs import ShowPerformanceConfig
 
-from .common import (
+from .performance import (
     LoadedResult,
     MetricSummaryGetter,
     PairwisePvalueGetter,
@@ -114,7 +114,7 @@ def _build_metric_significance_barplot(
     return pd.DataFrame(rows), fig
 
 
-def auc_delong_ci_barplot(config: ShowResultConfig) -> tuple[pd.DataFrame, Figure]:
+def auc_delong_ci_barplot(config: ShowPerformanceConfig) -> tuple[pd.DataFrame, Figure]:
     results, ref = _prepare_results(config)
     return _build_metric_significance_barplot(
         results,
@@ -130,7 +130,9 @@ def auc_delong_ci_barplot(config: ShowResultConfig) -> tuple[pd.DataFrame, Figur
     )
 
 
-def acc_mcnemar_ci_barplot(config: ShowResultConfig) -> tuple[pd.DataFrame, Figure]:
+def acc_mcnemar_ci_barplot(
+    config: ShowPerformanceConfig,
+) -> tuple[pd.DataFrame, Figure]:
     results, ref = _prepare_results(config)
     return _build_metric_significance_barplot(
         results,
@@ -146,7 +148,9 @@ def acc_mcnemar_ci_barplot(config: ShowResultConfig) -> tuple[pd.DataFrame, Figu
     )
 
 
-def auc_wilcoxon_std_barplot(config: ShowResultConfig) -> tuple[pd.DataFrame, Figure]:
+def auc_wilcoxon_std_barplot(
+    config: ShowPerformanceConfig,
+) -> tuple[pd.DataFrame, Figure]:
     results, ref = _prepare_results(config)
     return _build_metric_significance_barplot(
         results,
@@ -163,7 +167,9 @@ def auc_wilcoxon_std_barplot(config: ShowResultConfig) -> tuple[pd.DataFrame, Fi
     )
 
 
-def acc_wilcoxon_std_barplot(config: ShowResultConfig) -> tuple[pd.DataFrame, Figure]:
+def acc_wilcoxon_std_barplot(
+    config: ShowPerformanceConfig,
+) -> tuple[pd.DataFrame, Figure]:
     results, ref = _prepare_results(config)
     return _build_metric_significance_barplot(
         results,

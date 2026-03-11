@@ -4,9 +4,9 @@ import pandas as pd
 from matplotlib.figure import Figure
 from sklearn.metrics import roc_curve
 
-from iatreion.configs import ShowResultConfig
+from iatreion.configs import ShowPerformanceConfig
 
-from .common import (
+from .performance import (
     _delong_pvalue,
     _format_pvalue,
     _format_rate,
@@ -15,7 +15,9 @@ from .common import (
 )
 
 
-def roc_delong_comparison_plot(config: ShowResultConfig) -> tuple[pd.DataFrame, Figure]:
+def roc_delong_comparison_plot(
+    config: ShowPerformanceConfig,
+) -> tuple[pd.DataFrame, Figure]:
     results, _ = _prepare_results(config)
     best = max(
         results,

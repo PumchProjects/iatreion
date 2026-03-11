@@ -12,11 +12,13 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import PercentFormatter
 from numpy.typing import NDArray
 
-from iatreion.configs import ImportanceMethod, ImportanceScope, ShowResultConfig
+from iatreion.configs import FoldScope, ImportanceMethod, ShowImportanceConfig
 from iatreion.exceptions import IatreionException
 from iatreion.models import ImportanceScore
 
 plt.rcParams['font.family'] = 'DejaVu Sans, Noto Sans CJK JP'
+
+type FoldKey = tuple[int, int]
 
 _SCORE_PATTERN = re.compile(
     r'^score_(?P<method>native|permutation|shap)_'
@@ -28,7 +30,7 @@ _SCORE_PATTERN = re.compile(
 class ImportanceResult:
     label: str
     name: str
-    folds: list[tuple[int, int]]
+    folds: list[FoldKey]
     values: NDArray[np.floating]
     summary: pd.DataFrame
 
@@ -64,28 +66,29 @@ def _load_json_score(path: Path) -> ImportanceScore:
     return {str(key): float(value) for key, value in data.items()}
 
 
-def _select_scope(
-    scores: dict[tuple[int, int], ImportanceScore], scope: ImportanceScope
-) -> dict[tuple[int, int], ImportanceScore]:
+def _select_scope[T](
+    values: dict[FoldKey, T],
+    scope: FoldScope,
+) -> dict[FoldKey, T]:
     if scope == 'all':
-        return scores
-    selected: dict[int, tuple[int, tuple[int, int]]] = {}
-    for key in sorted(scores):
+        return values
+    selected: dict[int, tuple[int, FoldKey]] = {}
+    for key in sorted(values):
         outer, inner = key
         if outer not in selected or inner > selected[outer][0]:
             selected[outer] = (inner, key)
     return {
-        key: scores[key]
+        key: values[key]
         for _, key in sorted(selected.values(), key=lambda item: item[1])
     }
 
 
 def _to_matrix(
-    scores: dict[tuple[int, int], ImportanceScore],
+    scores: dict[FoldKey, ImportanceScore],
     *,
     use_abs: bool,
     normalize: bool,
-) -> tuple[list[tuple[int, int]], list[str], NDArray[np.floating]]:
+) -> tuple[list[FoldKey], list[str], NDArray[np.floating]]:
     if not scores:
         raise IatreionException('No importance scores were loaded.')
 
@@ -111,10 +114,10 @@ def _to_matrix(
     return folds, features, matrix
 
 
-def _summarize(
+def _summarize_importance(
     label: str,
     name: str,
-    folds: list[tuple[int, int]],
+    folds: list[FoldKey],
     features: list[str],
     matrix: NDArray[np.floating],
 ) -> pd.DataFrame:
@@ -135,14 +138,14 @@ def _summarize(
 
 
 def _load_importance_result(
-    config: ShowResultConfig,
+    config: ShowImportanceConfig,
     *,
     log_dir: Path,
     name: str,
     label: str,
     method: ImportanceMethod,
 ) -> ImportanceResult:
-    scores: dict[tuple[int, int], ImportanceScore] = {}
+    scores: dict[FoldKey, ImportanceScore] = {}
     for path in log_dir.glob('score_*.json'):
         parsed = _parse_score_file(path)
         if parsed is None:
@@ -152,7 +155,7 @@ def _load_importance_result(
             continue
         scores[(outer, inner)] = _load_json_score(path)
 
-    scores = _select_scope(scores, config.importance_scope)
+    scores = _select_scope(scores, config.fold_scope)
     if not scores:
         raise IatreionException(
             'No "$method" importance files found for "$name" in "$path".',
@@ -165,14 +168,14 @@ def _load_importance_result(
         use_abs=config.importance_abs,
         normalize=config.importance_normalize,
     )
-    summary = _summarize(label, name, folds, features, matrix)
+    summary = _summarize_importance(label, name, folds, features, matrix)
     return ImportanceResult(label, name, folds, matrix, summary)
 
 
-def _prepare_importance_results(config: ShowResultConfig) -> list[ImportanceResult]:
+def _prepare_importance_results(config: ShowImportanceConfig) -> list[ImportanceResult]:
     results: list[ImportanceResult] = []
     seen_labels: set[str] = set()
-    for train, name, label, method in config.make_configs():
+    for train, name, label, method in config.make_config():
         if label in seen_labels:
             raise IatreionException('Duplicate model label "$label".', label=label)
         seen_labels.add(label)
@@ -188,9 +191,11 @@ def _prepare_importance_results(config: ShowResultConfig) -> list[ImportanceResu
     return results
 
 
-def feature_importance_barplot(config: ShowResultConfig) -> tuple[pd.DataFrame, Figure]:
+def feature_importance_barplot(
+    config: ShowImportanceConfig,
+) -> tuple[pd.DataFrame, Figure]:
     results = _prepare_importance_results(config)
-    top_k = max(1, config.importance_top_k)
+    top_k = max(1, config.top_k)
     n_results = len(results)
     fig_h = max(4.0, min(0.4 * top_k + 2.5, 14.0))
     fig_w = max(7.0, 6.0 * n_results)
@@ -227,9 +232,11 @@ def feature_importance_barplot(config: ShowResultConfig) -> tuple[pd.DataFrame, 
     return table, fig
 
 
-def feature_importance_heatmap(config: ShowResultConfig) -> tuple[pd.DataFrame, Figure]:
+def feature_importance_heatmap(
+    config: ShowImportanceConfig,
+) -> tuple[pd.DataFrame, Figure]:
     results = _prepare_importance_results(config)
-    top_k = max(1, config.importance_top_k)
+    top_k = max(1, config.top_k)
     summary_map = {
         result.label: result.summary.set_index('Feature')['Mean'] for result in results
     }

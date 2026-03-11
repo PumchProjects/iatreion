@@ -5,9 +5,9 @@ import seaborn as sns
 from matplotlib.figure import Figure
 from numpy.typing import NDArray
 
-from iatreion.configs import ShowResultConfig
+from iatreion.configs import ShowPerformanceConfig
 
-from .common import (
+from .performance import (
     LoadedResult,
     ResultComparator,
     _compare_delong_auc,
@@ -61,14 +61,16 @@ def _plot_pvalue_heatmap(
     return fig
 
 
-def wilcoxon_pvalue_heatmap(config: ShowResultConfig) -> tuple[pd.DataFrame, Figure]:
+def wilcoxon_pvalue_heatmap(
+    config: ShowPerformanceConfig,
+) -> tuple[pd.DataFrame, Figure]:
     results, _ = _prepare_results(config)
     matrix, annot = _build_pairwise_pvalue_matrix(results, _compare_wilcoxon_auc)
     fig = _plot_pvalue_heatmap(matrix, annot, config.title)
     return matrix, fig
 
 
-def delong_pvalue_heatmap(config: ShowResultConfig) -> tuple[pd.DataFrame, Figure]:
+def delong_pvalue_heatmap(config: ShowPerformanceConfig) -> tuple[pd.DataFrame, Figure]:
     results, _ = _prepare_results(config)
     matrix, annot = _build_pairwise_pvalue_matrix(results, _compare_delong_auc)
     fig = _plot_pvalue_heatmap(matrix, annot, config.title)

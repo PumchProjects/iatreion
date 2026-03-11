@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
 
-from iatreion.configs import ShowResultConfig
+from iatreion.configs import ShowPerformanceConfig
 
-from .common import (
+from .performance import (
     LoadedResult,
     MetricDictGetter,
     MetricFormatter,
@@ -64,7 +64,7 @@ def _format_ci_values(values: MetricValues) -> str:
     return _format_ci(point, lower, upper)
 
 
-def make_mean_std_wilcoxon_table(config: ShowResultConfig) -> pd.DataFrame:
+def make_mean_std_wilcoxon_table(config: ShowPerformanceConfig) -> pd.DataFrame:
     results, ref = _prepare_results(config)
     return _build_comparison_table(
         results,
@@ -78,7 +78,7 @@ def make_mean_std_wilcoxon_table(config: ShowResultConfig) -> pd.DataFrame:
     )
 
 
-def make_ci_delong_table(config: ShowResultConfig) -> pd.DataFrame:
+def make_ci_delong_table(config: ShowPerformanceConfig) -> pd.DataFrame:
     results, ref = _prepare_results(config)
     return _build_comparison_table(
         results,

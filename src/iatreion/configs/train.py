@@ -122,6 +122,8 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     _group_names: list[str] = field(default_factory=list[str])
 
+    _sorted_group_names: list[str] = field(default_factory=list[str])
+
     _shuffle: bool = True
 
     _encode: bool = False
@@ -151,6 +153,7 @@ For discrete RRL, validation set is used for optimization when val_size is set.
             self._groups.append(sorted(names))
         self._group_names = [''.join(group) for group in self._groups]
         self._groups.sort(key=lambda x: x[0])
+        self._sorted_group_names = [''.join(group) for group in self._groups]
         if self.label_name is not None:
             self._base_pos = ''
             self._label_pos = self.label_name
@@ -232,6 +235,9 @@ For discrete RRL, validation set is used for optimization when val_size is set.
         self, name: str, outer_fold: int, inner_fold: int, *, method: str
     ) -> Path:
         return self._log_dir / f'score_{method}_{name}_{outer_fold}_{inner_fold}.json'
+
+    def get_shap_file(self, name: str, outer_fold: int, inner_fold: int) -> Path:
+        return self._log_dir / f'shap_{name}_{outer_fold}_{inner_fold}.npz'
 
     def get_roc_file(self, name: str) -> Path:
         return self._log_dir / f'roc_{name}.png'

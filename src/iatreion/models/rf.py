@@ -7,7 +7,7 @@ from iatreion.configs import RandomForestConfig
 from iatreion.rrl import TrainStepContext
 
 from .base import Model
-from .importance import ImportanceScore, calc_tree_shap_importance
+from .importance import ImportanceScore, calc_shap_importance
 
 
 class RandomForestModel(Model):
@@ -38,4 +38,4 @@ class RandomForestModel(Model):
 
     @override
     def _calc_shap_importance(self, ctx: TrainStepContext) -> ImportanceScore:
-        return calc_tree_shap_importance(self.config, ctx, self.forest)
+        return calc_shap_importance(self.config, ctx, model=self.forest)

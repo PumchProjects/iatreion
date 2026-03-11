@@ -1,5 +1,6 @@
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -13,6 +14,17 @@ from iatreion.utils import decode_string, task
 
 type ImportanceScore = dict[str, float]
 type PredictProba = Callable[[NDArray, NDArray], NDArray]
+
+
+@dataclass(frozen=True)
+class ShapBundle:
+    values: NDArray[np.floating]
+    base_values: NDArray[np.floating]
+    data: NDArray[np.floating]
+    y_true: NDArray[np.integer]
+    sample_indices: NDArray[np.integer]
+    feature_names: list[str]
+    output_names: list[str]
 
 
 def save_importance_score(
@@ -34,6 +46,35 @@ def save_importance_score(
         json.dump(score, f, ensure_ascii=False, indent=4)
 
 
+def save_shap_bundle(
+    train: TrainConfig,
+    ctx: TrainStepContext,
+    bundle: ShapBundle,
+) -> None:
+    np.savez_compressed(
+        train.get_shap_file(ctx.name, ctx.outer_fold, ctx.inner_fold),
+        values=bundle.values,
+        base_values=bundle.base_values,
+        data=bundle.data,
+        y_true=bundle.y_true,
+        sample_indices=bundle.sample_indices,
+        feature_names=np.asarray(bundle.feature_names, dtype=str),
+        output_names=np.asarray(bundle.output_names, dtype=str),
+    )
+
+
+def _sample_importance_indices(
+    n_samples: int,
+    *,
+    max_samples: int | None,
+    seed: int,
+) -> NDArray[np.integer]:
+    if max_samples is None or n_samples <= max_samples:
+        return np.arange(n_samples, dtype=np.int64)
+    rng = np.random.default_rng(seed)
+    return np.sort(rng.choice(n_samples, size=max_samples, replace=False))
+
+
 def sample_importance_data(
     X: NDArray,
     y: NDArray,
@@ -41,10 +82,11 @@ def sample_importance_data(
     max_samples: int | None,
     seed: int,
 ) -> tuple[NDArray, NDArray]:
-    if max_samples is None or X.shape[0] <= max_samples:
-        return X, y
-    rng = np.random.default_rng(seed)
-    index = rng.choice(X.shape[0], size=max_samples, replace=False)
+    index = _sample_importance_indices(
+        X.shape[0],
+        max_samples=max_samples,
+        seed=seed,
+    )
     return X[index], y[index]
 
 
@@ -121,18 +163,112 @@ def _reduce_shap_values(values: object, n_features: int) -> NDArray:
     )
 
 
-def calc_tree_shap_importance(
+def _get_feature_names(train: TrainConfig, feature_names: list[str]) -> list[str]:
+    if not train._encode:
+        return feature_names
+    return [decode_string(name) for name in feature_names]
+
+
+def _get_output_names(train: TrainConfig, values: NDArray) -> list[str]:
+    n_outputs = 1 if values.ndim == 2 else values.shape[-1]
+    group_names = train._sorted_group_names
+    if n_outputs == len(group_names):
+        return group_names
+    if n_outputs == 1 and len(group_names) == 2:
+        return [group_names[-1]]
+    if n_outputs == 1:
+        return ['output_0']
+    return [f'output_{index}' for index in range(n_outputs)]
+
+
+def _build_shap_predict_fn(
+    predict_proba: PredictProba,
+    y_ref: NDArray,
+) -> Callable[[NDArray], NDArray]:
+    y_ref = np.asarray(y_ref).ravel()
+
+    def _predict(X: NDArray) -> NDArray:
+        X = np.asarray(X)
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+        if y_ref.size == 0:
+            y = np.zeros(X.shape[0], dtype=np.int64)
+        else:
+            repeats = (X.shape[0] + y_ref.size - 1) // y_ref.size
+            y = np.tile(y_ref, repeats)[: X.shape[0]]
+        return predict_proba(X, y)
+
+    return _predict
+
+
+def _build_shap_bundle(
     config: ModelConfig,
     ctx: TrainStepContext,
-    model: Any,
+    explanation: shap.Explanation,
+    sample_indices: NDArray[np.integer],
+    y_true: NDArray[np.integer],
+) -> ShapBundle:
+    feature_names = _get_feature_names(config.train, list(ctx.db_enc.X_fname))
+    values = np.asarray(explanation.values, dtype=float)
+    base_values = np.asarray(explanation.base_values, dtype=float)
+    data = np.asarray(explanation.data, dtype=float)
+    return ShapBundle(
+        values=values,
+        base_values=base_values,
+        data=data,
+        y_true=np.asarray(y_true, dtype=int).reshape(-1),
+        sample_indices=np.asarray(sample_indices, dtype=int).reshape(-1),
+        feature_names=feature_names,
+        output_names=_get_output_names(config.train, values),
+    )
+
+
+def calc_shap_importance(
+    config: ModelConfig,
+    ctx: TrainStepContext,
+    predict_proba: PredictProba | None = None,
+    model: Any | None = None,
 ) -> ImportanceScore:
-    X_sample, _ = sample_importance_data(
-        *ctx.test_data,
+    X_test, y_test = ctx.test_data
+    sample_indices = _sample_importance_indices(
+        X_test.shape[0],
         max_samples=config.importance_max_samples,
         seed=config.train.seed,
     )
-    feature_names = ctx.db_enc.X_fname
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X_sample)
-    importances = _reduce_shap_values(shap_values, X_sample.shape[1])
-    return {name: float(importances[i]) for i, name in enumerate(feature_names)}
+    X_sample = X_test[sample_indices]
+    y_sample = y_test[sample_indices]
+    feature_names = _get_feature_names(config.train, list(ctx.db_enc.X_fname))
+    if predict_proba is not None:
+        explainer = shap.Explainer(
+            _build_shap_predict_fn(predict_proba, y_sample),
+            X_sample,
+            algorithm='permutation',
+            feature_names=feature_names,
+            output_names=config.train._sorted_group_names,
+            seed=config.train.seed,
+        )
+    elif model is not None:
+        explainer = shap.TreeExplainer(
+            model,
+            data=X_sample,
+            model_output='probability',
+            feature_names=feature_names,
+        )
+    else:
+        raise ValueError('Either predict_proba or model must be provided.')
+
+    explanation = explainer(X_sample)
+    bundle = _build_shap_bundle(
+        config,
+        ctx,
+        explanation,
+        sample_indices,
+        y_sample,
+    )
+    save_shap_bundle(config.train, ctx, bundle)
+
+    importances = _reduce_shap_values(bundle.values, bundle.data.shape[1])
+    return {
+        name: float(importances[index])
+        for index, name in enumerate(bundle.feature_names)
+    }
