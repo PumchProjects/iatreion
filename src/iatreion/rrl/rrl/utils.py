@@ -20,7 +20,7 @@ from sklearn import preprocessing
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import RepeatedStratifiedKFold, train_test_split
 
-from iatreion.configs import DataName, DatasetConfig, TrainConfig
+from iatreion.configs import DataName, DatasetConfig, ImportanceMethod, TrainConfig
 from iatreion.utils import encode_string, logger
 
 pd.set_option('future.no_silent_downcasting', True)
@@ -304,6 +304,13 @@ class TrainStepContext:
         if self.db_enc.train.final:
             return f'{self.name}.tsv'
         return f'rrl_{self.name}_{self.outer_fold}_{self.inner_fold}.tsv'
+
+    def get_importance_file(self, method: ImportanceMethod) -> str:
+        return f'score_{method}_{self.name}_{self.outer_fold}_{self.inner_fold}.json'
+
+    @property
+    def shap_file(self) -> str:
+        return f'shap_{self.name}_{self.outer_fold}_{self.inner_fold}.npz'
 
 
 def merge_data(

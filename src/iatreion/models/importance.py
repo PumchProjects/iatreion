@@ -36,12 +36,7 @@ def save_importance_score(
 ) -> None:
     if train._encode:
         score = {decode_string(name): value for name, value in score.items()}
-    score_file = train.get_importance_file(
-        ctx.name,
-        ctx.outer_fold,
-        ctx.inner_fold,
-        method=method,
-    )
+    score_file = train._log_dir / ctx.get_importance_file(method)
     with score_file.open('w', encoding='utf-8') as f:
         json.dump(score, f, ensure_ascii=False, indent=4)
 
@@ -52,7 +47,7 @@ def save_shap_bundle(
     bundle: ShapBundle,
 ) -> None:
     np.savez_compressed(
-        train.get_shap_file(ctx.name, ctx.outer_fold, ctx.inner_fold),
+        train._log_dir / ctx.shap_file,
         values=bundle.values,
         base_values=bundle.base_values,
         data=bundle.data,
