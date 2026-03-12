@@ -13,7 +13,7 @@ from iatreion.rrl import TrainStepContext
 from iatreion.utils import decode_string, task
 
 type ImportanceScore = dict[str, float]
-type PredictProba = Callable[[NDArray, NDArray], NDArray]
+type PredictProba = Callable[[NDArray], NDArray]
 
 
 @dataclass(frozen=True)
@@ -113,7 +113,7 @@ def calc_permutation_importance(
         seed=config.train.seed,
     )
     baseline = _calc_auc_score(
-        config.train.num_class, y_sample, predict_proba(X_sample, y_sample)
+        config.train.num_class, y_sample, predict_proba(X_sample)
     )
     feature_names = ctx.db_enc.X_fname
     if np.isnan(baseline):
@@ -129,7 +129,7 @@ def calc_permutation_importance(
                 permuted = X_sample.copy()
                 permuted[:, idx] = rng.permutation(permuted[:, idx])
                 auc = _calc_auc_score(
-                    config.train.num_class, y_sample, predict_proba(permuted, y_sample)
+                    config.train.num_class, y_sample, predict_proba(permuted)
                 )
                 if np.isnan(auc):
                     continue
@@ -176,26 +176,6 @@ def _get_output_names(train: TrainConfig, values: NDArray) -> list[str]:
     return [f'output_{index}' for index in range(n_outputs)]
 
 
-def _build_shap_predict_fn(
-    predict_proba: PredictProba,
-    y_ref: NDArray,
-) -> Callable[[NDArray], NDArray]:
-    y_ref = np.asarray(y_ref).ravel()
-
-    def _predict(X: NDArray) -> NDArray:
-        X = np.asarray(X)
-        if X.ndim == 1:
-            X = X.reshape(1, -1)
-        if y_ref.size == 0:
-            y = np.zeros(X.shape[0], dtype=np.int64)
-        else:
-            repeats = (X.shape[0] + y_ref.size - 1) // y_ref.size
-            y = np.tile(y_ref, repeats)[: X.shape[0]]
-        return predict_proba(X, y)
-
-    return _predict
-
-
 def _build_shap_bundle(
     config: ModelConfig,
     ctx: TrainStepContext,
@@ -235,7 +215,7 @@ def calc_shap_importance(
     feature_names = _get_feature_names(config.train, list(ctx.db_enc.X_fname))
     if predict_proba is not None:
         explainer = shap.Explainer(
-            _build_shap_predict_fn(predict_proba, y_sample),
+            predict_proba,
             X_sample,
             algorithm='permutation',
             feature_names=feature_names,

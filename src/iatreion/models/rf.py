@@ -26,7 +26,7 @@ class RandomForestModel(Model):
         self.forest.fit(X, y)
 
     @override
-    def _predict_proba(self, X: NDArray, y: NDArray) -> NDArray:
+    def _predict_proba(self, X: NDArray) -> NDArray:
         return self.forest.predict_proba(X)
 
     @override

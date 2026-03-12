@@ -29,7 +29,7 @@ class ModelConfig:
 
     importance_methods: Annotated[
         list[ImportanceMethod], Parameter(alias='-im', consume_multiple=True)
-    ] = field(default_factory=lambda: ['permutation'])
+    ] = field(default_factory=list)
     'Feature-importance methods to export. Available: native, permutation, shap.'
 
     importance_repeats: Annotated[int, Parameter(alias='-ir')] = 5

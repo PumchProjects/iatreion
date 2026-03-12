@@ -25,7 +25,7 @@ class Model(ABC):
     def _fit(self, X: NDArray, y: NDArray) -> None: ...
 
     @abstractmethod
-    def _predict_proba(self, X: NDArray, y: NDArray) -> NDArray: ...
+    def _predict_proba(self, X: NDArray) -> NDArray: ...
 
     def _calc_native_importance(self, ctx: TrainStepContext) -> ImportanceScore:
         raise NotImplementedError
@@ -70,6 +70,6 @@ class Model(ABC):
         self._fit(*ctx.train_data)
 
     def predict(self, ctx: TrainStepContext) -> ModelReturn:
-        y_score = self._predict_proba(*ctx.test_data)
+        y_score = self._predict_proba(ctx.test_data[0])
         self._calc_importance(ctx)
         return y_score, self._calc_complexity()

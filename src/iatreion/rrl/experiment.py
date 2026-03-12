@@ -16,12 +16,20 @@ from .rrl.models import RRL
 from .rrl.utils import TrainStepContext
 
 
-def get_data_loader(args: RrlConfig, X: NDArray, y: NDArray, *, shuffle=False, pin_memory=False) -> DataLoader:
+def get_data_loader(
+    args: RrlConfig,
+    X: NDArray,
+    y: NDArray | None = None,
+    *,
+    shuffle: bool = False,
+    pin_memory: bool = False,
+) -> DataLoader:
+    if y is not None:
+        dataset = TensorDataset(torch.tensor(X.astype(np.float32)), torch.tensor(y))
+    else:
+        dataset = TensorDataset(torch.tensor(X.astype(np.float32)))
     return DataLoader(
-        TensorDataset(torch.tensor(X.astype(np.float32)), torch.tensor(y)),
-        batch_size=args.batch_size,
-        shuffle=shuffle,
-        pin_memory=pin_memory,
+        dataset, batch_size=args.batch_size, shuffle=shuffle, pin_memory=pin_memory
     )
 
 
@@ -93,9 +101,9 @@ def print_rules(args: RrlConfig, ctx: TrainStepContext, rrl: RRL, metrics: tuple
     return rule2weights
 
 
-def test_model(args: RrlConfig, X: NDArray, y: NDArray, rrl: RRL):
-    test_loader = get_data_loader(args, X, y)
-    y_score, _, _ = rrl.test(test_loader=test_loader, set_name='Test')
+def test_model(args: RrlConfig, X: NDArray, rrl: RRL):
+    test_loader = get_data_loader(args, X)
+    y_score = rrl.predict_proba(test_loader)
     return y_score
 
 

@@ -24,5 +24,5 @@ class TabPFNModel(Model):
         self.model.fit(X, y)
 
     @override
-    def _predict_proba(self, X: NDArray, y: NDArray) -> NDArray:
+    def _predict_proba(self, X: NDArray) -> NDArray:
         return self.model.predict_proba(X)

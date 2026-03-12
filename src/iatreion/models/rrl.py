@@ -49,9 +49,9 @@ class RrlModel(Model):
         self.rule2weights = print_rules(self.config, ctx, self.model, self.metrics)
 
     @override
-    def _predict_proba(self, X: NDArray, y: NDArray) -> NDArray:
+    def _predict_proba(self, X: NDArray) -> NDArray:
         assert self.model is not None
-        return test_model(self.config, X, y, self.model)
+        return test_model(self.config, X, self.model)
 
     @override
     def _calc_complexity(self) -> dict[str, float | tuple[float, str]]:

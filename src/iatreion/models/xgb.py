@@ -59,8 +59,8 @@ class XgboostModel(Model):
         )
 
     @override
-    def _predict_proba(self, X: NDArray, y: NDArray) -> NDArray:
-        dtest = xgb.DMatrix(X, y)
+    def _predict_proba(self, X: NDArray) -> NDArray:
+        dtest = xgb.DMatrix(X)
         y_score = self.bst.predict(dtest)
         if self.num_class <= 2:
             return np.stack([1 - y_score, y_score], axis=-1)

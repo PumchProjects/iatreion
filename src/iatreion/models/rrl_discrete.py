@@ -340,7 +340,7 @@ class DiscreteRrlModel(Model):
         self.ctx = ctx
 
     @override
-    def _predict_proba(self, X: NDArray, y: NDArray) -> NDArray:
+    def _predict_proba(self, X: NDArray) -> NDArray:
         assert self.ctx is not None
         data = pd.DataFrame(X, columns=self.ctx.db_enc.X_fname)
         result, _ = self.get_model(self.ctx).eval(data)

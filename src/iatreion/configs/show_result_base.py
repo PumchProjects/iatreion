@@ -24,7 +24,7 @@ class ShowResultConfig(ShowConfig):
     aggregates: Annotated[
         list[Literal['average', 'concat', 'stack']],
         Parameter(alias='-a', consume_multiple=True),
-    ] = field(default_factory=lambda: ['stack'])
+    ]
     """Aggregation strategy for multimodal samples of the same patient.
 'average': simple average predictions of different modalities.
 'concat': concatenate features of different modalities.

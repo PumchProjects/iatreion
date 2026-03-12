@@ -274,6 +274,16 @@ class RRL:
         return epoch_histc
 
     @torch.no_grad()
+    def predict_proba(self, test_loader):
+        y_pred_b_list = []
+        for (X,) in test_loader:
+            X = X.to(self.device, non_blocking=True)
+            output = self.net.forward(X) / torch.exp(self.net.t)
+            y_pred_b_list.append(output)
+        y_pred_b = torch.cat(y_pred_b_list).softmax(dim=1).numpy(force=True)
+        return y_pred_b
+
+    @torch.no_grad()
     def test(self, test_loader=None, set_name='Validation'):
         if test_loader is None:
             raise Exception("Data loader is unavailable!")

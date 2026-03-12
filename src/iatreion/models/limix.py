@@ -1,8 +1,8 @@
+import base64
+import pickle
 import subprocess
-from typing import Literal, override
+from typing import override
 
-import numpy as np
-import pandas as pd
 from numpy.typing import NDArray
 
 from iatreion.configs import LimiXConfig
@@ -10,52 +10,63 @@ from iatreion.utils import chdir
 
 from .base import Model
 
+wrapped_code = """
+import sys
+
+sys.path.append()
+"""
+
 
 class LimiXModel(Model):
     def __init__(self, config: LimiXConfig) -> None:
         super().__init__()
         self.config: LimiXConfig = config
         self.num_class = config.train.num_class
+        self.input_data = {}
 
-    def _save_dataset(
-        self, X: NDArray, y: NDArray, mode: Literal['train', 'test']
-    ) -> None:
-        data = np.concatenate([X, y.reshape(-1, 1)], axis=1)
-        columns = [f'V{i}' for i in range(X.shape[1])] + ['target']
-        df = pd.DataFrame(data, columns=columns)
-        match mode:
-            case 'train':
-                df.to_csv(self.config.train_file, index=False)
-            case 'test':
-                df.to_csv(self.config.test_file, index=False)
+    def _register(self, data: NDArray, name: str) -> None:
+        self.input_data[name] = data
 
-    def _run_inference(self) -> None:
-        cmd = [
+    @staticmethod
+    def _serialize(data: NDArray) -> str:
+        return base64.b64encode(pickle.dumps(data)).decode('utf-8')
+
+    @staticmethod
+    def _deserialize(data_b64: str) -> NDArray:
+        return pickle.loads(base64.b64decode(data_b64))
+
+    def _run_inference(self) -> NDArray:
+        input_b64 = self._serialize(self.input_data)
+        wrapped_code = f"""
+import base64, pickle, torch
+from inference.predictor import LimiXPredictor
+input_data = pickle.loads(base64.b64decode('{input_b64}'))
+for k, v in input_data.items(): globals()[k] = v
+y_score = LimiXPredictor(
+    device=torch.device('cuda'),
+    model_path='{self.config.model_path}',
+    inference_config='{self.config.inference_config_path}',
+).predict(X_train, y_train, X_test)
+print(base64.b64encode(pickle.dumps(y_score)).decode('utf-8'))
+"""
+        process = subprocess.run(
             str(self.config.python_path),
-            str(self.config.script_path),
-            '--data_dir',
-            str(self.config.data_dir),
-            '--save_name',
-            self.config.save_name,
-            '--inference_config_path',
-            str(self.config.inference_config_path),
-            '--model_path',
-            str(self.config.model_path),
-        ]
-        subprocess.run(cmd, check=True)
-
-    def _get_score(self) -> NDArray:
-        result_df = pd.read_csv(self.config.result_file)
-        y_score = result_df.iloc[:, 1:].to_numpy()
-        return y_score
+            capture_output=True,
+            check=True,
+            encoding='utf-8',
+            input=wrapped_code,
+            text=True,
+        )
+        return self._deserialize(process.stdout.strip())
 
     @override
     def _fit(self, X: NDArray, y: NDArray) -> None:
-        self._save_dataset(X, y, mode='train')
+        self._register(X, 'X_train')
+        self._register(y, 'y_train')
 
     @override
-    def _predict_proba(self, X: NDArray, y: NDArray) -> NDArray:
-        self._save_dataset(X, y, mode='test')
+    def _predict_proba(self, X: NDArray) -> NDArray:
+        self._register(X, 'X_test')
         with chdir(self.config.repo_path):
-            self._run_inference()
-        return self._get_score()
+            y_score = self._run_inference()
+        return y_score
