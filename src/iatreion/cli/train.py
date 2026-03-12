@@ -27,7 +27,10 @@ counter = count()
 
 def train(model: Model) -> None:
     with progress:
-        ModelTrainer(model).train()
+        try:
+            ModelTrainer(model).train()
+        finally:
+            model.close()
 
 
 @sub_app.command(sort_key=next(counter))

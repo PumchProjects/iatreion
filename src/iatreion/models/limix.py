@@ -1,20 +1,62 @@
-import base64
-import pickle
-import subprocess
-from typing import override
+from pathlib import Path
+from typing import Any, override
 
 from numpy.typing import NDArray
 
 from iatreion.configs import LimiXConfig
-from iatreion.utils import chdir
+from iatreion.utils.worker import SubprocessWorker
 
 from .base import Model
 
-wrapped_code = """
-import sys
+_WORKER_SCRIPT = Path(__file__).with_name('limix_worker.py')
 
-sys.path.append()
-"""
+
+class _LimiXWorkerClient:
+    def __init__(self, config: LimiXConfig) -> None:
+        self._worker = SubprocessWorker(
+            [
+                str(config.python_path),
+                str(_WORKER_SCRIPT),
+                '--repo-path',
+                str(config.repo_path),
+                '--model-path',
+                str(config.model_path),
+                '--inference-config',
+                str(config.inference_config_path),
+            ],
+            cwd=config.repo_path,
+            name='LimiX worker',
+            ready_status='ready',
+            shutdown_request={'command': 'shutdown'},
+        )
+        self._fit_loaded = False
+
+    def mark_dirty(self) -> None:
+        self._fit_loaded = False
+
+    def predict(
+        self,
+        X_test: NDArray,
+        X_train: NDArray,
+        y_train: NDArray,
+    ) -> NDArray:
+        if self._worker.ensure_started():
+            self._fit_loaded = False
+        if not self._fit_loaded:
+            self._request_ok('fit', payload=(X_train, y_train))
+            self._fit_loaded = True
+        return self._request_ok('predict', payload=X_test)
+
+    def close(self) -> None:
+        self._worker.close()
+        self._fit_loaded = False
+
+    def _request_ok(self, command: str, *, payload: Any = None) -> Any:
+        response = self._worker.request({'command': command, 'payload': payload})
+        status = response.get('status') if isinstance(response, dict) else None
+        if status != 'ok':
+            raise RuntimeError(self._worker.format_response_error(response))
+        return response.get('result')
 
 
 class LimiXModel(Model):
@@ -22,51 +64,21 @@ class LimiXModel(Model):
         super().__init__()
         self.config: LimiXConfig = config
         self.num_class = config.train.num_class
-        self.input_data = {}
-
-    def _register(self, data: NDArray, name: str) -> None:
-        self.input_data[name] = data
-
-    @staticmethod
-    def _serialize(data: NDArray) -> str:
-        return base64.b64encode(pickle.dumps(data)).decode('utf-8')
-
-    @staticmethod
-    def _deserialize(data_b64: str) -> NDArray:
-        return pickle.loads(base64.b64decode(data_b64))
-
-    def _run_inference(self) -> NDArray:
-        input_b64 = self._serialize(self.input_data)
-        wrapped_code = f"""
-import base64, pickle, torch
-from inference.predictor import LimiXPredictor
-input_data = pickle.loads(base64.b64decode('{input_b64}'))
-for k, v in input_data.items(): globals()[k] = v
-y_score = LimiXPredictor(
-    device=torch.device('cuda'),
-    model_path='{self.config.model_path}',
-    inference_config='{self.config.inference_config_path}',
-).predict(X_train, y_train, X_test)
-print(base64.b64encode(pickle.dumps(y_score)).decode('utf-8'))
-"""
-        process = subprocess.run(
-            str(self.config.python_path),
-            capture_output=True,
-            check=True,
-            encoding='utf-8',
-            input=wrapped_code,
-            text=True,
-        )
-        return self._deserialize(process.stdout.strip())
+        self._train_data: tuple[NDArray, NDArray] | None = None
+        self._worker = _LimiXWorkerClient(config)
 
     @override
     def _fit(self, X: NDArray, y: NDArray) -> None:
-        self._register(X, 'X_train')
-        self._register(y, 'y_train')
+        self._train_data = (X, y)
+        self._worker.mark_dirty()
 
     @override
     def _predict_proba(self, X: NDArray) -> NDArray:
-        self._register(X, 'X_test')
-        with chdir(self.config.repo_path):
-            y_score = self._run_inference()
-        return y_score
+        if self._train_data is None:
+            raise RuntimeError('LimiXModel must be fitted before prediction.')
+        X_train, y_train = self._train_data
+        return self._worker.predict(X, X_train, y_train)
+
+    @override
+    def close(self) -> None:
+        self._worker.close()
