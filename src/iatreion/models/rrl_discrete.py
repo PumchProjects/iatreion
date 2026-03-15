@@ -12,7 +12,7 @@ from scipy.special import expit, softmax
 
 from iatreion.configs import DataName, DiscreteRrlConfig
 from iatreion.exceptions import IatreionException
-from iatreion.rrl import TrainStepContext
+from iatreion.train_utils import TrainStepContext
 from iatreion.utils import decode_string, logger
 
 from .base import Model

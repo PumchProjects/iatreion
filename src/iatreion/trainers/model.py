@@ -1,7 +1,7 @@
 from typing import override
 
 from iatreion.models import Model
-from iatreion.rrl import TrainStepContext
+from iatreion.train_utils import TrainStepContext
 from iatreion.utils import Timer
 
 from .base import Trainer, TrainerReturn

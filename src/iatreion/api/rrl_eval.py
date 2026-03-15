@@ -8,7 +8,7 @@ from iatreion.configs import DiscreteRrlConfig, RrlEvalConfig
 from iatreion.exceptions import IatreionException
 from iatreion.models import DiscreteRrlModel
 from iatreion.preprocessors import get_preprocessors
-from iatreion.rrl import make_data_labels
+from iatreion.train_utils import make_data_labels
 from iatreion.trainers import Recorder
 
 

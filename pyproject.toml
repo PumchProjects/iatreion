@@ -84,8 +84,7 @@ explicit = true
 
 [tool.ruff]
 extend-exclude = [
-    "src/iatreion/rrl/experiment.py",
-    "src/iatreion/rrl/rrl/[!u]*.py",
+    "src/iatreion/rrl/*",
 ]
 
 [tool.ruff.lint]
@@ -94,8 +93,6 @@ select = ["E", "F", "UP", "B", "SIM", "I"]
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "src/iatreion/configs/*" = ["E501"]
-"src/iatreion/preprocessors/history.py" = ["E501"]
-"src/iatreion/rrl/rrl/utils.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "single"

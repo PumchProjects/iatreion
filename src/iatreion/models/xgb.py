@@ -5,7 +5,7 @@ import xgboost as xgb
 from numpy.typing import NDArray
 
 from iatreion.configs import XgboostConfig
-from iatreion.rrl import TrainStepContext
+from iatreion.train_utils import TrainStepContext
 from iatreion.utils import decode_string, encode_string, logger
 
 from .base import Model

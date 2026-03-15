@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from contextlib import closing
 from itertools import groupby
 
 from iatreion.configs import ModelConfig
-from iatreion.rrl import TrainStepContext, get_train_iterator
+from iatreion.train_utils import TrainStepContext, get_train_iterator
 from iatreion.utils import logger, task
 
 from .recorder import Recorder, TrainerReturn
@@ -28,9 +29,12 @@ class Trainer(ABC):
         stacking_recorder = Recorder(self.train_config)
         outer_recorders = defaultdict(lambda: Recorder(self.train_config))
 
-        with task(
-            'Fold:', self.train_config.n_folds, not self.train_config.final
-        ) as fold_advance:
+        with (
+            closing(iterator),
+            task(
+                'Fold:', self.train_config.n_folds, not self.train_config.final
+            ) as fold_advance,
+        ):
             for outer_fold, outer_group in groupby(
                 iterator, lambda ctx: ctx.outer_fold
             ):

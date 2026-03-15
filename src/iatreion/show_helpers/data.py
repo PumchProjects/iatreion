@@ -6,7 +6,7 @@ from matplotlib.figure import Figure
 from tableone import TableOne
 
 from iatreion.configs import ShowConfig, ShowDataConfig
-from iatreion.rrl import merge_data, read_data
+from iatreion.train_utils import merge_data, read_data
 
 group_mapping: dict[str, str] = {
     'abc': 'AD + AD-mix + AD-like',

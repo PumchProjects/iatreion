@@ -9,3 +9,4 @@ from .string import (
     stem_to_name,
 )
 from .time import Timer
+from .worker import SubprocessWorker

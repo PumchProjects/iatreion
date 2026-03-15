@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from cyclopts import Parameter
-from cyclopts.types import Directory, PositiveInt
+from cyclopts.types import Directory, ExistingDirectory, ExistingFile, PositiveInt
 from cyclopts.validators import Number
 
 from iatreion.utils import (
@@ -26,6 +26,8 @@ type SamplerName = Literal[
     'svmsmote',
     'kmeanssmote',
 ]
+type MissingValueStrategy = Literal['simple', 'limix', 'none']
+type DiscreteProcessingStrategy = Literal['onehot', 'minmax', 'none']
 
 
 @Parameter(name='*')
@@ -54,6 +56,30 @@ class TrainConfig:
     preprocess: Annotated[bool, Parameter(negative='--no-pp')] = True
     'Whether to preprocess the data (e.g., filling missing values, normalization).'
 
+    missing_value_strategy: Annotated[MissingValueStrategy, Parameter(alias='-mvs')] = (
+        'simple'
+    )
+    """Missing-value handling strategy.
+'simple': use mode for unordered, median for ordered/discrete, mean for continuous.
+'limix': use the LimiX reconstruction model and only fill missing entries.
+'none': keep missing values unchanged.
+"""
+
+    normalize_continuous: Annotated[
+        bool,
+        Parameter(name='--normalize-continuous', negative='--no-normalize-continuous'),
+    ] = True
+    'Whether to z-score normalize continuous features.'
+
+    discrete_processing: Annotated[
+        DiscreteProcessingStrategy, Parameter(alias='-dp')
+    ] = 'onehot'
+    """Processing strategy for non-continuous features after resampling.
+'onehot': one-hot encode categorical features.
+'minmax': min-max scale categorical codes to [0, 1].
+'none': keep categorical codes unchanged.
+"""
+
     true_ref: Annotated[bool, Parameter(alias='-tr')] = False
     'Align not only the test data, but also the training data to the reference data.'
 
@@ -80,6 +106,23 @@ class TrainConfig:
 
     min_n_samples: Annotated[int, Parameter(alias='-mns')] = 0
     'Minimum number of samples for each class after resampling.'
+
+    limix_python_path: Annotated[ExistingFile | None, Parameter(alias='-lpp')] = None
+    'Python interpreter used for LimiX-based missing-value imputation.'
+
+    limix_repo_path: Annotated[ExistingDirectory | None, Parameter(alias='-lrp')] = None
+    'Path to the LimiX repository used for missing-value imputation.'
+
+    limix_model_path: Annotated[ExistingFile | None, Parameter(alias='-lmp')] = None
+    'Path to the pre-trained LimiX model file used for missing-value imputation.'
+
+    limix_inference_config_path: Annotated[
+        ExistingFile | None, Parameter(alias='-lic')
+    ] = None
+    'Optional override for the LimiX missing-value inference config file.'
+
+    limix_device: Annotated[str, Parameter(alias='-ld')] = 'cuda'
+    'Device passed to the LimiX missing-value worker.'
 
     val_size: Annotated[float | int | None, Parameter(alias='-vs')] = None
     """If float, should be between 0.0 and 1.0 and represent the proportion of the dataset to include in the validation split.
@@ -208,10 +251,48 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     def __post_init__(self) -> None:
         set_device(self.device_id)
         set_seed(self.seed)
+        self.set_groups()
         if self.num_class > 2:
             # HACK: Disable ROC plot for multiclass classification
             self.plot_roc = False
-        self.set_groups()
+        self.validate_preprocessing()
+
+    @property
+    def resolved_limix_inference_config_path(self) -> Path:
+        if self.limix_inference_config_path is not None:
+            return self.limix_inference_config_path
+        if self.limix_repo_path is None:
+            raise ValueError('limix_repo_path must be set when using LimiX imputation.')
+        return self.limix_repo_path / 'config' / 'reg_default_noretrieval_MVI.json'
+
+    def validate_preprocessing(self) -> None:
+        if not self.preprocess:
+            return
+        if self.over_sampler is not None and self.missing_value_strategy == 'none':
+            raise ValueError(
+                'Over-sampling requires missing_value_strategy to be "simple" or "limix".'
+            )
+        if self.missing_value_strategy != 'limix':
+            return
+
+        missing: list[str] = []
+        if self.limix_python_path is None:
+            missing.append('limix_python_path')
+        if self.limix_repo_path is None:
+            missing.append('limix_repo_path')
+        if self.limix_model_path is None:
+            missing.append('limix_model_path')
+        if missing:
+            joined = ', '.join(missing)
+            raise ValueError(
+                f'LimiX imputation requires the following parameters: {joined}.'
+            )
+
+        inference_config = self.resolved_limix_inference_config_path
+        if not inference_config.is_file():
+            raise ValueError(
+                f'LimiX inference config file not found: {inference_config}'
+            )
 
     @contextmanager
     def logging(self, name: str | Path) -> Generator[None, None, None]:

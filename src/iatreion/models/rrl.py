@@ -3,7 +3,6 @@ from typing import Any, override
 from numpy.typing import NDArray
 
 from iatreion.configs import RrlConfig
-from iatreion.rrl import TrainStepContext
 from iatreion.rrl.experiment import (
     calc_complexity,
     print_rules,
@@ -11,6 +10,7 @@ from iatreion.rrl.experiment import (
     train_model,
 )
 from iatreion.rrl.rrl.models import RRL
+from iatreion.train_utils import TrainStepContext
 from iatreion.utils import set_seed_torch
 
 from .base import Model

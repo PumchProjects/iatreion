@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from sklearn.metrics import roc_auc_score
 
 from iatreion.configs import ImportanceMethod, ModelConfig, TrainConfig
-from iatreion.rrl import TrainStepContext
+from iatreion.train_utils import TrainStepContext
 from iatreion.utils import decode_string, task
 
 type ImportanceScore = dict[str, float]

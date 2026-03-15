@@ -4,7 +4,7 @@ from numpy.typing import NDArray
 from sklearn.ensemble import RandomForestClassifier
 
 from iatreion.configs import RandomForestConfig
-from iatreion.rrl import TrainStepContext
+from iatreion.train_utils import TrainStepContext
 
 from .base import Model
 from .importance import ImportanceScore, calc_shap_importance

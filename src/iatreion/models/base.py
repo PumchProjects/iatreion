@@ -4,7 +4,7 @@ from collections.abc import Callable
 from numpy.typing import NDArray
 
 from iatreion.configs import ImportanceMethod, ModelConfig
-from iatreion.rrl import TrainStepContext
+from iatreion.train_utils import TrainStepContext
 from iatreion.utils import logger
 
 from .importance import (

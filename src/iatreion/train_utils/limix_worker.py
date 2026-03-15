@@ -49,6 +49,7 @@ def _build_predictor(
     model_path: Path,
     inference_config_path: Path,
     device: str,
+    mask_prediction: bool,
 ) -> Any:
     os.chdir(repo_path)
     repo = str(repo_path)
@@ -61,6 +62,7 @@ def _build_predictor(
     return LimiXPredictor(
         device=torch.device(device),
         model_path=str(model_path),
+        mask_prediction=mask_prediction,
         inference_config=str(inference_config_path),
     )
 
@@ -71,6 +73,7 @@ def _serve(protocol_stream: BinaryIO, args: argparse.Namespace) -> int:
         model_path=args.model_path,
         inference_config_path=args.inference_config,
         device=args.device,
+        mask_prediction=args.mask_prediction,
     )
     X_train = None
     y_train = None
@@ -91,8 +94,11 @@ def _serve(protocol_stream: BinaryIO, args: argparse.Namespace) -> int:
             elif command == 'predict':
                 if X_train is None or y_train is None:
                     raise RuntimeError('Worker received predict before fit.')
-                y_score = predictor.predict(X_train, y_train, payload)
-                response = {'status': 'ok', 'result': y_score}
+                X_test, task_type = payload['X_test'], payload['task_type']
+                result = predictor.predict(
+                    X_train, y_train, X_test, task_type=task_type
+                )
+                response = {'status': 'ok', 'result': result}
             elif command == 'shutdown':
                 _write_message(protocol_stream, {'status': 'ok'})
                 return 0
@@ -114,6 +120,7 @@ def main() -> int:
     parser.add_argument('--model-path', type=Path, required=True)
     parser.add_argument('--inference-config', type=Path, required=True)
     parser.add_argument('--device', default='cuda')
+    parser.add_argument('--mask-prediction', action='store_true')
     args = parser.parse_args()
 
     protocol_stream = _reserve_stdout_for_protocol()

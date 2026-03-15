@@ -10,10 +10,10 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 
 from iatreion.configs import RrlConfig
+from iatreion.train_utils import TrainStepContext
 from iatreion.utils import logger, task
 
 from .rrl.models import RRL
-from .rrl.utils import TrainStepContext
 
 
 def get_data_loader(
