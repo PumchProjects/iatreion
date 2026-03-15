@@ -28,7 +28,7 @@ class Model(ABC):
     def _predict_proba(self, X: NDArray) -> NDArray: ...
 
     def close(self) -> None:
-        pass
+        return None
 
     def _calc_native_importance(self, ctx: TrainStepContext) -> ImportanceScore:
         raise NotImplementedError

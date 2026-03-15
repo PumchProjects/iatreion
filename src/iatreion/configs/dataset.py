@@ -72,6 +72,9 @@ For discrete RRL, separate models are evaluated and then aggregated.
 For other models, features are concatenated.
 """
 
+    cat_sep: Annotated[str, Parameter(alias='-cs')] = ';'
+    'Separator for categories of categorical features.'
+
     @property
     def name_str(self) -> str:
         return ', '.join(self.names)

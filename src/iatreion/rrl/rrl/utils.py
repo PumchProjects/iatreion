@@ -26,15 +26,6 @@ from iatreion.utils import encode_string, logger
 pd.set_option('future.no_silent_downcasting', True)
 
 
-def read_info(info_path) -> list[list[str]]:
-    with open(info_path) as f:
-        f_list = []
-        for line in f:
-            tokens = line.strip().rsplit(maxsplit=1)
-            f_list.append(tokens)
-    return f_list
-
-
 def make_data_labels(
     D: pd.DataFrame, train: TrainConfig, group_columns: list[str]
 ) -> tuple[pd.DataFrame, pd.Series]:
@@ -47,9 +38,7 @@ def make_data_labels(
     group_mapping = train.get_name_group_mapping()
     if base_pos:
         D.loc[:, label_pos] = D[base_pos].fillna(D[label_pos])
-    D.loc[:, label_pos] = (
-        D[label_pos].map(group_mapping, na_action='ignore').astype('string')
-    )
+    D.loc[:, label_pos] = D[label_pos].map(group_mapping, na_action='ignore')
     D = D[~D[label_pos].isna()]
     y_df = D[label_pos]
     X_df = D.drop(columns=group_columns)
@@ -58,38 +47,37 @@ def make_data_labels(
 
 def read_csv(
     name: DataName, dataset: DatasetConfig, train: TrainConfig
-) -> tuple[pd.DataFrame, pd.Series, list[list[str]]]:
+) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
     data_path = dataset.get_data(name)
     info_path = dataset.get_info(name)
 
-    f_list = read_info(info_path)
-    group_columns = [name for name, type in f_list if type == 'label']
+    f_df = pd.read_csv(info_path)
+    group_columns = f_df.loc[f_df['type'] == 'label', 'name'].tolist()
 
-    names = [f[0] for f in f_list]
     dtype = {col: str for col in group_columns}
-    D = pd.read_csv(data_path, names=names, index_col=0, dtype=dtype)
+    D = pd.read_csv(data_path, index_col=0, dtype=dtype)
     X_df, y_df = make_data_labels(D, train, group_columns)
-    f_list = f_list[1 : -len(group_columns)]
+    f_df = f_df.iloc[1 : -len(group_columns)]
 
     if train._encode:
         X_df.rename(columns=encode_string, inplace=True)
-        f_list = [[encode_string(name), type] for name, type in f_list]
+        f_df['name'] = f_df['name'].map(encode_string)
 
-    return X_df, y_df, f_list
+    return X_df, y_df, f_df
 
 
 def read_data(
     dataset: DatasetConfig, train: TrainConfig
 ) -> tuple[list[pd.DataFrame], list[pd.Series], pd.Series, list[pd.DataFrame]]:
-    X_df, y_df, f_list = read_csv(dataset.names[0], dataset, train)
+    X_df, y_df, f_df = read_csv(dataset.names[0], dataset, train)
     ref_y_df = y_df
-    X_dfs, y_dfs, f_dfs = [X_df], [y_df], [pd.DataFrame(f_list)]
+    X_dfs, y_dfs, f_dfs = [X_df], [y_df], [f_df]
     for name in dataset.names[1:]:
-        X_df, y_df, f_list = read_csv(name, dataset, train)
+        X_df, y_df, f_df = read_csv(name, dataset, train)
         ref_y_df = ref_y_df[ref_y_df.index.intersection(y_df.index)]
         X_dfs.append(X_df)
         y_dfs.append(y_df)
-        f_dfs.append(pd.DataFrame(f_list))
+        f_dfs.append(f_df)
     if train._shuffle:
         ref_y_df = ref_y_df.sample(frac=1, random_state=0)
     return X_dfs, y_dfs, ref_y_df, f_dfs
@@ -119,9 +107,11 @@ class DBEncoder:
         self.std = None
 
     def split_data_fine(self, X_df: pd.DataFrame):
-        unordered_data = X_df[self.f_df.loc[self.f_df[1] == 'unordered', 0]]
-        ordered_data = X_df[self.f_df.loc[self.f_df[1] == 'ordered', 0]]
-        continuous_data = X_df[self.f_df.loc[self.f_df[1] == 'continuous', 0]]
+        unordered_data = X_df[self.f_df.loc[self.f_df['type'] == 'unordered', 'name']]
+        ordered_data = X_df[
+            self.f_df.loc[self.f_df['type'].isin({'ordered', 'discrete'}), 'name']
+        ]
+        continuous_data = X_df[self.f_df.loc[self.f_df['type'] == 'continuous', 'name']]
         if not continuous_data.empty:
             continuous_data = continuous_data.replace(
                 to_replace=r'.*\?.*', value=np.nan, regex=True
@@ -130,8 +120,8 @@ class DBEncoder:
         return unordered_data, ordered_data, continuous_data
 
     def split_data_coarse(self, X_df: pd.DataFrame):
-        discrete_data = X_df[self.f_df.loc[self.f_df[1] != 'continuous', 0]]
-        continuous_data = X_df[self.f_df.loc[self.f_df[1] == 'continuous', 0]]
+        discrete_data = X_df[self.f_df.loc[self.f_df['type'] != 'continuous', 'name']]
+        continuous_data = X_df[self.f_df.loc[self.f_df['type'] == 'continuous', 'name']]
         return discrete_data, continuous_data
 
     @staticmethod

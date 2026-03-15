@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 
 import pandas as pd
-from pandas.api.types import is_string_dtype
+from pandas.api.types import CategoricalDtype
 
 from iatreion.configs import DataName, PreprocessorConfig
 from iatreion.exceptions import IatreionException
@@ -130,9 +130,9 @@ class Preprocessor(ABC):
         ge_name: str,
         lt_name: str,
     ) -> pd.DataFrame:
-        col: pd.Series = (data[column] >= threshold).astype('Int8')
+        col: pd.Series = (data[column] >= threshold).astype('Int8').fillna(-1)
         data = data.drop(columns=[column])
-        data[name] = col.map({1: ge_name, 0: lt_name}).astype('string')
+        data[name] = pd.Categorical.from_codes(col, categories=[lt_name, ge_name])
         return data
 
     def drop_columns(
@@ -200,30 +200,40 @@ class Preprocessor(ABC):
             data = data.drop(columns=columns)
         return data
 
-    def get_augmented_vector_name(self, data: pd.DataFrame) -> list[tuple[str, str]]:
-        discrete_th = 10
-        augmented_vector_name: list[tuple[str, str]] = []
-        data = data.iloc[:, : -len(self.config.group_columns)]
-        for name in data.columns:
-            if is_string_dtype(data[name]):
-                augmented_vector_name.append((name, 'unordered'))
-            elif data[name].nunique() <= discrete_th:
-                augmented_vector_name.append((name, 'ordered'))
+    def save_info(self, data: pd.DataFrame) -> pd.DataFrame:
+        augmented_vector_name = [(self.config.index_name, 'index', '')]
+        for name in data.columns[: -len(self.config.group_columns)]:
+            if hasattr(data[name], 'cat'):
+                order = 'ordered' if data[name].cat.ordered else 'unordered'
+                categories = self.config.dataset.cat_sep.join(data[name].cat.categories)
+                data[name] = data[name].cat.codes.astype('Int64').replace(-1, pd.NA)
+                augmented_vector_name.append((name, order, categories))
+            elif data[name].nunique() <= self.config.discrete_threshold:
+                categories = sorted(data[name].dropna().unique())
+                joined_categories = self.config.dataset.cat_sep.join(
+                    map(str, categories)
+                )
+                data[name] = (
+                    data[name]
+                    .astype(CategoricalDtype(categories=categories, ordered=True))
+                    .cat.codes.astype('Int64')
+                    .replace(-1, pd.NA)
+                )
+                augmented_vector_name.append((name, 'discrete', joined_categories))
             else:
-                augmented_vector_name.append((name, 'continuous'))
-        return augmented_vector_name
+                augmented_vector_name.append((name, 'continuous', ''))
+        for col in self.config.group_columns:
+            augmented_vector_name.append((col, 'label', ''))
+        info = pd.DataFrame(
+            augmented_vector_name, columns=['name', 'type', 'categories']
+        )
+        info_file = self.config.dataset.get_info(self.name)
+        info.to_csv(info_file, index=False)
+        return data
 
-    def save_data(
-        self, data: pd.DataFrame, augmented_vector_name: list[tuple[str, str]]
-    ) -> None:
-        feature_names = [f'{pair[0]} {pair[1]}\n' for pair in augmented_vector_name]
-        with self.config.dataset.get_info(self.name).open('w', encoding='utf-8') as f:
-            f.write(f'{self.config.index_name} index\n')
-            f.writelines(feature_names)
-            for col in self.config.group_columns:
-                f.write(f'{col} label\n')
+    def save_data(self, data: pd.DataFrame) -> None:
         data_file = self.config.dataset.get_data(self.name)
-        data.to_csv(data_file, na_rep='<NA>', float_format='%.6f', header=False)
+        data.to_csv(data_file, na_rep='<NA>')
 
     def process(self) -> None:
         logger.info(
@@ -237,6 +247,6 @@ class Preprocessor(ABC):
         threshold = int(len(subset) * 0.5)
         data = data.dropna(axis=0, thresh=threshold, subset=subset)
         data = self.remove_useless_columns(data)
-        augmented_vector_name = self.get_augmented_vector_name(data)
         logger.info('Saving data...')
-        self.save_data(data, augmented_vector_name)
+        data = self.save_info(data)
+        self.save_data(data)

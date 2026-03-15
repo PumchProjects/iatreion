@@ -148,6 +148,12 @@ class PreprocessorConfig:
     ] = None
     'Group columns in the data files. If not set, use default group columns.'
 
+    discrete_threshold: Annotated[int, Parameter(alias='-dt')] = 10
+    """Threshold for determining whether a column is discrete. If the number of unique
+values in a column is less than or equal to this threshold, it will be considered as
+discrete. This is used for determining the encoding method for the column.
+"""
+
     _vmri_data_path: Path | None = None
 
     _vmri_change_path: Path | None = None

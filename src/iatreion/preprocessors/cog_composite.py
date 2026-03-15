@@ -22,7 +22,7 @@ class CompositePreprocessor(Preprocessor):
             data, '系列动作模仿正确数', 2, '系列动作模仿', '正常', '异常'
         )
         # HACK: Rey再认不是正确/错误的一律视为缺失
-        data.loc[~data['Rey再认'].isin(['正确', '错误']), 'Rey再认'] = pd.NA
+        data['Rey再认'] = pd.Categorical(data['Rey再认'], categories=['错误', '正确'])
         selected = [
             data.loc[:, '动物列名_实际数字'],
             data.loc[:, ['数字符号_正确数', '接龙A_A法时间']],

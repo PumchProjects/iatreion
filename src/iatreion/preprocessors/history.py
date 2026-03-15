@@ -55,13 +55,22 @@ class HistoryPreprocessor(Preprocessor):
 
     def parse_column_values(
         self, data: pd.DataFrame, column: str
-    ) -> tuple[pd.Series, pd.Series]:
+    ) -> tuple[pd.Series, list[str]]:
         values = data[column]
+        if self.config._final:
+            categories = self.process_info(list[str], column, 'categories')
+        else:
+            val_map: list[tuple[int, str]] = []
+            for val in values.unique():
+                if not pd.isna(val) and (val_match := self.val_pattern.match(val)):
+                    value = int(val_match.group('value'))
+                    name = val_match.group('name')
+                    val_map.append((value, name))
+            val_map.sort()
+            categories = [name for _, name in val_map]
+            self.process_info[column, 'categories'] = categories
         names = values.replace(regex=self.val_pattern, value=r'\g<name>')
-        values = values.replace(regex=self.val_pattern, value=r'\g<value>').astype(
-            'Int64'
-        )
-        return values, names
+        return names, categories
 
     def parse_column_codes(
         self, data: pd.DataFrame, column: str
@@ -82,8 +91,8 @@ class HistoryPreprocessor(Preprocessor):
     def process_single_choice(
         self, data: pd.DataFrame, column: str, *, ordered: bool = True
     ) -> pd.DataFrame:
-        values, names = self.parse_column_values(data, column)
-        data[column] = values if ordered else names
+        names, categories = self.parse_column_values(data, column)
+        data[column] = pd.Categorical(names, categories=categories, ordered=ordered)
         return data
 
     def binarize_multiple_choice(self, data: pd.DataFrame, column: str) -> pd.DataFrame:
