@@ -29,6 +29,7 @@ class XgboostModel(Model):
         self.num_class = config.train.num_class
         self.param = config._param
         self.update_param()
+        self.feature_types: list[str] = []
 
     def update_param(self) -> None:
         if self.num_class <= 2:
@@ -48,7 +49,12 @@ class XgboostModel(Model):
 
     @override
     def _fit(self, X: NDArray, y: NDArray) -> None:
-        dtrain = xgb.DMatrix(X, y)
+        dtrain = xgb.DMatrix(
+            X,
+            y,
+            feature_types=self.feature_types,
+            enable_categorical=True,
+        )
         self.bst = xgb.train(
             self.param,
             dtrain,
@@ -59,8 +65,17 @@ class XgboostModel(Model):
         )
 
     @override
+    def fit(self, ctx: TrainStepContext) -> None:
+        self.feature_types = [
+            *('i' for _ in range(ctx.db_enc.binary_flen)),
+            *('c' for _ in range(ctx.db_enc.categorical_flen)),
+            *('q' for _ in range(ctx.db_enc.numeric_flen)),
+        ]
+        super().fit(ctx)
+
+    @override
     def _predict_proba(self, X: NDArray) -> NDArray:
-        dtest = xgb.DMatrix(X)
+        dtest = xgb.DMatrix(X, feature_types=self.feature_types)
         y_score = self.bst.predict(dtest)
         if self.num_class <= 2:
             return np.stack([1 - y_score, y_score], axis=-1)
@@ -73,8 +88,9 @@ class XgboostModel(Model):
             / f'fmap_{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.tsv'
         )
         with fmap_file.open('w', encoding='utf-8') as f:
-            for i, name in enumerate(ctx.db_enc.X_fname):
-                ftype = 'i' if i < ctx.db_enc.discrete_flen else 'q'
+            for i, (name, ftype) in enumerate(
+                zip(ctx.db_enc.X_fname, self.feature_types, strict=True)
+            ):
                 f.write(f'{i}\t{encode_string(name, " ")}\t{ftype}\n')
         raw_score = self.bst.get_score(str(fmap_file), importance_type='gain')
         score = {decode_string(name): float(value) for name, value in raw_score.items()}

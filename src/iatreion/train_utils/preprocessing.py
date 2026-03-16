@@ -50,8 +50,9 @@ class DBEncoder:
         self.label_enc = preprocessing.LabelEncoder()
         self.X_fname: list[str] = []
         self.y_fname: list[str] = []
-        self.discrete_flen = 0
-        self.continuous_flen = 0
+        self.binary_flen = 0
+        self.categorical_flen = 0
+        self.numeric_flen = 0
         self.mean: pd.Series | None = None
         self.std: pd.Series | None = None
         self._continuous_mean = pd.Series(dtype=float)
@@ -60,9 +61,15 @@ class DBEncoder:
         self.unordered_columns = self._get_columns('unordered')
         self.ordered_columns = self._get_columns('ordered', 'discrete')
         self.continuous_columns = self._get_columns('continuous')
-        self.categorical_columns = [*self.unordered_columns, *self.ordered_columns]
-        self.feature_columns = [*self.categorical_columns, *self.continuous_columns]
+        self.discrete_columns = [*self.unordered_columns, *self.ordered_columns]
+        self.feature_columns = [*self.discrete_columns, *self.continuous_columns]
         self.category_labels = self._build_category_labels()
+        self.binary_discrete_columns = [
+            name for name in self.discrete_columns if self._category_count(name) <= 2
+        ]
+        self.categorical_discrete_columns = [
+            name for name in self.discrete_columns if self._category_count(name) > 2
+        ]
 
     def fit_transform(
         self,
@@ -207,7 +214,7 @@ class DBEncoder:
             index=combined.index,
             columns=combined.columns,
         )
-        self._snap_categorical_columns(combined_filled, self.categorical_columns)
+        self._snap_categorical_columns(combined_filled, self.discrete_columns)
 
         frames.train = combined_filled.iloc[: len(frames.train)].copy()
         offset = len(frames.train)
@@ -282,7 +289,7 @@ class DBEncoder:
             if not strategy:
                 return X, y
 
-        categorical = [name in self.categorical_columns for name in X.columns]
+        categorical = [name in self.discrete_columns for name in X.columns]
         if not any(categorical):
             match self.train.over_sampler:
                 case 'adasyn':
@@ -339,51 +346,66 @@ class DBEncoder:
     def _encode_output_frame(
         self, frame: pd.DataFrame, *, fit: bool = False
     ) -> NDArray:
-        discrete_names: list[str] = []
-        data_parts: list[NDArray] = []
+        binary_parts: list[NDArray] = []
+        categorical_parts: list[NDArray] = []
+        numeric_parts: list[NDArray] = []
+
+        binary_names: list[str] = []
+        categorical_names: list[str] = []
+        numeric_names: list[str] = []
+
+        inverse_mean = pd.Series(dtype=float)
+        inverse_std = pd.Series(dtype=float)
 
         if self.train.discrete_processing == 'onehot':
-            discrete_array, discrete_names = self._one_hot_encode(frame)
-            if discrete_array.shape[1] > 0:
-                data_parts.append(discrete_array)
-            numeric_frame = frame.loc[:, self.continuous_columns]
-            numeric_names = self.continuous_columns
-            inverse_mean = self._continuous_mean if numeric_names else None
-            inverse_std = self._continuous_std if numeric_names else None
+            binary_array, binary_names = self._one_hot_encode(frame)
+            if binary_array.shape[1] > 0:
+                binary_parts.append(binary_array)
+        elif self.train.discrete_processing == 'none':
+            binary_frame = frame.loc[:, self.binary_discrete_columns]
+            categorical_frame = frame.loc[:, self.categorical_discrete_columns]
+            binary_names = self.binary_discrete_columns
+            categorical_names = self.categorical_discrete_columns
+            if binary_frame.shape[1] > 0:
+                binary_parts.append(binary_frame.to_numpy(dtype=float))
+            if categorical_frame.shape[1] > 0:
+                categorical_parts.append(categorical_frame.to_numpy(dtype=float))
+                inverse_mean = pd.Series(0.0, index=categorical_names)
+                inverse_std = pd.Series(1.0, index=categorical_names)
         else:
-            numeric_frame, discrete_inverse_mean, discrete_inverse_std = (
+            binary_frame = frame.loc[:, self.binary_discrete_columns]
+            binary_names = self.binary_discrete_columns
+            if binary_frame.shape[1] > 0:
+                binary_parts.append(binary_frame.to_numpy(dtype=float))
+            scaled_numeric_frame, discrete_inverse_mean, discrete_inverse_std = (
                 self._transform_numeric_discrete(frame)
             )
-            if self.continuous_columns:
-                numeric_frame = pd.concat(
-                    [numeric_frame, frame.loc[:, self.continuous_columns]], axis=1
-                )
-            numeric_names = numeric_frame.columns.to_list()
+            if scaled_numeric_frame.shape[1] > 0:
+                numeric_parts.append(scaled_numeric_frame.to_numpy(dtype=float))
+                numeric_names.extend(scaled_numeric_frame.columns.to_list())
+                inverse_mean = pd.concat([inverse_mean, discrete_inverse_mean])
+                inverse_std = pd.concat([inverse_std, discrete_inverse_std])
+
+        continuous_frame = frame.loc[:, self.continuous_columns]
+        if continuous_frame.shape[1] > 0:
+            numeric_parts.append(continuous_frame.to_numpy(dtype=float))
+            numeric_names.extend(self.continuous_columns)
             inverse_mean = pd.concat(
-                [
-                    discrete_inverse_mean,
-                    self._continuous_mean.reindex(self.continuous_columns),
-                ]
+                [inverse_mean, self._continuous_mean.reindex(self.continuous_columns)]
             )
             inverse_std = pd.concat(
-                [
-                    discrete_inverse_std,
-                    self._continuous_std.reindex(self.continuous_columns),
-                ]
+                [inverse_std, self._continuous_std.reindex(self.continuous_columns)]
             )
-
-        if numeric_frame.shape[1] > 0:
-            data_parts.append(numeric_frame.to_numpy(dtype=float))
 
         if fit:
-            self.discrete_flen = len(discrete_names)
-            self.continuous_flen = len(numeric_names)
-            self.X_fname = [*discrete_names, *numeric_names]
-            self.mean = (
-                None if inverse_mean is None or inverse_mean.empty else inverse_mean
-            )
-            self.std = None if inverse_std is None or inverse_std.empty else inverse_std
+            self.binary_flen = len(binary_names)
+            self.categorical_flen = len(categorical_names)
+            self.numeric_flen = len(numeric_names)
+            self.X_fname = [*binary_names, *categorical_names, *numeric_names]
+            self.mean = None if inverse_mean.empty else inverse_mean
+            self.std = None if inverse_std.empty else inverse_std
 
+        data_parts = [*binary_parts, *categorical_parts, *numeric_parts]
         if not data_parts:
             return np.empty((len(frame), 0))
         return np.hstack(data_parts)
@@ -392,7 +414,7 @@ class DBEncoder:
         data_parts: list[NDArray] = []
         feature_names: list[str] = []
 
-        for name in self.categorical_columns:
+        for name in self.discrete_columns:
             series = frame[name]
             category_count = self._category_count(name)
             codes = [1] if category_count == 2 else list(range(category_count))
@@ -412,24 +434,18 @@ class DBEncoder:
     def _transform_numeric_discrete(
         self, frame: pd.DataFrame
     ) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
-        numeric = frame.loc[:, self.categorical_columns].copy()
+        numeric = frame.loc[:, self.categorical_discrete_columns].copy()
         mean = pd.Series(dtype=float)
         std = pd.Series(dtype=float)
 
-        for name in self.categorical_columns:
+        for name in self.categorical_discrete_columns:
             category_range = max(self._category_count(name) - 1, 0)
-            if self.train.discrete_processing == 'minmax':
-                if category_range > 0:
-                    numeric.loc[:, name] = numeric[name] / category_range
-                else:
-                    numeric.loc[:, name] = numeric[name].where(
-                        numeric[name].isna(), 0.0
-                    )
-                mean.loc[name] = 0.0
-                std.loc[name] = 1.0 if category_range == 0 else float(category_range)
+            if category_range > 0:
+                numeric.loc[:, name] = numeric[name] / category_range
             else:
-                mean.loc[name] = 0.0
-                std.loc[name] = 1.0
+                numeric.loc[:, name] = numeric[name].where(numeric[name].isna(), 0.0)
+            mean.loc[name] = 0.0
+            std.loc[name] = 1.0 if category_range == 0 else float(category_range)
         return numeric, mean, std
 
     @staticmethod

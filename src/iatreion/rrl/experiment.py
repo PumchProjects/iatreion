@@ -33,7 +33,11 @@ def get_data_loader(
     )
 
 
-def train_model(args: RrlConfig, save_model_callback: Callable[..., None], ctx: TrainStepContext):
+def train_model(
+    args: RrlConfig,
+    save_model_callback: Callable[..., None],
+    ctx: TrainStepContext,
+):
     writer = SummaryWriter(str(args.folder_path))
 
     train_loader = get_data_loader(args, *ctx.train_data, shuffle=True, pin_memory=True)
@@ -44,21 +48,28 @@ def train_model(args: RrlConfig, save_model_callback: Callable[..., None], ctx: 
 
     db_enc = ctx.db_enc
     y_fname = db_enc.y_fname
-    discrete_flen = db_enc.discrete_flen
-    continuous_flen = db_enc.continuous_flen
+    binary_flen = db_enc.binary_flen
+    categorical_flen = db_enc.categorical_flen
+    numeric_flen = db_enc.numeric_flen
 
-    rrl = RRL(dim_list=[(discrete_flen, continuous_flen)] + list(map(int, args.structure.split('@'))) + [len(y_fname)],
-              use_not=args.use_not,
-              writer=writer,
-              estimated_grad=args.estimated_grad,
-              use_skip=args.skip,
-              save_model_callback=save_model_callback,
-              use_nlaf=args.nlaf,
-              alpha=args.alpha,
-              beta=args.beta,
-              gamma=args.gamma,
-              temperature=args.temp)
-    
+    rrl = RRL(
+        dim_list=[
+            (binary_flen, categorical_flen + numeric_flen),
+            *list(map(int, args.structure.split('@'))),
+            len(y_fname),
+        ],
+        use_not=args.use_not,
+        writer=writer,
+        estimated_grad=args.estimated_grad,
+        use_skip=args.skip,
+        save_model_callback=save_model_callback,
+        use_nlaf=args.nlaf,
+        alpha=args.alpha,
+        beta=args.beta,
+        gamma=args.gamma,
+        temperature=args.temp,
+    )
+
     y_true = ctx.train_data[1]
     class_weights = None
     if args.weighted:
@@ -90,14 +101,37 @@ def train_model(args: RrlConfig, save_model_callback: Callable[..., None], ctx: 
         )
 
 
-def print_rules(args: RrlConfig, ctx: TrainStepContext, rrl: RRL, metrics: tuple[float, ...]) -> Any:
+def print_rules(
+    args: RrlConfig,
+    ctx: TrainStepContext,
+    rrl: RRL,
+    metrics: tuple[float, ...],
+) -> Any:
     train_loader = get_data_loader(args, *ctx.train_data)
     db_enc = ctx.db_enc
     if args.print_rule:
-        with open(args.train._log_dir / ctx.rrl_file, 'w', encoding='utf-8') as rrl_file:
-            rule2weights = rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, file=rrl_file, mean=db_enc.mean, std=db_enc.std, metrics=metrics)
+        with open(
+            args.train._log_dir / ctx.rrl_file, 'w', encoding='utf-8'
+        ) as rrl_file:
+            rule2weights = rrl.rule_print(
+                db_enc.X_fname,
+                db_enc.y_fname,
+                train_loader,
+                file=rrl_file,
+                mean=db_enc.mean,
+                std=db_enc.std,
+                metrics=metrics,
+            )
     else:
-        rule2weights = rrl.rule_print(db_enc.X_fname, db_enc.y_fname, train_loader, mean=db_enc.mean, std=db_enc.std, metrics=metrics, display=False)
+        rule2weights = rrl.rule_print(
+            db_enc.X_fname,
+            db_enc.y_fname,
+            train_loader,
+            mean=db_enc.mean,
+            std=db_enc.std,
+            metrics=metrics,
+            display=False,
+        )
     return rule2weights
 
 
@@ -112,7 +146,7 @@ def calc_complexity(rrl: RRL, rule2weights: Any) -> float:
     edge_cnt = 0
     connected_rid = defaultdict(lambda: set())
     ln = len(rrl.net.layer_list) - 1
-    for rid, w in rule2weights:
+    for rid, _w in rule2weights:
         connected_rid[ln - abs(rid[0])].add(rid[1])
     while ln > 1:
         ln -= 1
@@ -129,5 +163,5 @@ def calc_complexity(rrl: RRL, rule2weights: Any) -> float:
             for rid in rule:
                 connected_rid[ln - abs(rid[0])].add(rid[1])
     complexity = np.log(edge_cnt).item() if edge_cnt > 0 else np.nan
-    logger.debug('\n\t{} of RRL  Model: {}'.format(metric, complexity))
+    logger.debug(f'\n\t{metric} of RRL  Model: {complexity}')
     return complexity

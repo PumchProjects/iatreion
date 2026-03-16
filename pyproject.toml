@@ -82,17 +82,13 @@ name = "torch-cu126"
 url = "https://download.pytorch.org/whl/cu126"
 explicit = true
 
-[tool.ruff]
-extend-exclude = [
-    "src/iatreion/rrl/*",
-]
-
 [tool.ruff.lint]
 select = ["E", "F", "UP", "B", "SIM", "I"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "src/iatreion/configs/*" = ["E501"]
+"src/iatreion/rrl/rrl/*" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "single"
