@@ -1,10 +1,14 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from cyclopts import Parameter
+from cyclopts.types import PositiveFloat
+from cyclopts.validators import Number
 
 from .model_base import ModelConfig
+
+type RrlVariant = Literal['original', 'improved']
 
 
 @Parameter(name='*')
@@ -82,6 +86,17 @@ class RrlConfig(ModelConfig):
     debug: Annotated[bool, Parameter(alias='-D')] = False
     'Whether to enable debug mode.'
 
+    variant: Annotated[RrlVariant, Parameter(alias='-v')] = 'original'
+    'Select `original` RRL or the improved missing-aware RRL with mask-aware + coverage-gated logic.'
+
+    coverage_tau: Annotated[
+        float, Parameter(name='--tau', validator=Number(gte=0, lte=1))
+    ] = 0.5
+    'Coverage threshold used by the improved RRL gate.'
+
+    coverage_kappa: Annotated[PositiveFloat, Parameter(name='--kappa')] = 0.1
+    'Soft gate sharpness used by the improved RRL gate.'
+
     _folder_name: str | None = None
 
     @property
@@ -90,6 +105,9 @@ class RrlConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         self.train._encode = True
+        if self.variant == 'improved':
+            self.train.missing_value_strategy = 'none'
+            self.train.validate_preprocessing()
         if self.debug:
             over_sampler = str(self.train.over_sampler).upper()
             self._folder_name = (
@@ -97,6 +115,7 @@ class RrlConfig(ModelConfig):
                 f'_lr{self.learning_rate}_lrdr{self.lr_decay_rate}_lrde{self.lr_decay_epoch}_wd{self.weight_decay}'
                 f'_si{self.save_interval}_useNOT{self.use_not}_valSize{self.train.val_size}_useSkip{self.skip}'
                 f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
+                f'_variant{self.variant}_tau{self.coverage_tau}_kappa{self.coverage_kappa}'
                 f'_esp{self.early_stop_patience}_esd{self.early_stop_min_delta}_ls{self.label_smoothing}_mgn{self.max_grad_norm}'
             )
         self.register_log_dir('rrl', folder_name=self._folder_name)

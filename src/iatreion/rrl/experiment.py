@@ -16,6 +16,18 @@ from iatreion.utils import logger, task
 from .rrl.models import RRL
 
 
+def _prepare_model_input(
+    args: RrlConfig, X: NDArray
+) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
+    values = np.asarray(X, dtype=np.float32)
+    if args.variant == 'improved':
+        missing = np.isnan(values)
+        mask = (~missing).astype(np.float32)
+        values = np.where(missing, 0.0, values)
+        return values, mask
+    return values, np.ones_like(values, dtype=np.float32)
+
+
 def get_data_loader(
     args: RrlConfig,
     X: NDArray,
@@ -24,10 +36,15 @@ def get_data_loader(
     shuffle: bool = False,
     pin_memory: bool = False,
 ) -> DataLoader:
+    X_value, X_mask = _prepare_model_input(args, X)
     if y is not None:
-        dataset = TensorDataset(torch.tensor(X.astype(np.float32)), torch.tensor(y))
+        dataset = TensorDataset(
+            torch.tensor(X_value),
+            torch.tensor(X_mask),
+            torch.tensor(y),
+        )
     else:
-        dataset = TensorDataset(torch.tensor(X.astype(np.float32)))
+        dataset = TensorDataset(torch.tensor(X_value), torch.tensor(X_mask))
     return DataLoader(
         dataset, batch_size=args.batch_size, shuffle=shuffle, pin_memory=pin_memory
     )
@@ -68,6 +85,9 @@ def train_model(
         beta=args.beta,
         gamma=args.gamma,
         temperature=args.temp,
+        use_missing_aware=args.variant == 'improved',
+        coverage_tau=args.coverage_tau,
+        coverage_kappa=args.coverage_kappa,
     )
 
     y_true = ctx.train_data[1]

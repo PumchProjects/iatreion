@@ -35,6 +35,60 @@ class Binarize(torch.autograd.Function):
         return grad_input
 
 
+def _expand_with_not(x, m, use_not):
+    if not use_not:
+        return x, m
+    return torch.cat((x, 1 - x), dim=1), torch.cat((m, m), dim=1)
+
+
+def _expand_mask_with_not(m, use_not):
+    if not use_not:
+        return m
+    return torch.cat((m, m), dim=1)
+
+
+def _coverage_ratio(m, w):
+    return (m @ w + EPSILON) / (torch.sum(w, dim=0, keepdim=True) + EPSILON)
+
+
+class _LogicLayerMixin:
+    def _init_missing_logic(
+        self,
+        *,
+        missing_aware=False,
+        coverage_tau=0.5,
+        coverage_kappa=0.1,
+    ):
+        self.missing_aware = missing_aware
+        self.coverage_tau = coverage_tau
+        self.coverage_kappa = coverage_kappa
+        self.last_coverage = None
+
+    def _prepare_inputs(self, x, m):
+        x, m = _expand_with_not(x, m, self.use_not)
+        if self.missing_aware:
+            return x, m
+        return x, torch.ones_like(x)
+
+    def _gate_outputs(self, res_tilde, res_bar, m, *, soft_mask=False):
+        m = _expand_mask_with_not(m, self.use_not)
+        if not self.missing_aware:
+            self.last_coverage = torch.ones_like(res_bar)
+            gate = torch.ones_like(res_bar)
+            return res_tilde, res_bar, gate
+
+        Wb = Binarize.apply(self.W - THRESHOLD)
+        coverage_bar = _coverage_ratio(m, Wb)
+        coverage_tilde = _coverage_ratio(m, self.W.clamp(0.0, 1.0))
+        gate_bar = (coverage_bar >= self.coverage_tau).to(res_bar.dtype)
+        gate_tilde = torch.sigmoid(
+            (coverage_tilde - self.coverage_tau) / self.coverage_kappa
+        )
+        self.last_coverage = coverage_bar
+        mask_out = gate_tilde if soft_mask else gate_bar
+        return res_tilde * gate_tilde, res_bar * gate_bar, mask_out
+
+
 class BinarizeLayer(nn.Module):
     """Implement the feature discretization and binarization."""
 
@@ -63,21 +117,28 @@ class BinarizeLayer(nn.Module):
                 cl = torch.randn(self.n, self.input_dim[1])
             self.register_buffer('cl', cl)
 
-    def forward(self, x):
+    def forward(self, x, m):
         if self.input_dim[1] > 0:
-            x_disc, x = x[:, 0 : self.input_dim[0]], x[:, self.input_dim[0] :]
-            x = x.unsqueeze(-1)
+            x_disc, x_cont = x[:, 0 : self.input_dim[0]], x[:, self.input_dim[0] :]
+            m_disc, m_cont = m[:, 0 : self.input_dim[0]], m[:, self.input_dim[0] :]
+            x_cont = x_cont.unsqueeze(-1)
             if self.use_not:
                 x_disc = torch.cat((x_disc, 1 - x_disc), dim=1)
-            binarize_res = Binarize.apply(x - self.cl.t()).reshape(x.shape[0], -1)
-            return torch.cat((x_disc, binarize_res, 1.0 - binarize_res), dim=1)
+                m_disc = torch.cat((m_disc, m_disc), dim=1)
+            binarize_res = Binarize.apply(x_cont - self.cl.t()).reshape(x.shape[0], -1)
+            m_cont = m_cont.repeat_interleave(self.n, dim=1)
+            return (
+                torch.cat((x_disc, binarize_res, 1.0 - binarize_res), dim=1),
+                torch.cat((m_disc, m_cont, m_cont), dim=1),
+            )
         if self.use_not:
             x = torch.cat((x, 1 - x), dim=1)
-        return x
+            m = torch.cat((m, m), dim=1)
+        return x, m
 
     @torch.no_grad()
-    def binarized_forward(self, x):
-        return self.forward(x)
+    def binarized_forward(self, x, m):
+        return self.forward(x, m)
 
     def clip(self):
         if self.input_dim[1] > 0 and self.left is not None and self.right is not None:
@@ -161,12 +222,14 @@ class LRLayer(nn.Module):
 
         self.fc1 = nn.Linear(self.input_dim, self.output_dim)
 
-    def forward(self, x):
-        return self.fc1(x)
+    def forward(self, x, m):
+        return self.fc1(x * m), torch.ones(
+            x.shape[0], self.output_dim, device=x.device, dtype=x.dtype
+        )
 
     @torch.no_grad()
-    def binarized_forward(self, x):
-        return self.forward(x)
+    def binarized_forward(self, x, m):
+        return self.forward(x, m)
 
     def clip(self):
         for param in self.fc1.parameters():
@@ -223,10 +286,22 @@ class LRLayer(nn.Module):
         )
 
 
-class ConjunctionLayer(nn.Module):
+class ConjunctionLayer(_LogicLayerMixin, nn.Module):
     """The novel conjunction layer is used to learn the conjunction of nodes with less time and GPU memory usage."""
 
-    def __init__(self, n, input_dim, use_not=False, alpha=0.999, beta=8, gamma=1):
+    def __init__(
+        self,
+        n,
+        input_dim,
+        use_not=False,
+        alpha=0.999,
+        beta=8,
+        gamma=1,
+        *,
+        missing_aware=False,
+        coverage_tau=0.5,
+        coverage_kappa=0.1,
+    ):
         super().__init__()
         self.n = n
         self.use_not = use_not
@@ -243,36 +318,54 @@ class ConjunctionLayer(nn.Module):
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
+        self._init_missing_logic(
+            missing_aware=missing_aware,
+            coverage_tau=coverage_tau,
+            coverage_kappa=coverage_kappa,
+        )
 
-    def forward(self, x):
-        res_tilde = self.continuous_forward(x)
-        res_bar = self.binarized_forward(x)
-        return GradGraft.apply(res_bar, res_tilde)
+    def forward(self, x, m):
+        res_tilde = self.continuous_forward(x, m)
+        res_bar = self.binarized_forward(x, m)
+        res_tilde, res_bar, m_out = self._gate_outputs(
+            res_tilde, res_bar, m, soft_mask=True
+        )
+        return GradGraft.apply(res_bar, res_tilde), m_out
 
-    def continuous_forward(self, x):
-        if self.use_not:
-            x = torch.cat((x, 1 - x), dim=1)
-        x = 1.0 - x
+    def continuous_forward(self, x, m):
+        x, m = self._prepare_inputs(x, m)
+        x = (1.0 - x) * m
         xl = 1.0 - 1.0 / (1.0 - (x * self.alpha) ** self.beta)
         wl = 1.0 - 1.0 / (1.0 - (self.W * self.alpha) ** self.beta)
         return 1.0 / (1.0 + xl @ wl) ** self.gamma
 
     @torch.no_grad()
-    def binarized_forward(self, x):
-        if self.use_not:
-            x = torch.cat((x, 1 - x), dim=1)
+    def binarized_forward(self, x, m):
+        x, m = self._prepare_inputs(x, m)
         Wb = Binarize.apply(self.W - THRESHOLD)
-        res = (1 - x) @ Wb
+        res = ((1 - x) * m) @ Wb
         return torch.where(res > 0, torch.zeros_like(res), torch.ones_like(res))
 
     def clip(self):
         self.W.data.clamp_(INIT_L, 1.0)
 
 
-class DisjunctionLayer(nn.Module):
+class DisjunctionLayer(_LogicLayerMixin, nn.Module):
     """The novel disjunction layer is used to learn the disjunction of nodes with less time and GPU memory usage."""
 
-    def __init__(self, n, input_dim, use_not=False, alpha=0.999, beta=8, gamma=1):
+    def __init__(
+        self,
+        n,
+        input_dim,
+        use_not=False,
+        alpha=0.999,
+        beta=8,
+        gamma=1,
+        *,
+        missing_aware=False,
+        coverage_tau=0.5,
+        coverage_kappa=0.1,
+    ):
         super().__init__()
         self.n = n
         self.use_not = use_not
@@ -289,35 +382,52 @@ class DisjunctionLayer(nn.Module):
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
+        self._init_missing_logic(
+            missing_aware=missing_aware,
+            coverage_tau=coverage_tau,
+            coverage_kappa=coverage_kappa,
+        )
 
-    def forward(self, x):
-        res_tilde = self.continuous_forward(x)
-        res_bar = self.binarized_forward(x)
-        return GradGraft.apply(res_bar, res_tilde)
+    def forward(self, x, m):
+        res_tilde = self.continuous_forward(x, m)
+        res_bar = self.binarized_forward(x, m)
+        res_tilde, res_bar, m_out = self._gate_outputs(
+            res_tilde, res_bar, m, soft_mask=True
+        )
+        return GradGraft.apply(res_bar, res_tilde), m_out
 
-    def continuous_forward(self, x):
-        if self.use_not:
-            x = torch.cat((x, 1 - x), dim=1)
+    def continuous_forward(self, x, m):
+        x, m = self._prepare_inputs(x, m)
+        x = x * m
         xl = 1.0 - 1.0 / (1.0 - (x * self.alpha) ** self.beta)
         wl = 1.0 - 1.0 / (1.0 - (self.W * self.alpha) ** self.beta)
         return 1.0 - 1.0 / (1.0 + xl @ wl) ** self.gamma
 
     @torch.no_grad()
-    def binarized_forward(self, x):
-        if self.use_not:
-            x = torch.cat((x, 1 - x), dim=1)
+    def binarized_forward(self, x, m):
+        x, m = self._prepare_inputs(x, m)
         Wb = Binarize.apply(self.W - THRESHOLD)
-        res = x @ Wb
+        res = (x * m) @ Wb
         return torch.where(res > 0, torch.ones_like(res), torch.zeros_like(res))
 
     def clip(self):
         self.W.data.clamp_(INIT_L, 1.0)
 
 
-class OriginalConjunctionLayer(nn.Module):
+class OriginalConjunctionLayer(_LogicLayerMixin, nn.Module):
     """The conjunction layer is used to learn the conjunction of nodes."""
 
-    def __init__(self, n, input_dim, use_not=False, estimated_grad=False):
+    def __init__(
+        self,
+        n,
+        input_dim,
+        use_not=False,
+        estimated_grad=False,
+        *,
+        missing_aware=False,
+        coverage_tau=0.5,
+        coverage_kappa=0.1,
+    ):
         super().__init__()
         self.n = n
         self.use_not = use_not
@@ -328,32 +438,48 @@ class OriginalConjunctionLayer(nn.Module):
         self.W = nn.Parameter(INIT_RANGE * torch.rand(self.input_dim, self.n))
         self.Product = EstimatedProduct if estimated_grad else Product
         self.node_activation_cnt = None
+        self._init_missing_logic(
+            missing_aware=missing_aware,
+            coverage_tau=coverage_tau,
+            coverage_kappa=coverage_kappa,
+        )
 
-    def forward(self, x):
-        res_tilde = self.continuous_forward(x)
-        res_bar = self.binarized_forward(x)
-        return GradGraft.apply(res_bar, res_tilde)
+    def forward(self, x, m):
+        res_tilde = self.continuous_forward(x, m)
+        res_bar = self.binarized_forward(x, m)
+        res_tilde, res_bar, m_out = self._gate_outputs(
+            res_tilde, res_bar, m, soft_mask=True
+        )
+        return GradGraft.apply(res_bar, res_tilde), m_out
 
-    def continuous_forward(self, x):
-        if self.use_not:
-            x = torch.cat((x, 1 - x), dim=1)
-        return self.Product.apply(1 - (1 - x).unsqueeze(-1) * self.W)
+    def continuous_forward(self, x, m):
+        x, m = self._prepare_inputs(x, m)
+        return self.Product.apply(1 - ((1 - x) * m).unsqueeze(-1) * self.W)
 
     @torch.no_grad()
-    def binarized_forward(self, x):
-        if self.use_not:
-            x = torch.cat((x, 1 - x), dim=1)
+    def binarized_forward(self, x, m):
+        x, m = self._prepare_inputs(x, m)
         Wb = Binarize.apply(self.W - THRESHOLD)
-        return torch.prod(1 - (1 - x).unsqueeze(-1) * Wb, dim=1)
+        return torch.prod(1 - ((1 - x) * m).unsqueeze(-1) * Wb, dim=1)
 
     def clip(self):
         self.W.data.clamp_(0.0, 1.0)
 
 
-class OriginalDisjunctionLayer(nn.Module):
+class OriginalDisjunctionLayer(_LogicLayerMixin, nn.Module):
     """The disjunction layer is used to learn the disjunction of nodes."""
 
-    def __init__(self, n, input_dim, use_not=False, estimated_grad=False):
+    def __init__(
+        self,
+        n,
+        input_dim,
+        use_not=False,
+        estimated_grad=False,
+        *,
+        missing_aware=False,
+        coverage_tau=0.5,
+        coverage_kappa=0.1,
+    ):
         super().__init__()
         self.n = n
         self.use_not = use_not
@@ -364,23 +490,29 @@ class OriginalDisjunctionLayer(nn.Module):
         self.W = nn.Parameter(INIT_RANGE * torch.rand(self.input_dim, self.n))
         self.Product = EstimatedProduct if estimated_grad else Product
         self.node_activation_cnt = None
+        self._init_missing_logic(
+            missing_aware=missing_aware,
+            coverage_tau=coverage_tau,
+            coverage_kappa=coverage_kappa,
+        )
 
-    def forward(self, x):
-        res_tilde = self.continuous_forward(x)
-        res_bar = self.binarized_forward(x)
-        return GradGraft.apply(res_bar, res_tilde)
+    def forward(self, x, m):
+        res_tilde = self.continuous_forward(x, m)
+        res_bar = self.binarized_forward(x, m)
+        res_tilde, res_bar, m_out = self._gate_outputs(
+            res_tilde, res_bar, m, soft_mask=True
+        )
+        return GradGraft.apply(res_bar, res_tilde), m_out
 
-    def continuous_forward(self, x):
-        if self.use_not:
-            x = torch.cat((x, 1 - x), dim=1)
-        return 1 - self.Product.apply(1 - x.unsqueeze(-1) * self.W)
+    def continuous_forward(self, x, m):
+        x, m = self._prepare_inputs(x, m)
+        return 1 - self.Product.apply(1 - (x * m).unsqueeze(-1) * self.W)
 
     @torch.no_grad()
-    def binarized_forward(self, x):
-        if self.use_not:
-            x = torch.cat((x, 1 - x), dim=1)
+    def binarized_forward(self, x, m):
+        x, m = self._prepare_inputs(x, m)
         Wb = Binarize.apply(self.W - THRESHOLD)
-        return 1 - torch.prod(1 - x.unsqueeze(-1) * Wb, dim=1)
+        return 1 - torch.prod(1 - (x * m).unsqueeze(-1) * Wb, dim=1)
 
     def clip(self):
         self.W.data.clamp_(0.0, 1.0)
@@ -487,6 +619,9 @@ class UnionLayer(nn.Module):
         alpha=0.999,
         beta=8,
         gamma=1,
+        missing_aware=False,
+        coverage_tau=0.5,
+        coverage_kappa=0.1,
     ):
         super().__init__()
         self.n = n
@@ -499,6 +634,9 @@ class UnionLayer(nn.Module):
         self.dim2id = None
         self.rule_list = None
         self.rule_name = None
+        self.node_coverage_sum = None
+        self.last_coverage = None
+        self.coverage_tau = coverage_tau
 
         if use_nlaf:  # use novel logical activation functions
             self.con_layer = ConjunctionLayer(
@@ -508,6 +646,9 @@ class UnionLayer(nn.Module):
                 alpha=alpha,
                 beta=beta,
                 gamma=gamma,
+                missing_aware=missing_aware,
+                coverage_tau=coverage_tau,
+                coverage_kappa=coverage_kappa,
             )
             self.dis_layer = DisjunctionLayer(
                 self.n,
@@ -516,23 +657,47 @@ class UnionLayer(nn.Module):
                 alpha=alpha,
                 beta=beta,
                 gamma=gamma,
+                missing_aware=missing_aware,
+                coverage_tau=coverage_tau,
+                coverage_kappa=coverage_kappa,
             )
         else:  # use original logical activation functions
             self.con_layer = OriginalConjunctionLayer(
-                self.n, self.input_dim, use_not=use_not, estimated_grad=estimated_grad
+                self.n,
+                self.input_dim,
+                use_not=use_not,
+                estimated_grad=estimated_grad,
+                missing_aware=missing_aware,
+                coverage_tau=coverage_tau,
+                coverage_kappa=coverage_kappa,
             )
             self.dis_layer = OriginalDisjunctionLayer(
-                self.n, self.input_dim, use_not=use_not, estimated_grad=estimated_grad
+                self.n,
+                self.input_dim,
+                use_not=use_not,
+                estimated_grad=estimated_grad,
+                missing_aware=missing_aware,
+                coverage_tau=coverage_tau,
+                coverage_kappa=coverage_kappa,
             )
 
-    def forward(self, x):
-        return torch.cat([self.con_layer(x), self.dis_layer(x)], dim=1)
-
-    def binarized_forward(self, x):
-        return torch.cat(
-            [self.con_layer.binarized_forward(x), self.dis_layer.binarized_forward(x)],
-            dim=1,
+    def forward(self, x, m):
+        con_x, con_m = self.con_layer(x, m)
+        dis_x, dis_m = self.dis_layer(x, m)
+        self.last_coverage = torch.cat(
+            [self.con_layer.last_coverage, self.dis_layer.last_coverage], dim=1
         )
+        return torch.cat([con_x, dis_x], dim=1), torch.cat([con_m, dis_m], dim=1)
+
+    def binarized_forward(self, x, m):
+        con_x = self.con_layer.binarized_forward(x, m)
+        dis_x = self.dis_layer.binarized_forward(x, m)
+        _, con_x, con_m = self.con_layer._gate_outputs(con_x, con_x, m)
+        _, dis_x, dis_m = self.dis_layer._gate_outputs(dis_x, dis_x, m)
+        self.last_coverage = torch.cat(
+            [self.con_layer.last_coverage, self.dis_layer.last_coverage], dim=1
+        )
+        return torch.cat([con_x, dis_x], dim=1), torch.cat([con_m, dis_m], dim=1)
 
     def edge_count(self):
         con_Wb = Binarize.apply(self.con_layer.W - THRESHOLD)

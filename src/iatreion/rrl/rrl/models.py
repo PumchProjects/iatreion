@@ -25,6 +25,9 @@ class Net(nn.Module):
         beta=8,
         gamma=1,
         temperature=0.01,
+        use_missing_aware=False,
+        coverage_tau=0.5,
+        coverage_kappa=0.1,
     ):
         super().__init__()
 
@@ -34,6 +37,7 @@ class Net(nn.Module):
         self.right = right
         self.layer_list = nn.ModuleList([])
         self.use_skip = use_skip
+        self.use_missing_aware = use_missing_aware
         self.t = nn.Parameter(torch.log(torch.tensor([temperature])))
 
         prev_layer_dim = dim_list[0]
@@ -65,6 +69,9 @@ class Net(nn.Module):
                     alpha=alpha,
                     beta=beta,
                     gamma=gamma,
+                    missing_aware=use_missing_aware,
+                    coverage_tau=coverage_tau,
+                    coverage_kappa=coverage_kappa,
                 )
                 layer_name = f'union{i}'
 
@@ -81,26 +88,39 @@ class Net(nn.Module):
             self.add_module(layer_name, layer)
             self.layer_list.append(layer)
 
-    def forward(self, x):
+    def forward(self, x, m):
         for layer in self.layer_list:
             if layer.conn.skip_from_layer is not None:
                 x = torch.cat((x, layer.conn.skip_from_layer.x_res), dim=1)
+                m = torch.cat((m, layer.conn.skip_from_layer.m_res), dim=1)
                 del layer.conn.skip_from_layer.x_res
-            x = layer(x)
+                del layer.conn.skip_from_layer.m_res
+            x, m = layer(x, m)
             if layer.conn.is_skip_to_layer:
                 layer.x_res = x
+                layer.m_res = m
         return x
 
-    def bi_forward(self, x, count=False):
+    def bi_forward(self, x, m, count=False):
         for layer in self.layer_list:
             if layer.conn.skip_from_layer is not None:
                 x = torch.cat((x, layer.conn.skip_from_layer.x_res), dim=1)
+                m = torch.cat((m, layer.conn.skip_from_layer.m_res), dim=1)
                 del layer.conn.skip_from_layer.x_res
-            x = layer.binarized_forward(x)
+                del layer.conn.skip_from_layer.m_res
+            x, m = layer.binarized_forward(x, m)
             if layer.conn.is_skip_to_layer:
                 layer.x_res = x
+                layer.m_res = m
             if count and layer.layer_type != 'linear':
-                layer.node_activation_cnt += torch.sum(x, dim=0)
+                layer.node_activation_cnt += torch.sum(x * m, dim=0, dtype=torch.double)
+                if (
+                    getattr(layer, 'node_coverage_sum', None) is not None
+                    and getattr(layer, 'last_coverage', None) is not None
+                ):
+                    layer.node_coverage_sum += torch.sum(
+                        layer.last_coverage, dim=0, dtype=torch.double
+                    )
                 layer.forward_tot += x.shape[0]
         return x
 
@@ -121,6 +141,9 @@ class RRL:
         beta=8,
         gamma=1,
         temperature=0.01,
+        use_missing_aware=False,
+        coverage_tau=0.5,
+        coverage_kappa=0.1,
     ):
         super().__init__()
         self.dim_list = dim_list
@@ -130,6 +153,7 @@ class RRL:
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
+        self.use_missing_aware = use_missing_aware
         self.best_f1 = -1.0
         self.best_loss = 1e20
 
@@ -151,6 +175,9 @@ class RRL:
             beta=beta,
             gamma=gamma,
             temperature=temperature,
+            use_missing_aware=use_missing_aware,
+            coverage_tau=coverage_tau,
+            coverage_kappa=coverage_kappa,
         )
         self.net.to(self.device)
 
@@ -250,14 +277,15 @@ class RRL:
             abs_gradient_avg = 0.0
 
             ba_cnt = 0
-            for X, y in data_loader:
+            for X, M, y in data_loader:
                 ba_cnt += 1
                 X = X.to(self.device, non_blocking=True)
+                M = M.to(self.device, non_blocking=True)
                 y = y.to(self.device, non_blocking=True)
                 optimizer.zero_grad()  # Zero the gradient buffers.
 
                 # trainable softmax temperature
-                y_bar = self.net.forward(X) / torch.exp(self.net.t)
+                y_bar = self.net.forward(X, M) / torch.exp(self.net.t)
 
                 loss_rrl = criterion(y_bar, y) + weight_decay * self.l2_penalty()
 
@@ -374,9 +402,10 @@ class RRL:
     @torch.no_grad()
     def predict_proba(self, test_loader):
         y_pred_b_list = []
-        for (X,) in test_loader:
+        for X, M in test_loader:
             X = X.to(self.device, non_blocking=True)
-            output = self.net.forward(X) / torch.exp(self.net.t)
+            M = M.to(self.device, non_blocking=True)
+            output = self.net.forward(X, M) / torch.exp(self.net.t)
             y_pred_b_list.append(output)
         y_pred_b = torch.cat(y_pred_b_list).softmax(dim=1).numpy(force=True)
         return y_pred_b
@@ -387,7 +416,7 @@ class RRL:
             raise Exception('Data loader is unavailable!')
 
         y_list = []
-        for _X, y in test_loader:
+        for _X, _M, y in test_loader:
             y_list.append(y)
         y_true = torch.cat(y_list, dim=0)
         y_true = y_true.cpu().numpy().astype(int)
@@ -397,9 +426,10 @@ class RRL:
         logger.debug(f'y_true: {y_true.shape} {y_true[::slice_step]}')
 
         y_pred_b_list = []
-        for X, _y in test_loader:
+        for X, M, _y in test_loader:
             X = X.to(self.device, non_blocking=True)
-            output = self.net.forward(X) / torch.exp(self.net.t)
+            M = M.to(self.device, non_blocking=True)
+            output = self.net.forward(X, M) / torch.exp(self.net.t)
             y_pred_b_list.append(output)
 
         y_pred_b = torch.cat(y_pred_b_list).softmax(dim=1).cpu().numpy()
@@ -437,11 +467,16 @@ class RRL:
                 layer.node_activation_cnt = torch.zeros(
                     layer.output_dim, dtype=torch.double, device=self.device
                 )
+                if hasattr(layer, 'node_coverage_sum'):
+                    layer.node_coverage_sum = torch.zeros(
+                        layer.output_dim, dtype=torch.double, device=self.device
+                    )
                 layer.forward_tot = 0
 
-            for x, _y in data_loader:
+            for x, m, _y in data_loader:
                 x_bar = x.to(self.device)
-                self.net.bi_forward(x_bar, count=True)
+                m_bar = m.to(self.device)
+                self.net.bi_forward(x_bar, m_bar, count=True)
 
     def rule_print(
         self,
@@ -498,21 +533,29 @@ class RRL:
         )
         for i, ln in enumerate(label_name):
             print(f'{ln}(b={layer.bl[i] / temp:.4f})', end='\t', file=file)
-        print('Support\tRule', file=file)
+        if self.use_missing_aware:
+            print('Support\tMeanCoverage\tTau\tRule', file=file)
+        else:
+            print('Support\tRule', file=file)
         for rid, w in layer.rule2weights:
             print(rid, end='\t', file=file)
             for li in range(len(label_name)):
                 print(f'{w[li] / temp:.4f}', end='\t', file=file)
             now_layer = self.net.layer_list[-1 + rid[0]]
-            print(
-                '{:.4f}'.format(
-                    (
-                        now_layer.node_activation_cnt[layer.rid2dim[rid]]
-                        / now_layer.forward_tot
-                    ).item()
-                ),
-                end='\t',
-                file=file,
-            )
+            support = (
+                now_layer.node_activation_cnt[layer.rid2dim[rid]]
+                / now_layer.forward_tot
+            ).item()
+            print(f'{support:.4f}', end='\t', file=file)
+            if self.use_missing_aware:
+                coverage = (
+                    now_layer.node_coverage_sum[layer.rid2dim[rid]]
+                    / now_layer.forward_tot
+                ).item()
+                print(
+                    f'{coverage:.4f}\t{now_layer.coverage_tau:.4f}\t',
+                    end='',
+                    file=file,
+                )
             print(now_layer.rule_name[rid[1]], end='\n', file=file)
         return layer.rule2weights
