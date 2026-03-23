@@ -530,7 +530,7 @@ class RRL:
             else 'Meta(et={:.4f},ft={:.4f},ev={:.4f},fv={:.4f},t={:.5f})'
         )
         metadata_args = (
-            (1.0 - acc, f1, *metrics, temp, layer.coverage_tau)
+            (1.0 - acc, f1, *metrics, temp, self.net.layer_list[1].coverage_tau)
             if self.use_missing_aware
             else (1.0 - acc, f1, *metrics, temp)
         )

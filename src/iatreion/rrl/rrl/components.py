@@ -70,12 +70,12 @@ class _LogicLayerMixin:
             return x, m
         return x, torch.ones_like(x)
 
-    def _gate_outputs(self, res_tilde, res_bar, m, *, soft_mask=False):
+    def _gate_outputs(self, res_tilde, res_bar, m):
         m = _expand_mask_with_not(m, self.use_not)
         if not self.missing_aware:
             self.last_coverage = torch.ones_like(res_bar)
             gate = torch.ones_like(res_bar)
-            return res_tilde, res_bar, gate
+            return res_tilde, gate, res_bar, gate
 
         Wb = Binarize.apply(self.W - THRESHOLD)
         coverage_bar = _coverage_ratio(m, Wb)
@@ -85,8 +85,7 @@ class _LogicLayerMixin:
             (coverage_tilde - self.coverage_tau) / self.coverage_kappa
         )
         self.last_coverage = coverage_bar
-        mask_out = gate_tilde if soft_mask else gate_bar
-        return res_tilde * gate_tilde, res_bar * gate_bar, mask_out
+        return res_tilde, gate_tilde, res_bar, gate_bar
 
 
 class BinarizeLayer(nn.Module):
@@ -327,10 +326,12 @@ class ConjunctionLayer(_LogicLayerMixin, nn.Module):
     def forward(self, x, m):
         res_tilde = self.continuous_forward(x, m)
         res_bar = self.binarized_forward(x, m)
-        res_tilde, res_bar, m_out = self._gate_outputs(
-            res_tilde, res_bar, m, soft_mask=True
+        res_tilde, gate_tilde, res_bar, gate_bar = self._gate_outputs(
+            res_tilde, res_bar, m
         )
-        return GradGraft.apply(res_bar, res_tilde), m_out
+        return GradGraft.apply(res_bar, res_tilde), GradGraft.apply(
+            gate_bar, gate_tilde
+        )
 
     def continuous_forward(self, x, m):
         x, m = self._prepare_inputs(x, m)
@@ -391,10 +392,12 @@ class DisjunctionLayer(_LogicLayerMixin, nn.Module):
     def forward(self, x, m):
         res_tilde = self.continuous_forward(x, m)
         res_bar = self.binarized_forward(x, m)
-        res_tilde, res_bar, m_out = self._gate_outputs(
-            res_tilde, res_bar, m, soft_mask=True
+        res_tilde, gate_tilde, res_bar, gate_bar = self._gate_outputs(
+            res_tilde, res_bar, m
         )
-        return GradGraft.apply(res_bar, res_tilde), m_out
+        return GradGraft.apply(res_bar, res_tilde), GradGraft.apply(
+            gate_bar, gate_tilde
+        )
 
     def continuous_forward(self, x, m):
         x, m = self._prepare_inputs(x, m)
@@ -447,10 +450,12 @@ class OriginalConjunctionLayer(_LogicLayerMixin, nn.Module):
     def forward(self, x, m):
         res_tilde = self.continuous_forward(x, m)
         res_bar = self.binarized_forward(x, m)
-        res_tilde, res_bar, m_out = self._gate_outputs(
-            res_tilde, res_bar, m, soft_mask=True
+        res_tilde, gate_tilde, res_bar, gate_bar = self._gate_outputs(
+            res_tilde, res_bar, m
         )
-        return GradGraft.apply(res_bar, res_tilde), m_out
+        return GradGraft.apply(res_bar, res_tilde), GradGraft.apply(
+            gate_bar, gate_tilde
+        )
 
     def continuous_forward(self, x, m):
         x, m = self._prepare_inputs(x, m)
@@ -499,10 +504,12 @@ class OriginalDisjunctionLayer(_LogicLayerMixin, nn.Module):
     def forward(self, x, m):
         res_tilde = self.continuous_forward(x, m)
         res_bar = self.binarized_forward(x, m)
-        res_tilde, res_bar, m_out = self._gate_outputs(
-            res_tilde, res_bar, m, soft_mask=True
+        res_tilde, gate_tilde, res_bar, gate_bar = self._gate_outputs(
+            res_tilde, res_bar, m
         )
-        return GradGraft.apply(res_bar, res_tilde), m_out
+        return GradGraft.apply(res_bar, res_tilde), GradGraft.apply(
+            gate_bar, gate_tilde
+        )
 
     def continuous_forward(self, x, m):
         x, m = self._prepare_inputs(x, m)
@@ -692,8 +699,8 @@ class UnionLayer(nn.Module):
     def binarized_forward(self, x, m):
         con_x = self.con_layer.binarized_forward(x, m)
         dis_x = self.dis_layer.binarized_forward(x, m)
-        _, con_x, con_m = self.con_layer._gate_outputs(con_x, con_x, m)
-        _, dis_x, dis_m = self.dis_layer._gate_outputs(dis_x, dis_x, m)
+        _, _, con_x, con_m = self.con_layer._gate_outputs(con_x, con_x, m)
+        _, _, dis_x, dis_m = self.dis_layer._gate_outputs(dis_x, dis_x, m)
         self.last_coverage = torch.cat(
             [self.con_layer.last_coverage, self.dis_layer.last_coverage], dim=1
         )
