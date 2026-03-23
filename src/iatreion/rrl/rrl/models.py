@@ -524,17 +524,22 @@ class RRL:
 
         _, acc, f1 = self.test(test_loader=train_loader, set_name='Training')
         temp = torch.exp(self.net.t).item()
-        print(
-            'RID(et={:.4f},ft={:.4f},ev={:.4f},fv={:.4f},t={:.5f})'.format(
-                1.0 - acc, f1, *metrics, temp
-            ),
-            end='\t',
-            file=file,
+        metadata = (
+            'Meta(et={:.4f},ft={:.4f},ev={:.4f},fv={:.4f},t={:.5f},tau={:.4f})'
+            if self.use_missing_aware
+            else 'Meta(et={:.4f},ft={:.4f},ev={:.4f},fv={:.4f},t={:.5f})'
         )
+        metadata_args = (
+            (1.0 - acc, f1, *metrics, temp, layer.coverage_tau)
+            if self.use_missing_aware
+            else (1.0 - acc, f1, *metrics, temp)
+        )
+        print(metadata.format(*metadata_args), file=file)
+        print('RuleID', end='\t', file=file)
         for i, ln in enumerate(label_name):
             print(f'{ln}(b={layer.bl[i] / temp:.4f})', end='\t', file=file)
         if self.use_missing_aware:
-            print('Support\tMeanCoverage\tTau\tRule', file=file)
+            print('Support\tMeanCoverage\tRule', file=file)
         else:
             print('Support\tRule', file=file)
         for rid, w in layer.rule2weights:
@@ -552,10 +557,6 @@ class RRL:
                     now_layer.node_coverage_sum[layer.rid2dim[rid]]
                     / now_layer.forward_tot
                 ).item()
-                print(
-                    f'{coverage:.4f}\t{now_layer.coverage_tau:.4f}\t',
-                    end='',
-                    file=file,
-                )
+                print(f'{coverage:.4f}\t', end='', file=file)
             print(now_layer.rule_name[rid[1]], end='\n', file=file)
         return layer.rule2weights

@@ -165,14 +165,35 @@ class Rule:
         return result
 
 
+@dataclass(frozen=True)
+class RuleTableSchema:
+    num_labels: int
+    support_idx: int
+    rule_idx: int
+    mean_coverage_idx: int | None = None
+
+
 class Line:
     def __init__(
-        self, line: str, labels: list[str], callback: Callable[[str], str] | None
+        self,
+        line: str,
+        labels: list[str],
+        callback: Callable[[str], str] | None,
+        *,
+        schema: RuleTableSchema,
+        tau: float | None = None,
     ) -> None:
-        units = line.split('\t')
-        self.weights = list(map(float, units[1:-2]))
-        self.support = float(units[-2])
-        self.rule = Rule(units[-1])
+        units = line.rstrip().split('\t')
+        self.rule_id = units[0]
+        self.weights = list(map(float, units[1 : 1 + schema.num_labels]))
+        self.support = float(units[schema.support_idx])
+        self.mean_coverage = (
+            float(units[schema.mean_coverage_idx])
+            if schema.mean_coverage_idx is not None
+            else None
+        )
+        self.tau = tau
+        self.rule = Rule(units[schema.rule_idx])
         self.labels = labels
         self.callback = callback
 
@@ -197,15 +218,16 @@ class Line:
 
 
 class Rrl:
-    rid_template = re.compile(
+    metadata_template = re.compile(
         r"""
-            RID \(                       # RID(
-            et = (?P<train_err> .*? ) ,  # train error
-            ft = (?P<train_f1> .*? ) ,   # train f1
-            ev = (?P<val_err> .*? ) ,    # val error
-            fv = (?P<val_f1> .*? ) ,     # val f1
-            t = (?P<temp> .*? )          # temperature
-            \)                           # )
+            (?:RID|Meta) \(               # legacy RID(...) or new Meta(...)
+            et = (?P<train_err> .*? ) ,    # train error
+            ft = (?P<train_f1> .*? ) ,     # train f1
+            ev = (?P<val_err> .*? ) ,      # val error
+            fv = (?P<val_f1> .*? ) ,       # val f1
+            t = (?P<temp> .*? )            # temperature
+            (?: , tau = (?P<tau> .*? ) )?  # optional coverage tau
+            \)                             # )
         """,
         re.VERBOSE,
     )
@@ -215,12 +237,16 @@ class Rrl:
         self, file: Path, weight: str, callback: Callable[[str], str] | None = None
     ) -> None:
         with file.open('r', encoding='utf-8') as f:
-            texts = f.readlines()
-        headers = texts[0].split('\t')
+            texts = [line.rstrip('\n') for line in f if line.strip()]
 
-        match_obj = self.rid_template.match(headers[0])
+        metadata, headers, rule_lines = self._split_metadata_and_table(texts)
+        match_obj = (
+            None if metadata is None else self.metadata_template.fullmatch(metadata)
+        )
         if match_obj is not None:
             self.temp = float(match_obj.group('temp'))
+            tau = match_obj.group('tau')
+            self.tau = None if tau is None else float(tau)
             match weight:
                 case 'uniform':
                     self.weight = 1.0
@@ -238,6 +264,7 @@ class Rrl:
                     raise ValueError(f'Unknown weight mode: {weight}!')
         else:
             self.temp = 0.01
+            self.tau = None
             self.weight = 1.0
             logger.warning(
                 f'[bold yellow]Using default temperature {self.temp}'
@@ -245,15 +272,47 @@ class Rrl:
                 extra={'markup': True},
             )
 
-        self.labels: list[str] = []
-        self.biases: list[float] = []
-        for header in headers[1:-2]:
-            match_obj = self.label_template.match(header)
-            assert match_obj is not None, f'Invalid header: {header}!'
-            self.labels.append(match_obj.group('label').split('_')[-1])
-            self.biases.append(float(match_obj.group('bias')))
+        self.labels, self.biases, schema = self._parse_table_header(headers)
+        self.lines = [
+            Line(line, self.labels, callback, schema=schema, tau=self.tau)
+            for line in rule_lines
+        ]
 
-        self.lines = [Line(line, self.labels, callback) for line in texts[1:]]
+    @classmethod
+    def _split_metadata_and_table(
+        cls, texts: list[str]
+    ) -> tuple[str | None, list[str], list[str]]:
+        first_units = texts[0].split('\t')
+        if len(first_units) == 1 and cls.metadata_template.fullmatch(first_units[0]):
+            return first_units[0], texts[1].split('\t'), texts[2:]
+
+        metadata = (
+            first_units[0] if cls.metadata_template.fullmatch(first_units[0]) else None
+        )
+        return metadata, first_units, texts[1:]
+
+    @classmethod
+    def _parse_table_header(
+        cls, headers: list[str]
+    ) -> tuple[list[str], list[float], RuleTableSchema]:
+        labels: list[str] = []
+        biases: list[float] = []
+        column_start = 1
+        for header in headers[column_start:]:
+            match_obj = cls.label_template.fullmatch(header)
+            if match_obj is None:
+                break
+            labels.append(match_obj.group('label').split('_')[-1])
+            biases.append(float(match_obj.group('bias')))
+
+        named_columns = {name: idx for idx, name in enumerate(headers)}
+        schema = RuleTableSchema(
+            num_labels=len(labels),
+            support_idx=named_columns['Support'],
+            mean_coverage_idx=named_columns.get('MeanCoverage'),
+            rule_idx=named_columns['Rule'],
+        )
+        return labels, biases, schema
 
     def eval(
         self, data: pd.DataFrame, active_lines: list[Line] | None = None
