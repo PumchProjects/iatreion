@@ -60,7 +60,7 @@ class DBEncoder:
         self._continuous_std = pd.Series(dtype=float)
 
         self.unordered_columns = self._get_columns('unordered')
-        self.ordered_columns = self._get_columns('ordered', 'discrete')
+        self.ordered_columns = self._get_columns('ordered')
         self.continuous_columns = self._get_columns('continuous')
         self.discrete_columns = [*self.unordered_columns, *self.ordered_columns]
         self.feature_columns = [*self.discrete_columns, *self.continuous_columns]
@@ -128,9 +128,7 @@ class DBEncoder:
 
     def _build_category_labels(self) -> dict[str, tuple[str, ...]]:
         labels: dict[str, tuple[str, ...]] = {}
-        cat_rows = self.f_df.loc[
-            self.f_df['type'].isin({'unordered', 'ordered', 'discrete'})
-        ]
+        cat_rows = self.f_df.loc[self.f_df['type'].isin({'unordered', 'ordered'})]
         for row in cat_rows.itertuples(index=False):
             raw = '' if pd.isna(row.categories) else str(row.categories)
             labels[row.name] = tuple(raw.split(self.cat_sep)) if raw else ()

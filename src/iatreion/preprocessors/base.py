@@ -164,12 +164,38 @@ class Preprocessor(ABC):
                 self.config._final_indices.append(data[indices_names].astype(str))
         return self.config._data[self.data_name].copy()
 
+    def discretize_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        discrete_features = self.process_info(list[str], 'discrete_features')
+        if not self.config._final:
+            for name in data.columns[: -len(self.config.group_columns)]:
+                if (
+                    not hasattr(data[name], 'cat')
+                    and data[name].nunique() <= self.config.discrete_threshold
+                ):
+                    discrete_features.append(name)
+                    categories = sorted(data[name].dropna().unique().tolist())
+                    self.process_info[name, 'categories'] = categories
+        for name in discrete_features:
+            categories = self.process_info(list[float | int], name, 'categories')
+            data[name] = data[name].astype(
+                CategoricalDtype(categories=categories, ordered=True)
+            )
+        return data
+
+    def convert_categorical(self, data: pd.DataFrame) -> pd.DataFrame:
+        for name in data.columns:
+            if hasattr(data[name], 'cat'):
+                data[name] = data[name].cat.codes.astype('Int64').replace(-1, pd.NA)
+        return data
+
     @abstractmethod
     def get_data(self) -> pd.DataFrame: ...
 
     def get_data_outer(self) -> pd.DataFrame:
         data = self.get_data()
+        data = self.discretize_data(data)
         if self.config._final:
+            data = self.convert_categorical(data)
             data.rename(columns=encode_string, inplace=True)
         else:
             self.save_process_info()
@@ -205,21 +231,11 @@ class Preprocessor(ABC):
         for name in data.columns[: -len(self.config.group_columns)]:
             if hasattr(data[name], 'cat'):
                 order = 'ordered' if data[name].cat.ordered else 'unordered'
-                categories = self.config.dataset.cat_sep.join(data[name].cat.categories)
+                categories = self.config.dataset.cat_sep.join(
+                    map(str, data[name].cat.categories)
+                )
                 data[name] = data[name].cat.codes.astype('Int64').replace(-1, pd.NA)
                 augmented_vector_name.append((name, order, categories))
-            elif data[name].nunique() <= self.config.discrete_threshold:
-                categories = sorted(data[name].dropna().unique())
-                joined_categories = self.config.dataset.cat_sep.join(
-                    map(str, categories)
-                )
-                data[name] = (
-                    data[name]
-                    .astype(CategoricalDtype(categories=categories, ordered=True))
-                    .cat.codes.astype('Int64')
-                    .replace(-1, pd.NA)
-                )
-                augmented_vector_name.append((name, 'discrete', joined_categories))
             else:
                 augmented_vector_name.append((name, 'continuous', ''))
         for col in self.config.group_columns:
