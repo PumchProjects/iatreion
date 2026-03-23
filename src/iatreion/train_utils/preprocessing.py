@@ -48,6 +48,7 @@ class DBEncoder:
         self.limix_client = limix_client
 
         self.label_enc = preprocessing.LabelEncoder()
+        self.X_compl_fname: dict[int, str] = {}
         self.X_fname: list[str] = []
         self.y_fname: list[str] = []
         self.binary_flen = 0
@@ -350,6 +351,7 @@ class DBEncoder:
         categorical_parts: list[NDArray] = []
         numeric_parts: list[NDArray] = []
 
+        compl_names: dict[int, str] = {}
         binary_names: list[str] = []
         categorical_names: list[str] = []
         numeric_names: list[str] = []
@@ -358,7 +360,7 @@ class DBEncoder:
         inverse_std = pd.Series(dtype=float)
 
         if self.train.discrete_processing == 'onehot':
-            binary_array, binary_names = self._one_hot_encode(frame)
+            binary_array, binary_names, compl_names = self._one_hot_encode(frame)
             if binary_array.shape[1] > 0:
                 binary_parts.append(binary_array)
         elif self.train.discrete_processing == 'none':
@@ -402,6 +404,7 @@ class DBEncoder:
             self.categorical_flen = len(categorical_names)
             self.numeric_flen = len(numeric_names)
             self.X_fname = [*binary_names, *categorical_names, *numeric_names]
+            self.X_compl_fname = compl_names
             self.mean = None if inverse_mean.empty else inverse_mean
             self.std = None if inverse_std.empty else inverse_std
 
@@ -410,14 +413,21 @@ class DBEncoder:
             return np.empty((len(frame), 0))
         return np.hstack(data_parts)
 
-    def _one_hot_encode(self, frame: pd.DataFrame) -> tuple[NDArray, list[str]]:
+    def _one_hot_name(self, name: str, code: int) -> str:
+        return f'{name}_{code}_{self._category_label(name, code)}'
+
+    def _one_hot_encode(
+        self, frame: pd.DataFrame
+    ) -> tuple[NDArray, list[str], dict[int, str]]:
         data_parts: list[NDArray] = []
         feature_names: list[str] = []
+        compl_feature_names: dict[int, str] = {}
 
         for name in self.discrete_columns:
             series = frame[name]
             category_count = self._category_count(name)
-            codes = [1] if category_count == 2 else list(range(category_count))
+            is_binary = category_count == 2
+            codes = [1] if is_binary else list(range(category_count))
             for code in codes:
                 values = np.where(
                     series.isna(),
@@ -425,11 +435,15 @@ class DBEncoder:
                     (series.to_numpy(dtype=float) == float(code)).astype(float),
                 )
                 data_parts.append(values.reshape(-1, 1))
-                feature_names.append(f'{name}_{self._category_label(name, code)}')
+                if is_binary:
+                    compl_feature_names[len(feature_names)] = self._one_hot_name(
+                        name, 0
+                    )
+                feature_names.append(self._one_hot_name(name, code))
 
         if not data_parts:
-            return np.empty((len(frame), 0)), []
-        return np.hstack(data_parts), feature_names
+            return np.empty((len(frame), 0)), [], {}
+        return np.hstack(data_parts), feature_names, compl_feature_names
 
     def _transform_numeric_discrete(
         self, frame: pd.DataFrame

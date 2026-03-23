@@ -148,13 +148,13 @@ class BinarizeLayer(nn.Module):
                 self.cl.data < self.left, self.left, self.cl.data
             )
 
-    def get_bound_name(self, feature_name, mean=None, std=None):
+    def get_bound_name(self, feature_name, compl_feature_name, mean=None, std=None):
         bound_name = []
         for i in range(self.input_dim[0]):
             bound_name.append(feature_name[i])
         if self.use_not:
             for i in range(self.input_dim[0]):
-                bound_name.append('~' + feature_name[i])
+                bound_name.append(compl_feature_name.get(i) or '~' + feature_name[i])
         if self.input_dim[1] > 0:
             for c, op in [(self.cl, '>'), (self.cl, '<=')]:
                 c = c.detach().cpu().numpy()

@@ -481,6 +481,7 @@ class RRL:
     def rule_print(
         self,
         feature_name,
+        compl_feature_name,
         label_name,
         train_loader,
         file=sys.stdout,
@@ -498,7 +499,7 @@ class RRL:
 
         # for Binarize Layer
         self.net.layer_list[0].get_bound_name(
-            feature_name, mean, std
+            feature_name, compl_feature_name, mean, std
         )  # layer_list[0].rule_name == bound_name
 
         # for Union Layer

@@ -67,11 +67,12 @@ class BinaryItem(Item):
 
 @dataclass
 class DiscreteItem(Item):
-    value: str | float
+    value: str | float | int
+    category: str | None = None
 
     @override
     def __str__(self) -> str:
-        return f'{self.name} = {self.value}'
+        return f'{self.name} = {self.category or self.value}'
 
     @override
     def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]':
@@ -119,7 +120,9 @@ def get_item(item: str) -> Item:
     units = item.split()
     if len(units) == 1:
         units = units[0].split('_')
-        if len(units) == 1:
+        if len(units) == 3:
+            return DiscreteItem(units[0], int(units[1]), units[2])
+        elif len(units) == 1:
             return BinaryItem(item)
         else:
             try:

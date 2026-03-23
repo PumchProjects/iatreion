@@ -135,6 +135,7 @@ def print_rules(
         ) as rrl_file:
             rule2weights = rrl.rule_print(
                 db_enc.X_fname,
+                db_enc.X_compl_fname,
                 db_enc.y_fname,
                 train_loader,
                 file=rrl_file,
@@ -145,6 +146,7 @@ def print_rules(
     else:
         rule2weights = rrl.rule_print(
             db_enc.X_fname,
+            db_enc.X_compl_fname,
             db_enc.y_fname,
             train_loader,
             mean=db_enc.mean,
