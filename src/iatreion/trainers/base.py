@@ -51,6 +51,7 @@ class Trainer(ABC):
                         for ctx in inner_group:
                             if self.train_config.final:
                                 self.train_final(ctx)
+                                data_advance()
                                 continue
 
                             results = self.train_step(ctx)
