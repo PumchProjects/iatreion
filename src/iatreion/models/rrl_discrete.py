@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Self, cast, override
+from typing import Self, override
 
 import numpy as np
 import pandas as pd
@@ -18,6 +18,13 @@ from iatreion.utils import decode_string, logger
 from .base import Model
 
 
+@dataclass(frozen=True)
+class RuleEval:
+    truth: 'pd.Series[bool]'
+    valid: 'pd.Series[bool]'
+    coverage: 'pd.Series[float]'
+
+
 @dataclass
 class Item(ABC):
     name: str
@@ -27,6 +34,18 @@ class Item(ABC):
 
     @abstractmethod
     def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]': ...
+
+    @abstractmethod
+    def eval_with_coverage(self, data: pd.DataFrame) -> RuleEval: ...
+
+
+def _eval_leaf(result: 'pd.Series[bool]', observed: 'pd.Series[bool]') -> RuleEval:
+    truth = result.fillna(False).astype(bool) & observed
+    return RuleEval(
+        truth=truth,
+        valid=observed,
+        coverage=observed.astype(float),
+    )
 
 
 @dataclass
@@ -39,6 +58,11 @@ class BinaryItem(Item):
     def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]':
         value = data[self.name]
         return value == 1
+
+    @override
+    def eval_with_coverage(self, data: pd.DataFrame) -> RuleEval:
+        value = data[self.name]
+        return _eval_leaf(value == 1, value.notna())
 
 
 @dataclass
@@ -53,6 +77,11 @@ class DiscreteItem(Item):
     def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]':
         value = data[self.name]
         return value == self.value
+
+    @override
+    def eval_with_coverage(self, data: pd.DataFrame) -> RuleEval:
+        value = data[self.name]
+        return _eval_leaf(value == self.value, value.notna())
 
 
 @dataclass
@@ -78,6 +107,11 @@ class ContinuousItem(Item):
                 return value >= self.th
             case _op:
                 raise ValueError(f'Unknown operator: {_op}!')
+
+    @override
+    def eval_with_coverage(self, data: pd.DataFrame) -> RuleEval:
+        value = data[self.name]
+        return _eval_leaf(self.eval(data), value.notna())
 
 
 def get_item(item: str) -> Item:
@@ -160,9 +194,39 @@ class Rule:
                     result |= other
                 case '&':
                     result &= other
+                case _op:
+                    raise ValueError(f'Unknown operator: {_op}!')
         if self.is_not:
             result = ~result
         return result
+
+    def eval_with_coverage(self, data: pd.DataFrame, *, tau: float) -> RuleEval:
+        child_results = [
+            item.eval_with_coverage(data, tau=tau)
+            if isinstance(item, Rule)
+            else item.eval_with_coverage(data)
+            for item in self.items
+        ]
+        truth_frame = pd.DataFrame(
+            {i: result.truth for i, result in enumerate(child_results)},
+            index=data.index,
+        )
+        valid_frame = pd.DataFrame(
+            {i: result.valid for i, result in enumerate(child_results)},
+            index=data.index,
+        )
+        match self.op:
+            case '|':
+                truth = truth_frame.where(valid_frame, False).any(axis=1)
+            case '&':
+                truth = truth_frame.where(valid_frame, True).all(axis=1)
+            case _op:
+                raise ValueError(f'Unknown operator: {_op}!')
+        if self.is_not:
+            truth = ~truth
+        coverage = valid_frame.mean(axis=1)
+        valid = coverage >= tau
+        return RuleEval(truth=truth, valid=valid, coverage=coverage)
 
 
 @dataclass(frozen=True)
@@ -206,15 +270,28 @@ class Line:
     def eval(
         self, data: pd.DataFrame, active_lines: list[Self] | None = None
     ) -> pd.DataFrame:
-        result = self.rule.eval(data)
-        if active_lines is not None and not pd.isna(r := result.item()) and r:
+        if self.tau is None:
+            result = self.rule.eval(data)
+            if active_lines is not None and not pd.isna(r := result.item()) and r:
+                active_lines.append(self)
+            table: dict[str, pd.Series] = {}
+            for label, weight in zip(self.labels, self.weights, strict=True):
+                col = result * weight
+                table[f'{label}_upper'] = col.fillna(max(0, weight))
+                table[f'{label}_lower'] = col.fillna(min(0, weight))
+            return pd.DataFrame(table)
+
+        gated = self.rule.eval_with_coverage(data, tau=self.tau)
+        result = gated.truth & gated.valid
+        if active_lines is not None and result.item():
             active_lines.append(self)
-        table: dict[str, pd.Series] = {}
-        for label, weight in zip(self.labels, self.weights, strict=True):
-            col = result * weight
-            table[f'{label}_upper'] = col.fillna(max(0, weight))
-            table[f'{label}_lower'] = col.fillna(min(0, weight))
-        return pd.DataFrame(table)
+        active = result.astype(float)
+        table = {
+            name: active * weight
+            for label, weight in zip(self.labels, self.weights, strict=True)
+            for name in (f'{label}_upper', f'{label}_lower')
+        }
+        return pd.DataFrame(table, dtype=float)
 
 
 class Rrl:
@@ -338,9 +415,12 @@ class Rrl:
         softmax_result = mean_result.apply(
             softmax, axis=1, raw=True, result_type='expand'
         )
-        max_lower = result[[f'{label}_lower' for label in self.labels]].max(axis=1)
-        min_upper = result[[f'{label}_upper' for label in self.labels]].min(axis=1)
-        confidence: pd.Series = (max_lower - min_upper).map(expit)
+        if self.tau is None:
+            max_lower = result[[f'{label}_lower' for label in self.labels]].max(axis=1)
+            min_upper = result[[f'{label}_upper' for label in self.labels]].min(axis=1)
+            confidence: pd.Series = (max_lower - min_upper).map(expit)
+        else:
+            confidence = pd.Series(np.nan, index=data.index, dtype=float)
         # Returned results all have "float64" dtype
         return softmax_result, confidence
 
@@ -378,16 +458,24 @@ class DiscreteRrlModel(Model):
     ) -> tuple[pd.DataFrame, pd.Series]:
         if not predictions:
             raise IatreionException('No predictions to aggregate!')
-        results = cast(
-            pd.DataFrame,
-            sum(
-                pred.mul(confidence * model.weight, axis=0)
-                for (pred, confidence), model in zip(predictions, models, strict=True)
-            ),
-        )
+
+        results = predictions[0][0].copy()
+        results.iloc[:, :] = 0.0
+        confidence_parts: list[pd.Series] = []
+        for (pred, confidence), model in zip(predictions, models, strict=True):
+            if confidence.notna().any():
+                pred_weight = confidence.fillna(1.0) * model.weight
+                confidence_parts.append(confidence)
+            else:
+                pred_weight = pd.Series(model.weight, index=pred.index, dtype=float)
+            results += pred.mul(pred_weight, axis=0)
+
         results = results.div(results.sum(axis=1) + 1e-8, axis=0)
-        confidence = pd.concat([c for _, c in predictions], axis=1).max(axis=1)
-        results.loc[confidence < 0.5] = np.nan
+        if confidence_parts:
+            confidence = pd.concat(confidence_parts, axis=1).max(axis=1)
+            results.loc[confidence < 0.5] = np.nan
+        else:
+            confidence = pd.Series(np.nan, index=results.index, dtype=float)
         return results, confidence
 
     @override
