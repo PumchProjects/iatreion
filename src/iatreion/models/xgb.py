@@ -32,20 +32,17 @@ class XgboostModel(Model):
         self.feature_types: list[str] = []
 
     def update_param(self) -> None:
-        if self.num_class <= 2:
-            self.param.update(
-                {
-                    'objective': 'binary:logistic',
-                    'eval_metric': ['auc'],
-                }
-            )
-        else:
-            self.param.update(
-                {
-                    'objective': 'multi:softprob',
-                    'num_class': self.num_class,
-                }
-            )
+        self.param |= (
+            {
+                'objective': 'binary:logistic',
+                'eval_metric': ['auc'],
+            }
+            if self.num_class <= 2
+            else {
+                'objective': 'multi:softprob',
+                'num_class': self.num_class,
+            }
+        )
 
     @override
     def _fit(self, X: NDArray, y: NDArray) -> None:

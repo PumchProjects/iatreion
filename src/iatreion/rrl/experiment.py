@@ -20,7 +20,7 @@ def _prepare_model_input(
     args: RrlConfig, X: NDArray
 ) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
     values = np.asarray(X, dtype=np.float32)
-    if args.variant == 'improved':
+    if args.missing_aware_mode == 'improved':
         missing = np.isnan(values)
         mask = (~missing).astype(np.float32)
         values = np.where(missing, 0.0, values)
@@ -86,7 +86,8 @@ def train_model(
         beta=args.beta,
         gamma=args.gamma,
         temperature=args.temp,
-        use_missing_aware=args.variant == 'improved',
+        use_disjunction=not args.conjunction_only,
+        use_missing_aware=args.missing_aware_mode == 'improved',
         coverage_tau=args.coverage_tau,
         coverage_kappa=args.coverage_kappa,
     )
@@ -175,13 +176,7 @@ def calc_complexity(rrl: RRL, rule2weights: Any) -> float:
         ln -= 1
         layer = rrl.net.layer_list[ln]
         for r in connected_rid[ln]:
-            con_len = len(layer.rule_list[0])
-            if r >= con_len:
-                opt_id = 1
-                r -= con_len
-            else:
-                opt_id = 0
-            rule = layer.rule_list[opt_id][r]
+            rule = layer.get_rule(r)
             edge_cnt += len(rule)
             for rid in rule:
                 connected_rid[ln - abs(rid[0])].add(rid[1])

@@ -8,7 +8,7 @@ from cyclopts.validators import Number
 
 from .model_base import ModelConfig
 
-type RrlVariant = Literal['original', 'improved']
+type MissingAwareMode = Literal['original', 'improved']
 
 
 @Parameter(name='*')
@@ -50,7 +50,7 @@ class RrlConfig(ModelConfig):
     max_grad_norm: Annotated[float | None, Parameter(alias='-mgn')] = 5.0
     'Max gradient norm for clipping. Disabled when None or <= 0.'
 
-    nlaf: bool = False
+    nlaf: bool = True
     'Use novel logical activation functions to take less time and GPU memory usage. We recommend trying (alpha, beta, gamma) in {(0.999, 8, 1), (0.999, 8, 3), (0.9, 3, 3)}'
 
     alpha: float = 0.999
@@ -80,14 +80,19 @@ class RrlConfig(ModelConfig):
     print_rule: bool = False
     'Print the rules.'
 
+    conjunction_only: bool = False
+    'Use only conjunction logical layers. When false, each logical layer includes both conjunction and disjunction branches.'
+
     structure: Annotated[str, Parameter(alias='-s')] = '5@64'
     'Set the number of nodes in the binarization layer and logical layers. E.g., 10@64, 10@64@32@16.'
 
     debug: Annotated[bool, Parameter(alias='-D')] = False
     'Whether to enable debug mode.'
 
-    variant: Annotated[RrlVariant, Parameter(alias='-v')] = 'original'
-    'Select `original` RRL or the improved missing-aware RRL with mask-aware + coverage-gated logic.'
+    missing_aware_mode: Annotated[MissingAwareMode, Parameter(alias='-v')] = (
+        'original'
+    )
+    'Select `original` RRL behavior or the improved missing-aware RRL with mask-aware + coverage-gated logic.'
 
     coverage_tau: Annotated[
         float, Parameter(name='--tau', validator=Number(gte=0, lte=1))
@@ -105,7 +110,7 @@ class RrlConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         self.train._encode = True
-        if self.variant == 'improved':
+        if self.missing_aware_mode == 'improved':
             self.train.missing_value_strategy = 'none'
             self.train.validate_preprocessing()
         if self.debug:
@@ -114,8 +119,9 @@ class RrlConfig(ModelConfig):
                 f'e{self.epoch}_os{over_sampler}_mns{self.train.min_n_samples}_bs{self.batch_size}'
                 f'_lr{self.learning_rate}_lrdr{self.lr_decay_rate}_lrde{self.lr_decay_epoch}_wd{self.weight_decay}'
                 f'_si{self.save_interval}_useNOT{self.use_not}_valSize{self.train.val_size}_useSkip{self.skip}'
-                f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}_L{self.structure}'
-                f'_variant{self.variant}_tau{self.coverage_tau}_kappa{self.coverage_kappa}'
+                f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}'
+                f'_conjOnly{self.conjunction_only}_L{self.structure}'
+                f'_missingMode{self.missing_aware_mode}_tau{self.coverage_tau}_kappa{self.coverage_kappa}'
                 f'_esp{self.early_stop_patience}_esd{self.early_stop_min_delta}_ls{self.label_smoothing}_mgn{self.max_grad_norm}'
             )
         self.register_log_dir('rrl', folder_name=self._folder_name)

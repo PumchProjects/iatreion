@@ -51,6 +51,12 @@ def _coverage_ratio(m, w):
     return (m @ w + EPSILON) / (torch.sum(w, dim=0, keepdim=True) + EPSILON)
 
 
+LOGIC_OPERATOR_SYMBOLS = {
+    'conjunction': '&',
+    'disjunction': '|',
+}
+
+
 class _LogicLayerMixin:
     def _init_missing_logic(
         self,
@@ -178,10 +184,7 @@ class Product(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        (
-            X,
-            y,
-        ) = ctx.saved_tensors
+        X, y = ctx.saved_tensors
         grad_input = grad_output.unsqueeze(1) * (y.unsqueeze(1) ** 2 / (X + EPSILON))
         return grad_input
 
@@ -197,10 +200,7 @@ class EstimatedProduct(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        (
-            X,
-            y,
-        ) = ctx.saved_tensors
+        X, y = ctx.saved_tensors
         grad_input = grad_output.unsqueeze(1) * (
             (-1.0 / (-1.0 + torch.log(y.unsqueeze(1) ** 2))) / (X + EPSILON)
         )
@@ -525,6 +525,68 @@ class OriginalDisjunctionLayer(_LogicLayerMixin, nn.Module):
         self.W.data.clamp_(0.0, 1.0)
 
 
+def _build_logic_layer(
+    operator_name,
+    *,
+    n,
+    input_dim,
+    use_not,
+    use_nlaf,
+    estimated_grad,
+    alpha,
+    beta,
+    gamma,
+    missing_aware,
+    coverage_tau,
+    coverage_kappa,
+):
+    if operator_name == 'conjunction':
+        if use_nlaf:
+            return ConjunctionLayer(
+                n,
+                input_dim,
+                use_not=use_not,
+                alpha=alpha,
+                beta=beta,
+                gamma=gamma,
+                missing_aware=missing_aware,
+                coverage_tau=coverage_tau,
+                coverage_kappa=coverage_kappa,
+            )
+        return OriginalConjunctionLayer(
+            n,
+            input_dim,
+            use_not=use_not,
+            estimated_grad=estimated_grad,
+            missing_aware=missing_aware,
+            coverage_tau=coverage_tau,
+            coverage_kappa=coverage_kappa,
+        )
+    if operator_name == 'disjunction':
+        if use_nlaf:
+            return DisjunctionLayer(
+                n,
+                input_dim,
+                use_not=use_not,
+                alpha=alpha,
+                beta=beta,
+                gamma=gamma,
+                missing_aware=missing_aware,
+                coverage_tau=coverage_tau,
+                coverage_kappa=coverage_kappa,
+            )
+        return OriginalDisjunctionLayer(
+            n,
+            input_dim,
+            use_not=use_not,
+            estimated_grad=estimated_grad,
+            missing_aware=missing_aware,
+            coverage_tau=coverage_tau,
+            coverage_kappa=coverage_kappa,
+        )
+    raise ValueError(f'Unsupported logical operator: {operator_name}')
+
+
 def extract_rules(prev_layer, skip_connect_layer, layer, pos_shift=0):
     # dim2id = {dimension: rule_id} :
     dim2id = defaultdict(lambda: -1)
@@ -614,13 +676,14 @@ def extract_rules(prev_layer, skip_connect_layer, layer, pos_shift=0):
 
 
 class UnionLayer(nn.Module):
-    """The union layer is used to learn the rule-based representation."""
+    """The logical layer is used to learn the rule-based representation."""
 
     def __init__(
         self,
         n,
         input_dim,
         use_not=False,
+        use_disjunction=True,
         use_nlaf=False,
         estimated_grad=False,
         alpha=0.999,
@@ -634,123 +697,128 @@ class UnionLayer(nn.Module):
         self.n = n
         self.use_not = use_not
         self.input_dim = input_dim
-        self.output_dim = self.n * 2
         self.layer_type = 'union'
         self.forward_tot = None
         self.node_activation_cnt = None
         self.dim2id = None
         self.rule_list = None
+        self.rule_offsets = None
         self.rule_name = None
         self.node_coverage_sum = None
         self.last_coverage = None
         self.coverage_tau = coverage_tau
+        self.operator_names = (
+            ('conjunction', 'disjunction') if use_disjunction else ('conjunction',)
+        )
+        self.logic_layers = nn.ModuleList(
+            [
+                _build_logic_layer(
+                    operator_name,
+                    n=self.n,
+                    input_dim=self.input_dim,
+                    use_not=use_not,
+                    use_nlaf=use_nlaf,
+                    estimated_grad=estimated_grad,
+                    alpha=alpha,
+                    beta=beta,
+                    gamma=gamma,
+                    missing_aware=missing_aware,
+                    coverage_tau=coverage_tau,
+                    coverage_kappa=coverage_kappa,
+                )
+                for operator_name in self.operator_names
+            ]
+        )
+        self.output_dim = sum(layer.output_dim for layer in self.logic_layers)
 
-        if use_nlaf:  # use novel logical activation functions
-            self.con_layer = ConjunctionLayer(
-                self.n,
-                self.input_dim,
-                use_not=use_not,
-                alpha=alpha,
-                beta=beta,
-                gamma=gamma,
-                missing_aware=missing_aware,
-                coverage_tau=coverage_tau,
-                coverage_kappa=coverage_kappa,
-            )
-            self.dis_layer = DisjunctionLayer(
-                self.n,
-                self.input_dim,
-                use_not=use_not,
-                alpha=alpha,
-                beta=beta,
-                gamma=gamma,
-                missing_aware=missing_aware,
-                coverage_tau=coverage_tau,
-                coverage_kappa=coverage_kappa,
-            )
-        else:  # use original logical activation functions
-            self.con_layer = OriginalConjunctionLayer(
-                self.n,
-                self.input_dim,
-                use_not=use_not,
-                estimated_grad=estimated_grad,
-                missing_aware=missing_aware,
-                coverage_tau=coverage_tau,
-                coverage_kappa=coverage_kappa,
-            )
-            self.dis_layer = OriginalDisjunctionLayer(
-                self.n,
-                self.input_dim,
-                use_not=use_not,
-                estimated_grad=estimated_grad,
-                missing_aware=missing_aware,
-                coverage_tau=coverage_tau,
-                coverage_kappa=coverage_kappa,
-            )
+    def _iter_logic_layers(self):
+        pos_shift = 0
+        for operator_name, layer in zip(
+            self.operator_names, self.logic_layers, strict=True
+        ):
+            yield operator_name, layer, pos_shift
+            pos_shift += layer.output_dim
 
     def forward(self, x, m):
-        con_x, con_m = self.con_layer(x, m)
-        dis_x, dis_m = self.dis_layer(x, m)
-        self.last_coverage = torch.cat(
-            [self.con_layer.last_coverage, self.dis_layer.last_coverage], dim=1
-        )
-        return torch.cat([con_x, dis_x], dim=1), torch.cat([con_m, dis_m], dim=1)
+        outputs = []
+        masks = []
+        coverages = []
+        for _operator_name, layer, _pos_shift in self._iter_logic_layers():
+            output, mask = layer(x, m)
+            outputs.append(output)
+            masks.append(mask)
+            coverages.append(layer.last_coverage)
+        self.last_coverage = torch.cat(coverages, dim=1)
+        return torch.cat(outputs, dim=1), torch.cat(masks, dim=1)
 
     def binarized_forward(self, x, m):
-        con_x = self.con_layer.binarized_forward(x, m)
-        dis_x = self.dis_layer.binarized_forward(x, m)
-        _, _, con_x, con_m = self.con_layer._gate_outputs(con_x, con_x, m)
-        _, _, dis_x, dis_m = self.dis_layer._gate_outputs(dis_x, dis_x, m)
-        self.last_coverage = torch.cat(
-            [self.con_layer.last_coverage, self.dis_layer.last_coverage], dim=1
-        )
-        return torch.cat([con_x, dis_x], dim=1), torch.cat([con_m, dis_m], dim=1)
+        outputs = []
+        masks = []
+        coverages = []
+        for _operator_name, layer, _pos_shift in self._iter_logic_layers():
+            output = layer.binarized_forward(x, m)
+            _, _, output, mask = layer._gate_outputs(output, output, m)
+            outputs.append(output)
+            masks.append(mask)
+            coverages.append(layer.last_coverage)
+        self.last_coverage = torch.cat(coverages, dim=1)
+        return torch.cat(outputs, dim=1), torch.cat(masks, dim=1)
 
     def edge_count(self):
-        con_Wb = Binarize.apply(self.con_layer.W - THRESHOLD)
-        dis_Wb = Binarize.apply(self.dis_layer.W - THRESHOLD)
-        return torch.sum(con_Wb) + torch.sum(dis_Wb)
+        return sum(
+            torch.sum(Binarize.apply(layer.W - THRESHOLD))
+            for layer in self.logic_layers
+        )
 
     def l1_norm(self):
-        return torch.sum(self.con_layer.W) + torch.sum(self.dis_layer.W)
+        return sum(torch.sum(layer.W) for layer in self.logic_layers)
 
     def l2_norm(self):
-        return torch.sum(self.con_layer.W**2) + torch.sum(self.dis_layer.W**2)
+        return sum(torch.sum(layer.W**2) for layer in self.logic_layers)
 
     def clip(self):
-        self.con_layer.clip()
-        self.dis_layer.clip()
+        for layer in self.logic_layers:
+            layer.clip()
 
     def get_rules(self, prev_layer, skip_connect_layer):
-        self.con_layer.forward_tot = self.dis_layer.forward_tot = self.forward_tot
-        self.con_layer.node_activation_cnt = self.dis_layer.node_activation_cnt = (
-            self.node_activation_cnt
-        )
+        dim2id = {}
+        rule_list = []
+        rule_offsets = []
+        rule_id_shift = 0
+        for _operator_name, layer, pos_shift in self._iter_logic_layers():
+            layer.forward_tot = self.forward_tot
+            layer.node_activation_cnt = self.node_activation_cnt
 
-        # get dim2id and rule lists of the conjunction layer and the disjunction layer
-        # dim2id: dimension --> (k, rule id)
-        con_dim2id, con_rule_list = extract_rules(
-            prev_layer, skip_connect_layer, self.con_layer
-        )
-        dis_dim2id, dis_rule_list = extract_rules(
-            prev_layer, skip_connect_layer, self.dis_layer, self.con_layer.W.shape[1]
-        )
+            operator_dim2id, operator_rule_list = extract_rules(
+                prev_layer, skip_connect_layer, layer, pos_shift
+            )
+            dim2id |= {
+                key: (-1 if value == -1 else value + rule_id_shift)
+                for key, value in operator_dim2id.items()
+            }
+            rule_offsets.append(rule_id_shift)
+            rule_list.append(operator_rule_list)
+            rule_id_shift += len(operator_rule_list)
 
-        shift = max(con_dim2id.values()) + 1
-        dis_dim2id = {k: (-1 if v == -1 else v + shift) for k, v in dis_dim2id.items()}
-        dim2id = defaultdict(lambda: -1, {**con_dim2id, **dis_dim2id})
+        self.dim2id = defaultdict(lambda: -1, dim2id)
+        self.rule_list = tuple(rule_list)
+        self.rule_offsets = tuple(rule_offsets)
 
-        rule_list = (con_rule_list, dis_rule_list)
-
-        self.dim2id = dim2id
-        self.rule_list = rule_list
+    def get_rule(self, rid):
+        if self.rule_list is None or self.rule_offsets is None:
+            raise RuntimeError('Rules have not been extracted yet.')
+        for offset, rules in zip(self.rule_offsets, self.rule_list, strict=True):
+            if rid < offset + len(rules):
+                return rules[rid - offset]
+        raise IndexError(f'Rule id out of range: {rid}')
 
     def get_rule_description(self, input_rule_name, wrap=False):
         """
         input_rule_name: (skip_connect_rule_name, prev_rule_name)
         """
         self.rule_name = []
-        for rl, op in zip(self.rule_list, ('&', '|'), strict=True):
+        for operator_name, rl in zip(self.operator_names, self.rule_list, strict=True):
+            op = LOGIC_OPERATOR_SYMBOLS[operator_name]
             for rule in rl:
                 name = ''
                 for i, ri in enumerate(rule):

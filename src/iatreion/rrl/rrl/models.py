@@ -25,6 +25,7 @@ class Net(nn.Module):
         beta=8,
         gamma=1,
         temperature=0.01,
+        use_disjunction=True,
         use_missing_aware=False,
         coverage_tau=0.5,
         coverage_kappa=0.1,
@@ -37,6 +38,7 @@ class Net(nn.Module):
         self.right = right
         self.layer_list = nn.ModuleList([])
         self.use_skip = use_skip
+        self.use_disjunction = use_disjunction
         self.use_missing_aware = use_missing_aware
         self.t = nn.Parameter(torch.log(torch.tensor([temperature])))
 
@@ -66,6 +68,7 @@ class Net(nn.Module):
                     use_nlaf=use_nlaf,
                     estimated_grad=estimated_grad,
                     use_not=layer_use_not,
+                    use_disjunction=use_disjunction,
                     alpha=alpha,
                     beta=beta,
                     gamma=gamma,
@@ -141,6 +144,7 @@ class RRL:
         beta=8,
         gamma=1,
         temperature=0.01,
+        use_disjunction=True,
         use_missing_aware=False,
         coverage_tau=0.5,
         coverage_kappa=0.1,
@@ -153,6 +157,7 @@ class RRL:
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
+        self.use_disjunction = use_disjunction
         self.use_missing_aware = use_missing_aware
         self.best_f1 = -1.0
         self.best_loss = 1e20
@@ -175,6 +180,7 @@ class RRL:
             beta=beta,
             gamma=gamma,
             temperature=temperature,
+            use_disjunction=use_disjunction,
             use_missing_aware=use_missing_aware,
             coverage_tau=coverage_tau,
             coverage_kappa=coverage_kappa,
