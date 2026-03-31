@@ -15,6 +15,7 @@ dependencies = [
     "tableone>=0.9.6",
     "seaborn>=0.13.2",
     "shap>=0.51.0",
+    "optuna>=4.8.0",
 ]
 
 [project.optional-dependencies]

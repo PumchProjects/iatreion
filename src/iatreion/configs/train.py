@@ -174,6 +174,7 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     def set_groups(self) -> None:
         if not self.group_names:
             raise ValueError('No valid groups found.')
+        groups: list[list[str]] = []
         for group in self.group_names:
             group = expand_range(group)
             names: list[str] = []
@@ -193,9 +194,9 @@ For discrete RRL, validation set is used for optimization when val_size is set.
                         self._label_pos = 'group_Ab'
                     names.append(group[i])
                     i += 1
-            self._groups.append(sorted(names))
-        self._group_names = [''.join(group) for group in self._groups]
-        self._groups.sort(key=lambda x: x[0])
+            groups.append(sorted(names))
+        self._group_names = [''.join(group) for group in groups]
+        self._groups = sorted(groups, key=lambda x: x[0])
         self._sorted_group_names = [''.join(group) for group in self._groups]
         if self.label_name is not None:
             self._base_pos = ''

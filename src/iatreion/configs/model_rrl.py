@@ -119,4 +119,3 @@ class RrlConfig(ModelConfig):
                 f'_esp{self.early_stop_patience}_esd{self.early_stop_min_delta}_ls{self.label_smoothing}_mgn{self.max_grad_norm}'
             )
         self.register_log_dir('rrl', folder_name=self._folder_name)
-        self.folder_path.mkdir(parents=True, exist_ok=True)

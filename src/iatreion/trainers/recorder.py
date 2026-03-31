@@ -84,6 +84,7 @@ class Finish:
     ci_result: str
     running: RunningRecord
     final: FinalRecord
+    ci: dict[str, tuple[float, float, float]] | None = None
     roc: Figure | None = None
 
     def log(self, name: str) -> None:
@@ -515,9 +516,10 @@ class Recorder:
         result = self.formatter.format_final_avg(
             final=final, mean_std=mean_std, auc=auc, width=width
         )
+        ci = None
         if calc_ci:
             ci = self._calc_bootstrap_ci(y_true, y_score, point_estimates)
             ci_result = self.formatter.format_final_ci(final=final, ci=ci, width=width)
         else:
             ci_result = self.formatter.format_final_metrics(final=final, width=width)
-        return Finish(self.config, result, ci_result, self.result, final, roc)
+        return Finish(self.config, result, ci_result, self.result, final, ci, roc)

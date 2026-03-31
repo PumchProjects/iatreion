@@ -1,12 +1,14 @@
 from dataclasses import dataclass, field
 from functools import cached_property
+from logging import FileHandler
 from pathlib import Path
 from typing import Annotated, Literal
 
 from cyclopts import Parameter
+from cyclopts.types import ExistingFile
 
 from iatreion.exceptions import IatreionException
-from iatreion.utils import add_file_handler
+from iatreion.utils import add_file_handler, remove_file_handler
 
 from .dataset import DatasetConfig
 from .train import TrainConfig
@@ -38,6 +40,14 @@ class ModelConfig:
     importance_max_samples: Annotated[int | None, Parameter(alias='-ims')] = 256
     'Maximum number of test samples used for permutation/SHAP importance. Disable with None.'
 
+    tune: bool = False
+    'Whether to tune hyperparameters with Optuna instead of running a single training job.'
+
+    tune_config: Annotated[ExistingFile | None, Parameter(name='--tune-config')] = None
+    'Path to the TOML file that defines the Optuna study and search space.'
+
+    _log_handler: FileHandler | None = field(init=False, default=None, repr=False)
+
     def get_exp_root(self, model_name: str) -> Path:
         return (
             self.train.log_root
@@ -65,7 +75,22 @@ class ModelConfig:
         folder_name: str | None = None,
         file_name: str = 'train.log',
     ) -> None:
+        if self.tune:
+            return
         self.train._log_dir = self.get_exp_root(model_name)
         if folder_name is not None and not self.train.final:
             self.train._log_dir /= folder_name
-        add_file_handler(self.train._log_dir / file_name)
+        self.close_log_handler()
+        self._log_handler = add_file_handler(self.train._log_dir / file_name)
+
+    def validate_tuning(self) -> None:
+        if self.tune and self.tune_config is None:
+            raise IatreionException(
+                'Hyperparameter tuning was enabled but no --tune-config file was provided.'
+            )
+
+    def close_log_handler(self) -> None:
+        if self._log_handler is None:
+            return
+        remove_file_handler(self._log_handler)
+        self._log_handler = None

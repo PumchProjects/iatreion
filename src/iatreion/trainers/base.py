@@ -1,19 +1,28 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from contextlib import closing
+from dataclasses import dataclass, field
 from itertools import groupby
 
 from iatreion.configs import ModelConfig
 from iatreion.train_utils import TrainStepContext, get_train_iterator
 from iatreion.utils import logger, task
 
-from .recorder import Recorder, TrainerReturn
+from .recorder import Finish, Recorder, TrainerReturn
 from .utils import record_simple, record_weighted_and_stacking
+
+
+@dataclass(frozen=True)
+class TrainerSummary:
+    finishes: dict[str, Finish] = field(default_factory=dict)
+    objectives: dict[str, float] = field(default_factory=dict)
 
 
 class Trainer(ABC):
     def __init__(self, config: ModelConfig) -> None:
         self.dataset_config, self.train_config = config.dataset, config.train
+        self.finishes: dict[str, Finish] = {}
+        self.objectives: dict[str, float] = {}
 
     @abstractmethod
     def train_step(self, ctx: TrainStepContext) -> TrainerReturn: ...
@@ -21,7 +30,22 @@ class Trainer(ABC):
     @abstractmethod
     def train_final(self, ctx: TrainStepContext) -> None: ...
 
-    def train(self) -> None:
+    def _store_finish(self, name: str, recorder: Recorder) -> None:
+        finish = recorder.finish()
+        finish.log(name)
+        self.finishes[name] = finish
+        for metric, value in finish.final.metrics.items():
+            self.objectives[f'{name}/{metric}'] = value
+        self.objectives[f'{name}/Time'] = finish.final.time
+        for key, (value, _fmt) in finish.final.complexity.items():
+            self.objectives[f'{name}/{key}'] = value
+        if finish.ci is None:
+            return
+        for metric, (_point, lower, upper) in finish.ci.items():
+            self.objectives[f'{name}/{metric}_lb'] = lower
+            self.objectives[f'{name}/{metric}_ub'] = upper
+
+    def train(self) -> TrainerSummary:
         iterator = get_train_iterator(self.dataset_config, self.train_config)
 
         simple_recorder = Recorder(self.train_config)
@@ -80,10 +104,15 @@ class Trainer(ABC):
         if not self.train_config.final:
             with task('Data:', len(outer_recorders)) as outer_advance:
                 for name, outer_recorder in outer_recorders.items():
-                    outer_recorder.finish().log(name)
+                    self._store_finish(name, outer_recorder)
                     outer_advance()
             if self.train_config.aggregate != 'concat':
-                simple_recorder.finish().log('all_simple_average')
+                self._store_finish('all_simple_average', simple_recorder)
             if self.train_config.aggregate == 'stack':
-                weighted_recorder.finish().log('all_weighted_average')
-                stacking_recorder.finish().log('all_stacking')
+                self._store_finish('all_weighted_average', weighted_recorder)
+                self._store_finish('all_stacking', stacking_recorder)
+
+        return TrainerSummary(
+            finishes=self.finishes,
+            objectives=self.objectives,
+        )

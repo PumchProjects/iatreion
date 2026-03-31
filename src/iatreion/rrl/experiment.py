@@ -55,6 +55,7 @@ def train_model(
     save_model_callback: Callable[..., None],
     ctx: TrainStepContext,
 ):
+    args.folder_path.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(str(args.folder_path))
 
     train_loader = get_data_loader(args, *ctx.train_data, shuffle=True, pin_memory=True)
