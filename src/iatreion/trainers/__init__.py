@@ -1,2 +1,2 @@
 from .model import ModelTrainer
-from .recorder import Recorder
+from .recorder import Recorder, TrainerReturn

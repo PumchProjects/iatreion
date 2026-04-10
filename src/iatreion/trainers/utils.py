@@ -4,7 +4,7 @@ from sklearn.linear_model import LogisticRegression
 from iatreion.configs import TrainConfig
 from iatreion.utils import logger
 
-from .recorder import FinalRecord, Recorder
+from .recorder import FinalRecord, Recorder, TrainerReturn
 
 
 def get_meta_model(
@@ -61,7 +61,7 @@ def aggregate(
             norm_weights = np.full(n_total, 1 / n_total)
         bias = 0
     recorder.record_weights_and_bias(norm_weights.tolist(), bias)
-    return recorder.record((time, y_true, y_score, {}))
+    return recorder.record(TrainerReturn(time, y_true, y_score, {}))
 
 
 def record_simple(

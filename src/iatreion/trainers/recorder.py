@@ -18,9 +18,13 @@ from sklearn.metrics import (
 from iatreion.configs import TrainConfig
 from iatreion.utils import logger, task
 
-type TrainerReturn = tuple[
-    float, NDArray, NDArray, dict[str, float | tuple[float, str]]
-]
+
+@dataclass
+class TrainerReturn:
+    time: float
+    y_true: NDArray
+    y_score: NDArray
+    complexity: dict[str, float | tuple[float, str]]
 
 
 @dataclass
@@ -472,7 +476,12 @@ class Recorder:
         return ci
 
     def record(self, results: TrainerReturn) -> str:
-        training_time, y_true, y_score, complexity = results
+        training_time, y_true, y_score, complexity = (
+            results.time,
+            results.y_true,
+            results.y_score,
+            results.complexity,
+        )
         self.result.y_true_all.append(y_true)
         self.result.y_score_all.append(y_score)
         self.result.time.append(training_time)
