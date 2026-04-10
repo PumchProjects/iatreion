@@ -15,8 +15,8 @@ def get_meta_model(
     y_score_list = []
     for name, record in named_records.items():
         width = max(width, len(name))
-        y_score_list.append(record.y_score[:, [1]])
-    y_true = record.y_true
+        y_score_list.append(record.y.score[:, [1]])
+    y_true = record.y.true
 
     meta_model = LogisticRegression(
         penalty='l2', C=0.5, random_state=42, solver='lbfgs'
@@ -43,9 +43,9 @@ def aggregate(
     y_score_list = []
     for child in named_recorders.values():
         time_list.append(child.result.time[-1])
-        y_score_list.append(child.result.y_score_all[-1])
+        y_score_list.append(child.result.y_all[-1].score)
     time = sum(time_list)
-    y_true = child.result.y_true_all[-1]
+    y_true = child.result.y_all[-1].true
     if meta_model is not None:
         # HACK: Binary classification only
         y_score = meta_model.predict_proba(
@@ -61,7 +61,7 @@ def aggregate(
             norm_weights = np.full(n_total, 1 / n_total)
         bias = 0
     recorder.record_weights_and_bias(norm_weights.tolist(), bias)
-    return recorder.record(TrainerReturn(time, y_true, y_score, {}))
+    return recorder.record(TrainerReturn(time, y_true, y_score))
 
 
 def record_simple(

@@ -1,5 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass, field
+from functools import cached_property
+from typing import Self
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,19 +21,54 @@ from iatreion.configs import TrainConfig
 from iatreion.utils import logger, task
 
 
+@dataclass(frozen=True)
+class PredictionRecord:
+    true: NDArray
+    pred: NDArray
+    score: NDArray
+
+    @cached_property
+    def pos_score(self) -> NDArray:
+        return self.score[:, 1] if self.score.shape[1] >= 2 else self.score.squeeze()
+
+    @classmethod
+    def from_list(cls, lst: list[Self]) -> Self:
+        return cls(
+            true=np.concatenate([record.true for record in lst]),
+            pred=np.concatenate([record.pred for record in lst]),
+            score=np.concatenate([record.score for record in lst]),
+        )
+
+    def __getitem__(self, index: NDArray) -> Self:
+        return PredictionRecord(
+            true=self.true[index],
+            pred=self.pred[index],
+            score=self.score[index],
+        )
+
+    def to_dict(self) -> dict[str, NDArray]:
+        return {'y_true': self.true, 'y_pred': self.pred, 'y_score': self.score}
+
+
 @dataclass
 class TrainerReturn:
     time: float
     y_true: NDArray
     y_score: NDArray
-    complexity: dict[str, float | tuple[float, str]]
+    complexity: dict[str, float | tuple[float, str]] = field(default_factory=dict)
+    y_pred: NDArray = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.y_pred = self.y_score.argmax(axis=1)
+
+    def get_prediction(self) -> PredictionRecord:
+        return PredictionRecord(self.y_true, self.y_pred, self.y_score)
 
 
 @dataclass
 class RunningRecord:
     time: list[float] = field(default_factory=list)
-    y_true_all: list[NDArray] = field(default_factory=list)
-    y_score_all: list[NDArray] = field(default_factory=list)
+    y_all: list[PredictionRecord] = field(default_factory=list)
     metrics: defaultdict[str, list[float]] = field(
         default_factory=lambda: defaultdict(list)
     )
@@ -44,8 +81,7 @@ class RunningRecord:
 @dataclass
 class FinalRecord:
     time: float
-    y_true: NDArray
-    y_score: NDArray
+    y: PredictionRecord
     metrics: dict[str, float]
     complexity: dict[str, tuple[float, str]]
     cm: NDArray | None = None
@@ -103,8 +139,7 @@ class Finish:
             logger.info(self.ci_result)
         np.savez_compressed(
             self.config.get_results_file(name),
-            y_true=self.final.y_true,
-            y_score=self.final.y_score,
+            **self.final.y.to_dict(),
             **{metric: np.array(vals) for metric, vals in self.running.metrics.items()},
         )
         if self.roc is not None:
@@ -126,11 +161,11 @@ class RecordROC:
         self.mean_fpr = np.linspace(0, 1, 100)
         self.fig, self.ax = plt.subplots(figsize=(6, 6), layout='constrained')
 
-    def record_fold(self, y_true: NDArray, y_pos_score: NDArray) -> float:
+    def record_fold(self, y: PredictionRecord) -> float:
         fold = len(self.aucs) + 1
         viz = RocCurveDisplay.from_predictions(
-            y_true,
-            y_pos_score,
+            y.true,
+            y.pos_score,
             name=f'{"" if self.show_legends else "_"}ROC fold {fold}',
             alpha=0.1,
             lw=1,
@@ -143,10 +178,10 @@ class RecordROC:
         self.aucs.append(viz.roc_auc)
         return viz.roc_auc
 
-    def record_final(self, y_true: NDArray, y_pos_score: NDArray) -> float:
+    def record_final(self, y: PredictionRecord) -> float:
         viz = RocCurveDisplay.from_predictions(
-            y_true,
-            y_pos_score,
+            y.true,
+            y.pos_score,
             name='_ROC',
             color='b',
             alpha=0.8,
@@ -165,10 +200,10 @@ class RecordROC:
         self.aucs.append(viz.roc_auc)
         return viz.roc_auc
 
-    def record(self, y_true: NDArray, y_pos_score: NDArray) -> float:
+    def record(self, y: PredictionRecord) -> float:
         if self.config.final:
-            return self.record_final(y_true, y_pos_score)
-        return self.record_fold(y_true, y_pos_score)
+            return self.record_final(y)
+        return self.record_fold(y)
 
     def finish(self) -> tuple[float, Figure]:
         mean_tpr = np.nanmean(self.tprs, axis=0)
@@ -322,61 +357,44 @@ class Recorder:
         self.config = config
         self.roc = RecordROC(config, is_inner=is_inner)
         self.calc_sen_and_spc = config.num_class == 2
+        self.labels = list(range(self.config.num_class))
         self.result = RunningRecord()
         self.formatter = RecordFormatter()
 
-    def _get_labels(self) -> list[int]:
-        return list(range(self.config.num_class))
-
-    @staticmethod
-    def _predict_from_score(y_score: NDArray) -> tuple[NDArray, NDArray]:
-        y_pred = y_score.argmax(axis=1)
-        y_pos_score = y_score[:, 1] if y_score.shape[1] >= 2 else y_score.squeeze()
-        return y_pred, y_pos_score
-
-    def _calc_auc(
-        self, y_true: NDArray, y_score: NDArray, y_pos_score: NDArray, labels: list[int]
-    ) -> float:
+    def _calc_auc(self, y: PredictionRecord) -> float:
         try:
             return roc_auc_score(
-                y_true,
-                y_pos_score if self.config.num_class <= 2 else y_score,
+                y.true,
+                y.pos_score if self.config.num_class <= 2 else y.score,
                 average='macro',
                 multi_class='ovr',
-                labels=labels,
+                labels=self.labels,
             )
         except ValueError:
             return np.nan
 
     def _calc_metrics(
-        self, y_true: NDArray, y_pred: NDArray, auc: float, labels: list[int]
+        self, y: PredictionRecord, *, plot_roc: bool = False
     ) -> dict[str, float]:
+        auc = self.roc.record(y) if plot_roc else self._calc_auc(y)
         precision, recall, f1, _ = precision_recall_fscore_support(
-            y_true, y_pred, labels=labels, average='macro', zero_division=np.nan
+            y.true, y.pred, labels=self.labels, average='macro', zero_division=np.nan
         )
         metrics = {
             'AUC': auc,
-            'ACC': accuracy_score(y_true, y_pred),
+            'ACC': accuracy_score(y.true, y.pred),
             'P': precision,
             'R': recall,
             'F1': f1,
         }
         if self.calc_sen_and_spc:
             metrics['SEN'] = recall_score(
-                y_true, y_pred, labels=labels, pos_label=0, zero_division=np.nan
+                y.true, y.pred, labels=self.labels, pos_label=0, zero_division=np.nan
             )
             metrics['SPC'] = recall_score(
-                y_true, y_pred, labels=labels, pos_label=1, zero_division=np.nan
+                y.true, y.pred, labels=self.labels, pos_label=1, zero_division=np.nan
             )
         return metrics
-
-    def _calc_metrics_from_prediction(
-        self, y_true: NDArray, y_score: NDArray
-    ) -> dict[str, float]:
-        labels = self._get_labels()
-        y_pred, y_pos_score = self._predict_from_score(y_score)
-        auc = self._calc_auc(y_true, y_score, y_pos_score, labels)
-        return self._calc_metrics(y_true, y_pred, auc, labels)
 
     def _append_fold_metrics(self, metrics: dict[str, float]) -> None:
         for metric, value in metrics.items():
@@ -419,14 +437,12 @@ class Recorder:
     def _build_final_record(
         self,
         complexity: dict[str, tuple[float, str]],
-        y_true: NDArray,
-        y_score: NDArray,
+        y: PredictionRecord,
         point_estimates: dict[str, float],
     ) -> FinalRecord:
         return FinalRecord(
             np.mean(self.result.time).item(),
-            y_true,
-            y_score,
+            y,
             point_estimates,
             complexity,
             self.result.cm,
@@ -437,9 +453,9 @@ class Recorder:
         )
 
     def _calc_bootstrap_ci(
-        self, y_true: NDArray, y_score: NDArray, point_estimates: dict[str, float]
+        self, y: PredictionRecord, point_estimates: dict[str, float]
     ) -> dict[str, tuple[float, float, float]]:
-        sample_count = y_true.shape[0]
+        sample_count = y.true.shape[0]
         if sample_count == 0:
             return {
                 metric: (value, np.nan, np.nan)
@@ -452,9 +468,7 @@ class Recorder:
         with task('Bootstrap:', self.config.bootstrap_samples) as bootstrap_advance:
             for _ in range(self.config.bootstrap_samples):
                 sampled_index = rng.choice(index, size=sample_count, replace=True)
-                sampled_metrics = self._calc_metrics_from_prediction(
-                    y_true[sampled_index], y_score[sampled_index]
-                )
+                sampled_metrics = self._calc_metrics(y[sampled_index])
                 for metric, value in sampled_metrics.items():
                     metric_samples[metric].append(value)
                 bootstrap_advance()
@@ -476,33 +490,20 @@ class Recorder:
         return ci
 
     def record(self, results: TrainerReturn) -> str:
-        training_time, y_true, y_score, complexity = (
-            results.time,
-            results.y_true,
-            results.y_score,
-            results.complexity,
-        )
-        self.result.y_true_all.append(y_true)
-        self.result.y_score_all.append(y_score)
-        self.result.time.append(training_time)
+        y = results.get_prediction()
+        self.result.y_all.append(y)
+        self.result.time.append(results.time)
 
-        labels = self._get_labels()
-        y_pred, y_pos_score = self._predict_from_score(y_score)
-        cm = confusion_matrix(y_true, y_pred, labels=labels)
+        cm = confusion_matrix(y.true, y.pred, labels=self.labels)
         self._update_confusion_matrix(cm)
-        fold_auc = (
-            self.roc.record(y_true, y_pos_score)
-            if self.config.plot_roc
-            else self._calc_auc(y_true, y_score, y_pos_score, labels)
-        )
-        metrics = self._calc_metrics(y_true, y_pred, fold_auc, labels)
+        metrics = self._calc_metrics(y, plot_roc=self.config.plot_roc)
         self._append_fold_metrics(metrics)
-        com, width = self._record_complexity(complexity)
+        com, width = self._record_complexity(results.complexity)
         return self.formatter.format_fold(
             cm=cm,
             metrics=metrics,
             complexity=com,
-            training_time=training_time,
+            training_time=results.time,
             width=width,
         )
 
@@ -517,17 +518,16 @@ class Recorder:
     def finish(self, *, calc_ci: bool = True) -> Finish:
         complexity, width = self._summarize_complexity()
         mean_std = self._summarize_fold_metrics()
-        y_true = np.concatenate(self.result.y_true_all)
-        y_score = np.concatenate(self.result.y_score_all)
-        point_estimates = self._calc_metrics_from_prediction(y_true, y_score)
-        final = self._build_final_record(complexity, y_true, y_score, point_estimates)
+        y = PredictionRecord.from_list(self.result.y_all)
+        point_estimates = self._calc_metrics(y)
+        final = self._build_final_record(complexity, y, point_estimates)
         auc, roc = self.roc.finish() if self.config.plot_roc else (None, None)
         result = self.formatter.format_final_avg(
             final=final, mean_std=mean_std, auc=auc, width=width
         )
         ci = None
         if calc_ci:
-            ci = self._calc_bootstrap_ci(y_true, y_score, point_estimates)
+            ci = self._calc_bootstrap_ci(y, point_estimates)
             ci_result = self.formatter.format_final_ci(final=final, ci=ci, width=width)
         else:
             ci_result = self.formatter.format_final_metrics(final=final, width=width)

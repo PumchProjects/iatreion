@@ -160,6 +160,6 @@ def get_eval_result(
     y_true = y_df.map(train_config.get_group_index_mapping()).to_numpy()
     y_score = X_df.to_numpy()
     recorder = Recorder(train_config)
-    eval_result = recorder.record(TrainerReturn(0.0, y_true, y_score, {}))
+    eval_result = recorder.record(TrainerReturn(0.0, y_true, y_score))
     fig = recorder.roc.fig if train_config.plot_roc else None
     return eval_result, fig, model.config
