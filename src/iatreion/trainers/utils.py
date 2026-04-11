@@ -1,31 +1,53 @@
 import numpy as np
+from numpy.typing import NDArray
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_curve
 
 from iatreion.configs import TrainConfig
 from iatreion.utils import logger
 
-from .recorder import FinalRecord, Recorder, TrainerReturn
+from .recorder import Recorder, TrainerReturn
+
+
+def get_predictions(
+    fold: int, inner_recorders: dict[str, Recorder]
+) -> tuple[NDArray, list[NDArray], list[float], list[str]]:
+    names = []
+    weights = []
+    y_pos_score_list = []
+    for name, child in inner_recorders.items():
+        names.append(name)
+        finish = child.finish(calc_ci=False)
+        weights.append(finish.final.f1)
+        # HACK: Binary classification only
+        y_pos_score_list.append(finish.final.y.score[:, 1])
+        finish.log(f'{name}_inner_{fold}')
+    y_true = finish.final.y.true
+    return y_true, y_pos_score_list, weights, names
+
+
+def get_threshold(y_true: NDArray, y_pos_score: NDArray) -> float:
+    fpr, tpr, thresholds = roc_curve(y_true, y_pos_score)
+    optimal_idx = np.argmax(tpr - fpr)
+    return thresholds[optimal_idx]
 
 
 def get_meta_model(
-    config: TrainConfig, fold: int, named_records: dict[str, FinalRecord]
+    config: TrainConfig,
+    fold: int,
+    y_true: NDArray,
+    y_pos_score_list: list[NDArray],
+    names: list[str],
 ) -> LogisticRegression:
-    # HACK: Binary classification only
-    width = 0
-    y_score_list = []
-    for name, record in named_records.items():
-        width = max(width, len(name))
-        y_score_list.append(record.y.score[:, [1]])
-    y_true = record.y.true
-
     meta_model = LogisticRegression(
         penalty='l2', C=0.5, random_state=42, solver='lbfgs'
-    ).fit(np.hstack(y_score_list), y_true)
+    ).fit(np.c_[*y_pos_score_list], y_true)
 
     weights = meta_model.coef_[0]
     intercept = meta_model.intercept_[0]
+    width = max(len(name) for name in names)
     with config.logging(f'weights_stacking_{fold}'):
-        for idx, name in enumerate(named_records.keys()):
+        for idx, name in enumerate(names):
             logger.info(f'Weight for {f"{name}:":{width + 1}} {weights[idx]:.4f}')
         logger.info(f'Intercept (Bias): {intercept:.4f}')
 
@@ -38,6 +60,7 @@ def aggregate(
     *,
     weights: list[float] | None = None,
     meta_model: LogisticRegression | None = None,
+    threshold: float | None = None,
 ) -> str:
     time_list = []
     y_score_list = []
@@ -61,7 +84,7 @@ def aggregate(
             norm_weights = np.full(n_total, 1 / n_total)
         bias = 0
     recorder.record_weights_and_bias(norm_weights.tolist(), bias)
-    return recorder.record(TrainerReturn(time, y_true, y_score))
+    return recorder.record(TrainerReturn(time, y_true, y_score, threshold=threshold))
 
 
 def record_simple(
@@ -71,23 +94,41 @@ def record_simple(
     logger.info(aggregate(recorder, outer_recorders))
 
 
-def record_weighted_and_stacking(
+def record_all(
     fold: int,
+    simple_recorder: Recorder,
     weighted_recorder: Recorder,
     stacking_recorder: Recorder,
     inner_recorders: dict[str, Recorder],
     outer_recorders: dict[str, Recorder],
 ) -> None:
-    weights = []
-    named_records = {}
-    for name, child in inner_recorders.items():
-        finish = child.finish(calc_ci=False)
-        weights.append(finish.final.f1)
-        named_records[name] = finish.final
-        finish.log(f'{name}_inner_{fold}')
-    logger.info(f'[bold green]Weighted Average (Fold {fold}):', extra={'markup': True})
-    logger.info(aggregate(weighted_recorder, outer_recorders, weights=weights))
+    y_true, y_pos_score_list, weights, names = get_predictions(fold, inner_recorders)
 
-    meta_model = get_meta_model(stacking_recorder.config, fold, named_records)
+    y_pos_score = np.average(y_pos_score_list, axis=0)
+    threshold = get_threshold(y_true, y_pos_score)
+    logger.info(f'[bold green]Simple Average (Fold {fold}):', extra={'markup': True})
+    logger.info(aggregate(simple_recorder, outer_recorders, threshold=threshold))
+
+    y_pos_score = np.average(y_pos_score_list, axis=0, weights=weights)
+    threshold = get_threshold(y_true, y_pos_score)
+    logger.info(f'[bold green]Weighted Average (Fold {fold}):', extra={'markup': True})
+    logger.info(
+        aggregate(
+            weighted_recorder, outer_recorders, weights=weights, threshold=threshold
+        )
+    )
+
+    meta_model = get_meta_model(
+        stacking_recorder.config, fold, y_true, y_pos_score_list, names
+    )
+    y_pos_score = meta_model.predict_proba(np.c_[*y_pos_score_list])[:, 1]
+    threshold = get_threshold(y_true, y_pos_score)
     logger.info(f'[bold green]Stacking (Fold {fold}):', extra={'markup': True})
-    logger.info(aggregate(stacking_recorder, outer_recorders, meta_model=meta_model))
+    logger.info(
+        aggregate(
+            stacking_recorder,
+            outer_recorders,
+            meta_model=meta_model,
+            threshold=threshold,
+        )
+    )

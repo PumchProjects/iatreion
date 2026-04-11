@@ -9,7 +9,7 @@ from iatreion.train_utils import TrainStepContext, get_train_iterator
 from iatreion.utils import logger, task
 
 from .recorder import Finish, Recorder, TrainerReturn
-from .utils import record_simple, record_weighted_and_stacking
+from .utils import record_all, record_simple
 
 
 @dataclass(frozen=True)
@@ -90,16 +90,17 @@ class Trainer(ABC):
 
                 if self.train_config.final:
                     continue
-                if self.train_config.aggregate != 'concat':
-                    record_simple(outer_fold, simple_recorder, outer_recorders)
                 if self.train_config.aggregate == 'stack':
-                    record_weighted_and_stacking(
+                    record_all(
                         outer_fold,
+                        simple_recorder,
                         weighted_recorder,
                         stacking_recorder,
                         inner_recorders,
                         outer_recorders,
                     )
+                elif self.train_config.aggregate != 'concat':
+                    record_simple(outer_fold, simple_recorder, outer_recorders)
 
         if not self.train_config.final:
             with task('Data:', len(outer_recorders)) as outer_advance:

@@ -1,5 +1,5 @@
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import KW_ONLY, dataclass, field
 from functools import cached_property
 from typing import Self
 
@@ -57,9 +57,14 @@ class TrainerReturn:
     y_score: NDArray
     complexity: dict[str, float | tuple[float, str]] = field(default_factory=dict)
     y_pred: NDArray = field(init=False)
+    _: KW_ONLY
+    threshold: float | None = None
 
     def __post_init__(self) -> None:
-        self.y_pred = self.y_score.argmax(axis=1)
+        if self.threshold is not None:
+            self.y_pred = (self.y_score[:, 1] >= self.threshold).astype(int)
+        else:
+            self.y_pred = self.y_score.argmax(axis=1)
 
     def get_prediction(self) -> PredictionRecord:
         return PredictionRecord(self.y_true, self.y_pred, self.y_score)
