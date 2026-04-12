@@ -81,6 +81,7 @@ class RunningRecord:
     cm: NDArray | None = None
     weights: list[list[float]] | None = None
     bias: list[float] | None = None
+    thresholds: list[float] | None = None
 
 
 @dataclass
@@ -122,6 +123,14 @@ class FinalRecord:
         return self.metrics.get('SPC', np.nan)
 
 
+def get_display_name(name: str) -> str:
+    display_name = name.removeprefix('all_').replace('_', ' ').title()
+    if display_name[-1].isdigit():
+        prefix, fold = display_name.rsplit(maxsplit=1)
+        display_name = f'{prefix} (Fold {fold})'
+    return display_name
+
+
 @dataclass
 class Finish:
     config: TrainConfig
@@ -133,10 +142,7 @@ class Finish:
     roc: Figure | None = None
 
     def log(self, name: str) -> None:
-        display_name = name.removeprefix('all_').replace('_', ' ').title()
-        if display_name[-1].isdigit():
-            prefix, fold = display_name.rsplit(maxsplit=1)
-            display_name = f'{prefix} (Fold {fold})'
+        display_name = get_display_name(name)
         logger.info(f'[bold green]Finished {display_name}:', extra={'markup': True})
         with self.config.logging(self.config.get_avg_log_file(name)):
             logger.info(self.result)
@@ -147,13 +153,18 @@ class Finish:
             **self.final.y.to_dict(),
             **{metric: np.array(vals) for metric, vals in self.running.metrics.items()},
         )
-        if self.roc is not None:
-            self.roc.savefig(self.config.get_roc_file(name), dpi=300)
-        if self.final.weights is not None and self.final.bias is not None:
-            with self.config.logging(f'weights_{name}'):
-                for weight in self.final.weights:
-                    logger.debug(f'{weight:.4f}')
-                logger.debug(f'{self.final.bias:.4f}')
+        if self.running.thresholds is not None:
+            with self.config.logging(f'thresholds_{name}'):
+                for threshold in self.running.thresholds:
+                    logger.debug(f'{threshold:.4f}')
+        else:
+            if self.roc is not None:
+                self.roc.savefig(self.config.get_roc_file(name), dpi=300)
+            if self.final.weights is not None and self.final.bias is not None:
+                with self.config.logging(f'weights_{name}'):
+                    for weight in self.final.weights:
+                        logger.debug(f'{weight:.4f}')
+                    logger.debug(f'{self.final.bias:.4f}')
 
 
 class RecordROC:
@@ -498,6 +509,10 @@ class Recorder:
         y = results.get_prediction()
         self.result.y_all.append(y)
         self.result.time.append(results.time)
+        if results.threshold is not None:
+            if self.result.thresholds is None:
+                self.result.thresholds = []
+            self.result.thresholds.append(results.threshold)
 
         cm = confusion_matrix(y.true, y.pred, labels=self.labels)
         self._update_confusion_matrix(cm)

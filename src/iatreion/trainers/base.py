@@ -48,9 +48,7 @@ class Trainer(ABC):
     def train(self) -> TrainerSummary:
         iterator = get_train_iterator(self.dataset_config, self.train_config)
 
-        simple_recorder = Recorder(self.train_config)
-        weighted_recorder = Recorder(self.train_config)
-        stacking_recorder = Recorder(self.train_config)
+        recorders = defaultdict(lambda: Recorder(self.train_config))
         outer_recorders = defaultdict(lambda: Recorder(self.train_config))
 
         with (
@@ -92,26 +90,24 @@ class Trainer(ABC):
                     continue
                 if self.train_config.aggregate == 'stack':
                     record_all(
+                        self.train_config,
                         outer_fold,
-                        simple_recorder,
-                        weighted_recorder,
-                        stacking_recorder,
+                        recorders,
                         inner_recorders,
                         outer_recorders,
                     )
-                elif self.train_config.aggregate != 'concat':
-                    record_simple(outer_fold, simple_recorder, outer_recorders)
+                elif self.train_config.aggregate == 'average':
+                    record_simple(outer_fold, recorders, outer_recorders)
 
         if not self.train_config.final:
             with task('Data:', len(outer_recorders)) as outer_advance:
                 for name, outer_recorder in outer_recorders.items():
                     self._store_finish(name, outer_recorder)
                     outer_advance()
-            if self.train_config.aggregate != 'concat':
-                self._store_finish('all_simple_average', simple_recorder)
-            if self.train_config.aggregate == 'stack':
-                self._store_finish('all_weighted_average', weighted_recorder)
-                self._store_finish('all_stacking', stacking_recorder)
+            with task('Aggregate:', len(recorders)) as aggregate_advance:
+                for name, recorder in recorders.items():
+                    self._store_finish(name, recorder)
+                    aggregate_advance()
 
         return TrainerSummary(
             finishes=self.finishes,
