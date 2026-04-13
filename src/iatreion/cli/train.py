@@ -19,8 +19,7 @@ from iatreion.models import (
     RandomForestModel,
     XgboostModel,
 )
-from iatreion.trainers import ModelTrainer
-from iatreion.tuning import OptunaRunner
+from iatreion.runners import BasicRunner, OptunaRunner
 from iatreion.utils import progress
 
 sub_app = App(name='train', help='Train a model.', sort_key=1)
@@ -29,18 +28,10 @@ counter = count()
 
 def train(model_cls: type[Model], config: ModelConfig) -> None:
     with progress:
-        if config.tune:
-            try:
-                OptunaRunner(model_cls, config).run()
-            finally:
-                config.close_log_handler()
-            return
-
-        model = model_cls(config)
+        runner = OptunaRunner if config.tune else BasicRunner
         try:
-            ModelTrainer(model).train()
+            runner(model_cls, config).run()
         finally:
-            model.close()
             config.close_log_handler()
 
 

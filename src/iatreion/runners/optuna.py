@@ -1,7 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, override
 
 import optuna
 from optuna.pruners import BasePruner, NopPruner
@@ -10,10 +10,11 @@ from optuna.study import Study
 from optuna.trial import Trial
 
 from iatreion.configs import ModelConfig
-from iatreion.models.base import Model
-from iatreion.trainers.model import ModelTrainer
-from iatreion.utils import logger
-from iatreion.utils.file import load_dict
+from iatreion.models import Model
+from iatreion.trainers import ModelTrainer
+from iatreion.utils import load_dict, logger, save_dict
+
+from .base import Runner
 
 type SearchSpaceKind = Literal['float', 'int', 'categorical']
 type StudyDirection = Literal['maximize', 'minimize']
@@ -138,6 +139,10 @@ class TuningSpec:
             search=flatten_search_space(data['search']),
         )
 
+    @property
+    def study_root(self) -> Path:
+        return self.execution.trial_log_root / self.study.name
+
 
 def flatten_search_space(
     data: dict[str, Any], prefix: str = ''
@@ -169,12 +174,10 @@ def apply_overrides(obj: Any, overrides: dict[str, Any]) -> Any:
     return replace(obj, **direct)
 
 
-class OptunaRunner:
+class OptunaRunner(Runner):
     def __init__(self, model_cls: type[Model], config: ModelConfig) -> None:
-        config.validate_tuning()
+        super().__init__(model_cls, config)
         assert config.tune_config is not None
-        self.model_cls = model_cls
-        self.base_config = config
         self.spec = TuningSpec.load(config.tune_config)
 
     def _get_sampler(self) -> BaseSampler:
@@ -214,13 +217,8 @@ class OptunaRunner:
             sampled[key] = value
             overrides[key] = value
 
-        trial_log_root = (
-            self.spec.execution.trial_log_root
-            / self.spec.study.name
-            / f'trial_{trial.number:04d}'
-        )
+        trial_log_root = self.spec.study_root / f'trial_{trial.number:04d}'
         overrides['train.log_root'] = trial_log_root
-        overrides['tune'] = False
         overrides['tune_config'] = None
         config = apply_overrides(self.base_config, overrides)
         return config, sampled
@@ -256,7 +254,8 @@ class OptunaRunner:
             trial.set_user_attr(key, float(value))
         return float(objective)
 
-    def run(self) -> Study:
+    @override
+    def run(self) -> None:
         study = self._create_study()
         logger.info(
             'Optuna study "%s" started with objective %s',
@@ -275,4 +274,10 @@ class OptunaRunner:
                 study.best_value,
                 study.best_trial.params,
             )
-        return study
+            info = {
+                'trial_number': study.best_trial.number,
+                'value': study.best_value,
+                'params': study.best_trial.params,
+                'user_attrs': study.best_trial.user_attrs,
+            }
+            save_dict(info, self.spec.study_root / 'best_trial.toml')
