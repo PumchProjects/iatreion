@@ -40,6 +40,9 @@ class ModelConfig:
     importance_max_samples: Annotated[int | None, Parameter(alias='-ims')] = 256
     'Maximum number of test samples used for permutation/SHAP importance. Disable with None.'
 
+    study_name: Annotated[str | None, Parameter(alias='-sn')] = None
+    'Optuna study name. If not provided, use the default name defined in the TOML file.'
+
     tune_config: ExistingFile | None = None
     'Path to the TOML file that defines the Optuna study and search space.'
 

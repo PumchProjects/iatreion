@@ -126,16 +126,22 @@ class TuningSpec:
     search: dict[str, SearchSpace]
 
     @classmethod
-    def load(cls, path: Path) -> 'TuningSpec':
+    def load(cls, config: ModelConfig) -> 'TuningSpec':
+        assert (path := config.tune_config) is not None
         data = load_dict(path)
         if 'study' not in data:
             raise ValueError(f'Missing [study] section in tuning config: {path}')
         if 'search' not in data:
             raise ValueError(f'Missing [search] section in tuning config: {path}')
-        execution = data.get('execution', {})
+        execution = TuningExecutionConfig.from_dict(data.get('execution', {}))
+        if config.study_name is not None:
+            data['study']['name'] = config.study_name
+        assert (name := data['study'].get('name')), 'Study name is required'
+        storage_path = execution.trial_log_root / name / 'study.db'
+        data['study']['storage'] = f'sqlite:///{storage_path}'
         return cls(
             study=TuningStudyConfig.from_dict(data['study']),
-            execution=TuningExecutionConfig.from_dict(execution),
+            execution=execution,
             search=flatten_search_space(data['search']),
         )
 
@@ -177,8 +183,7 @@ def apply_overrides(obj: Any, overrides: dict[str, Any]) -> Any:
 class OptunaRunner(Runner):
     def __init__(self, model_cls: type[Model], config: ModelConfig) -> None:
         super().__init__(model_cls, config)
-        assert config.tune_config is not None
-        self.spec = TuningSpec.load(config.tune_config)
+        self.spec = TuningSpec.load(config)
 
     def _get_sampler(self) -> BaseSampler:
         match self.spec.study.sampler:
@@ -199,7 +204,7 @@ class OptunaRunner(Runner):
                 raise ValueError(f'Unknown Optuna pruner: {pruner}!')
 
     def _create_study(self) -> Study:
-        self.spec.execution.trial_log_root.mkdir(parents=True, exist_ok=True)
+        self.spec.study_root.mkdir(parents=True, exist_ok=True)
         return optuna.create_study(
             study_name=self.spec.study.name,
             storage=self.spec.study.storage,

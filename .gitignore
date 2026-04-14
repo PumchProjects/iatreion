@@ -180,12 +180,12 @@ cython_debug/
 .DS_Store
 
 # RRL log files
-logs*/
+/logs*/
 
 # Custom scripts
-configs/
-scripts/
-test.py
+/configs/
+/scripts/
+/test.py
 
 # Figures and tables
-figures/
+/figures/
