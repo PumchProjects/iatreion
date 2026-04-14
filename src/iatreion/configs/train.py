@@ -26,6 +26,7 @@ type SamplerName = Literal[
     'svmsmote',
     'kmeanssmote',
 ]
+type AggregationMethod = Literal['average', 'concat', 'concats', 'stack']
 type MissingValueStrategy = Literal['simple', 'limix', 'none']
 type DiscreteProcessingStrategy = Literal['onehot', 'minmax', 'none']
 
@@ -44,12 +45,11 @@ class TrainConfig:
 'last': keep the last sample of each patient.
 """
 
-    aggregate: Annotated[
-        Literal['average', 'concat', 'stack'], Parameter(alias='-a')
-    ] = 'average'
+    aggregate: Annotated[AggregationMethod, Parameter(alias='-a')] = 'average'
     """Aggregation strategy for multimodal samples of the same patient.
 'average': simple average predictions of different modalities.
 'concat': concatenate features of different modalities.
+'concats': concatenate features of different modalities and adjust classification threshold.
 'stack': late fusion by stacking predictions of different modalities as features for a meta-classifier.
 """
 
@@ -241,7 +241,9 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     @property
     def n_folds(self) -> int:
         # HACK: Coupled with get_train_iterator()
-        if self.aggregate == 'stack':
+        if self.final:
+            return 1
+        if self.aggregate in ('concats', 'stack'):
             return self.n_outer_folds * (self.n_inner_folds + 1)
         return self.n_outer_folds
 

@@ -89,9 +89,7 @@ class RrlConfig(ModelConfig):
     debug: Annotated[bool, Parameter(alias='-D')] = False
     'Whether to enable debug mode.'
 
-    missing_aware_mode: Annotated[MissingAwareMode, Parameter(alias='-v')] = (
-        'original'
-    )
+    missing_aware_mode: Annotated[MissingAwareMode, Parameter(alias='-v')] = 'original'
     'Select `original` RRL behavior or the improved missing-aware RRL with mask-aware + coverage-gated logic.'
 
     coverage_tau: Annotated[

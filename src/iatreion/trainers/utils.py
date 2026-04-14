@@ -168,14 +168,25 @@ def aggregate(
         logger.info(recorder.record(results))
 
 
-def record_simple(
+def record_average(
     fold: int, recorders: dict[str, Recorder], outer_recorders: dict[str, Recorder]
 ) -> None:
     last = get_last_predictions(outer_recorders)
     aggregate(fold, recorders, 'all_simple_average', last)
 
 
-def record_all(
+def record_concats(
+    fold: int,
+    recorders: dict[str, Recorder],
+    inner_recorders: dict[str, Recorder],
+    outer_recorders: dict[str, Recorder],
+) -> None:
+    last = get_last_predictions(outer_recorders)
+    final = get_final_predictions(fold, inner_recorders)
+    aggregate(fold, recorders, 'all_concats', last, final)
+
+
+def record_stack(
     config: TrainConfig,
     fold: int,
     recorders: dict[str, Recorder],

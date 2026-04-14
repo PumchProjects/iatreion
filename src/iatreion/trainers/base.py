@@ -5,11 +5,11 @@ from dataclasses import dataclass, field
 from itertools import groupby
 
 from iatreion.configs import ModelConfig
-from iatreion.train_utils import TrainStepContext, get_train_iterator
+from iatreion.train_utils import TrainStepContext, get_data_names, get_train_iterator
 from iatreion.utils import logger, task
 
 from .recorder import Finish, Recorder, TrainerReturn
-from .utils import record_all, record_simple
+from .utils import record_average, record_concats, record_stack
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,7 @@ class TrainerSummary:
 class Trainer(ABC):
     def __init__(self, config: ModelConfig) -> None:
         self.dataset_config, self.train_config = config.dataset, config.train
+        self.data_names = get_data_names(config.dataset, config.train)
         self.finishes: dict[str, Finish] = {}
         self.objectives: dict[str, float] = {}
 
@@ -53,9 +54,7 @@ class Trainer(ABC):
 
         with (
             closing(iterator),
-            task(
-                'Fold:', self.train_config.n_folds, not self.train_config.final
-            ) as fold_advance,
+            task('Fold:', self.train_config.n_folds) as fold_advance,
         ):
             for outer_fold, outer_group in groupby(
                 iterator, lambda ctx: ctx.outer_fold
@@ -65,11 +64,7 @@ class Trainer(ABC):
                 )
 
                 for _, inner_group in groupby(outer_group, lambda ctx: ctx.inner_fold):
-                    with task(
-                        'Data:',
-                        len(self.dataset_config.names),
-                        self.train_config.aggregate != 'concat',
-                    ) as data_advance:
+                    with task('Data:', len(self.data_names)) as data_advance:
                         for ctx in inner_group:
                             if self.train_config.final:
                                 self.train_final(ctx)
@@ -88,16 +83,21 @@ class Trainer(ABC):
 
                 if self.train_config.final:
                     continue
-                if self.train_config.aggregate == 'stack':
-                    record_all(
-                        self.train_config,
-                        outer_fold,
-                        recorders,
-                        inner_recorders,
-                        outer_recorders,
-                    )
-                elif self.train_config.aggregate == 'average':
-                    record_simple(outer_fold, recorders, outer_recorders)
+                match self.train_config.aggregate:
+                    case 'average':
+                        record_average(outer_fold, recorders, outer_recorders)
+                    case 'concats':
+                        record_concats(
+                            outer_fold, recorders, inner_recorders, outer_recorders
+                        )
+                    case 'stack':
+                        record_stack(
+                            self.train_config,
+                            outer_fold,
+                            recorders,
+                            inner_recorders,
+                            outer_recorders,
+                        )
 
         if not self.train_config.final:
             with task('Data:', len(outer_recorders)) as outer_advance:

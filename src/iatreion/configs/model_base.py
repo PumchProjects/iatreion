@@ -56,7 +56,7 @@ class ModelConfig:
     @property
     def tune(self) -> bool:
         return self.tune_config is not None
-    
+
     @property
     def delicate(self) -> bool:
         return self.delicate_config is not None

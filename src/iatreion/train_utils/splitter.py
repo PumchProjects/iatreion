@@ -73,6 +73,14 @@ def read_data(
     return X_dfs, y_dfs, ref_y_df, f_dfs
 
 
+def get_data_names(dataset: DatasetConfig, train: TrainConfig) -> list[str]:
+    if train.aggregate in ('concat', 'concats'):
+        # HACK: Delicate config should change the name according to train.final
+        return [dataset.name_str] if train.final else ['all_concat']
+    else:
+        return dataset.names
+
+
 @dataclass
 class TrainStepContext:
     outer_fold: int
@@ -153,6 +161,7 @@ def get_train_iterator(
     dataset: DatasetConfig, train: TrainConfig
 ) -> Generator[TrainStepContext, None, None]:
     X_dfs, y_dfs, ref_y_df, f_dfs = read_data(dataset, train)
+    data_names = get_data_names(dataset, train)
     limix_client = None
     if train.preprocess and train.missing_value_strategy == 'limix':
         limix_client = LimiXWorkerClient(
@@ -168,7 +177,7 @@ def get_train_iterator(
         )
 
     try:
-        if train.aggregate == 'concat':
+        if train.aggregate in ('concat', 'concats'):
             X_df, y_df, f_df = merge_data(X_dfs, y_dfs, f_dfs)
             X_dfs, y_dfs, f_dfs = [X_df], [y_df], [f_df]
 
@@ -180,7 +189,7 @@ def get_train_iterator(
             )
 
         for outer_fold, (train_outer, test_outer) in enumerate(outer_splitter):
-            if train.aggregate == 'stack' and not train.final:
+            if train.aggregate in ('concats', 'stack') and not train.final:
                 inner_splitter = chain(
                     get_train_test(
                         train.n_inner_splits,
@@ -194,18 +203,11 @@ def get_train_iterator(
 
             for inner_fold, (train_inner, test_inner) in enumerate(inner_splitter):
                 is_inner = (
-                    train.aggregate == 'stack'
-                    and inner_fold < train.n_inner_splits * train.n_inner_repeats
+                    train.aggregate in ('concats', 'stack')
+                    and inner_fold < train.n_inner_folds
                 )
 
-                if train.aggregate == 'concat':
-                    data_splitter = (
-                        [dataset.name_str] if train.final else ['all_concat']
-                    )
-                else:
-                    data_splitter = dataset.names
-
-                for index, name in enumerate(data_splitter):
+                for index, name in enumerate(data_names):
                     X_df, y_df, f_df = X_dfs[index], y_dfs[index], f_dfs[index]
                     test_union = test_inner.union(test_outer)
                     train_final, val_final = get_train_val(

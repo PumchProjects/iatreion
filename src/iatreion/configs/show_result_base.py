@@ -1,7 +1,7 @@
 from collections.abc import Generator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from cyclopts import Parameter
 from cyclopts.types import Directory
@@ -9,7 +9,7 @@ from cyclopts.types import Directory
 from .dataset import DatasetConfig
 from .model_base import ModelConfig
 from .show_base import ShowConfig
-from .train import TrainConfig
+from .train import AggregationMethod, TrainConfig
 
 
 @Parameter(name='*')
@@ -22,12 +22,13 @@ class ShowResultConfig(ShowConfig):
     'Model names to show results for.'
 
     aggregates: Annotated[
-        list[Literal['average', 'concat', 'stack']],
+        list[AggregationMethod],
         Parameter(alias='-a', consume_multiple=True),
     ]
     """Aggregation strategy for multimodal samples of the same patient.
 'average': simple average predictions of different modalities.
 'concat': concatenate features of different modalities.
+'concats': concatenate features of different modalities and adjust classification threshold.
 'stack': late fusion by stacking predictions of different modalities as features for a meta-classifier.
 """
 

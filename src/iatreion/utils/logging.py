@@ -51,10 +51,8 @@ progress = Progress(
 
 
 @contextmanager
-def task(
-    description: str, total: int, predicate: bool = True
-) -> Generator[Callable[[], None], None, None]:
-    if not predicate:
+def task(description: str, total: int) -> Generator[Callable[[], None], None, None]:
+    if total <= 1:
         yield lambda: None
         return
     task_id = progress.add_task(description, total=total)

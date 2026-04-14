@@ -19,7 +19,7 @@ class DelicateTrainer(ModelTrainer):
         self.check_names()
 
     def check_names(self) -> None:
-        names = set(self.base_config.dataset.names) - set(self.delicate_configs.keys())
+        names = set(self.data_names) - set(self.delicate_configs.keys())
         if names:
             logger.warning(
                 'The following data names do not have delicate configs '
