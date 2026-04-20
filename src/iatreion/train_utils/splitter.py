@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from functools import reduce
 from itertools import chain
 
+import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 from sklearn.model_selection import RepeatedStratifiedKFold, train_test_split
@@ -64,7 +65,7 @@ def read_data(
     X_dfs, y_dfs, f_dfs = [X_df], [y_df], [f_df]
     for name in dataset.names[1:]:
         X_df, y_df, f_df = read_csv(name, dataset, train)
-        ref_y_df = ref_y_df[ref_y_df.index.intersection(y_df.index)]
+        ref_y_df = ref_y_df.combine_first(y_df)
         X_dfs.append(X_df)
         y_dfs.append(y_df)
         f_dfs.append(f_df)
@@ -92,6 +93,7 @@ class TrainStepContext:
     train_data: tuple[NDArray, NDArray]
     val_data: tuple[NDArray | None, NDArray | None]
     test_data: tuple[NDArray, NDArray]
+    test_mask: NDArray
 
     @property
     def rrl_file(self) -> str:
@@ -114,14 +116,7 @@ def merge_data(
         return a.merge(b, how='outer', left_index=True, right_index=True)
 
     def merge_y(a: pd.Series, b: pd.Series) -> pd.Series:
-        merged = pd.merge(
-            a.to_frame('left'),
-            b.to_frame('right'),
-            how='outer',
-            left_index=True,
-            right_index=True,
-        )
-        return merged['left'].combine_first(merged['right'])
+        return a.combine_first(b)
 
     X_df = reduce(merge_X, X_dfs)
     y_df = reduce(merge_y, y_dfs)
@@ -142,10 +137,9 @@ def get_train_test(
 
 
 def get_train_val(
-    config: TrainConfig, y_df: pd.Series, train_index: pd.Index, test_index: pd.Index
+    config: TrainConfig, y_df: pd.Series, train_index: pd.Index, X_index: pd.Index
 ) -> tuple[pd.Index, pd.Index | None]:
-    if not config.true_ref:
-        train_index = y_df.index.difference(test_index)
+    train_index = train_index.intersection(X_index)
     val_index: pd.Index | None = None
     if config.val_size is not None:
         train_index, val_index = train_test_split(
@@ -160,7 +154,7 @@ def get_train_val(
 def get_train_iterator(
     dataset: DatasetConfig, train: TrainConfig
 ) -> Generator[TrainStepContext, None, None]:
-    X_dfs, y_dfs, ref_y_df, f_dfs = read_data(dataset, train)
+    X_dfs, _, ref_y_df, f_dfs = read_data(dataset, train)
     data_names = get_data_names(dataset, train)
     limix_client = None
     if train.preprocess and train.missing_value_strategy == 'limix':
@@ -178,8 +172,8 @@ def get_train_iterator(
 
     try:
         if train.aggregate in ('concat', 'concats'):
-            X_df, y_df, f_df = merge_data(X_dfs, y_dfs, f_dfs)
-            X_dfs, y_dfs, f_dfs = [X_df], [y_df], [f_df]
+            X_df, _, f_df = merge_data(X_dfs, [ref_y_df], f_dfs)
+            X_dfs, f_dfs = [X_df], [f_df]
 
         if train.final:
             outer_splitter = [(ref_y_df.index, pd.Index([]))]
@@ -208,17 +202,17 @@ def get_train_iterator(
                 )
 
                 for index, name in enumerate(data_names):
-                    X_df, y_df, f_df = X_dfs[index], y_dfs[index], f_dfs[index]
-                    test_union = test_inner.union(test_outer)
+                    X_df, f_df = X_dfs[index], f_dfs[index]
                     train_final, val_final = get_train_val(
-                        train, y_df, train_inner, test_union
+                        train, ref_y_df, train_inner, X_df.index
                     )
                     X_train = X_df.loc[train_final]
-                    y_train = y_df.loc[train_final]
+                    y_train = ref_y_df.loc[train_final]
                     X_val = None if val_final is None else X_df.loc[val_final]
-                    y_val = None if val_final is None else y_df.loc[val_final]
-                    X_test = X_df.loc[test_inner]
-                    y_test = y_df.loc[test_inner]
+                    y_val = None if val_final is None else ref_y_df.loc[val_final]
+                    X_test = X_df.reindex(test_inner)
+                    y_test = ref_y_df.loc[test_inner]
+                    test_mask = np.isnan(X_test).all(axis=1)
 
                     db_enc = DBEncoder(
                         train, f_df, cat_sep=dataset.cat_sep, limix_client=limix_client
@@ -235,6 +229,7 @@ def get_train_iterator(
                         train_data=train_data,
                         val_data=val_data,
                         test_data=test_data,
+                        test_mask=test_mask,
                     )
     finally:
         if limix_client is not None:

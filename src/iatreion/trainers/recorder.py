@@ -26,6 +26,7 @@ class PredictionRecord:
     true: NDArray
     pred: NDArray
     score: NDArray
+    mask: NDArray
 
     @cached_property
     def pos_score(self) -> NDArray:
@@ -37,6 +38,7 @@ class PredictionRecord:
             true=np.concatenate([record.true for record in lst]),
             pred=np.concatenate([record.pred for record in lst]),
             score=np.concatenate([record.score for record in lst]),
+            mask=np.concatenate([record.mask for record in lst]),
         )
 
     def __getitem__(self, index: NDArray) -> Self:
@@ -44,10 +46,16 @@ class PredictionRecord:
             true=self.true[index],
             pred=self.pred[index],
             score=self.score[index],
+            mask=self.mask[index],
         )
 
     def to_dict(self) -> dict[str, NDArray]:
-        return {'y_true': self.true, 'y_pred': self.pred, 'y_score': self.score}
+        return {
+            'y_true': self.true,
+            'y_pred': self.pred,
+            'y_score': self.score,
+            'y_mask': self.mask,
+        }
 
 
 @dataclass
@@ -56,18 +64,25 @@ class TrainerReturn:
     y_true: NDArray
     y_score: NDArray
     complexity: dict[str, float | tuple[float, str]] = field(default_factory=dict)
+    y_mask: NDArray = field(init=False)
     y_pred: NDArray = field(init=False)
     _: KW_ONLY
+    test_mask: NDArray | None = None
     threshold: float | None = None
 
     def __post_init__(self) -> None:
+        if self.test_mask is not None:
+            self.y_score[self.test_mask] = 1.0 / self.y_score.shape[1]
+            self.y_mask = self.test_mask.astype(int)
+        else:
+            self.y_mask = np.zeros_like(self.y_true, dtype=int)
         if self.threshold is not None:
             self.y_pred = (self.y_score[:, 1] >= self.threshold).astype(int)
         else:
             self.y_pred = self.y_score.argmax(axis=1)
 
     def get_prediction(self) -> PredictionRecord:
-        return PredictionRecord(self.y_true, self.y_pred, self.y_score)
+        return PredictionRecord(self.y_true, self.y_pred, self.y_score, self.y_mask)
 
 
 @dataclass

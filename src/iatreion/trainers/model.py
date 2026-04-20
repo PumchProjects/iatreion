@@ -18,7 +18,13 @@ class ModelTrainer(Trainer):
         with Timer() as timer:
             self.model.fit(ctx)
         y_score, complexity = self.model.predict(ctx)
-        return TrainerReturn(timer.duration, ctx.test_data[1], y_score, complexity)
+        return TrainerReturn(
+            timer.duration,
+            ctx.test_data[1],
+            y_score,
+            complexity,
+            test_mask=ctx.test_mask,
+        )
 
     @override
     def train_final(self, ctx: TrainStepContext) -> None:

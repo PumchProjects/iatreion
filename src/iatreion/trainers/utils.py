@@ -15,24 +15,28 @@ from .recorder import Recorder, TrainerReturn, get_display_name
 class LastPredictions:
     y_true: NDArray
     y_score_list: list[NDArray]
+    y_mask_list: list[NDArray]
     time: float
 
 
 def get_last_predictions(named_recorders: dict[str, Recorder]) -> LastPredictions:
     time_list = []
     y_score_list = []
+    y_mask_list = []
     for child in named_recorders.values():
         time_list.append(child.result.time[-1])
         y_score_list.append(child.result.y_all[-1].score)
+        y_mask_list.append(child.result.y_all[-1].mask)
     time = sum(time_list)
     y_true = child.result.y_all[-1].true
-    return LastPredictions(y_true, y_score_list, time)
+    return LastPredictions(y_true, y_score_list, y_mask_list, time)
 
 
 @dataclass
 class FinalPredictions:
     y_true: NDArray
     y_pos_score_list: list[NDArray]
+    y_mask_list: list[NDArray]
     weights: list[float]
     names: list[str]
 
@@ -43,15 +47,17 @@ def get_final_predictions(
     names = []
     weights = []
     y_pos_score_list = []
+    y_mask_list = []
     for name, child in named_recorders.items():
         names.append(name)
         finish = child.finish(calc_ci=False)
         weights.append(finish.final.f1)
         # HACK: Binary classification only
         y_pos_score_list.append(finish.final.y.score[:, 1])
+        y_mask_list.append(finish.final.y.mask)
         finish.log(f'{name}_inner_{fold}')
     y_true = finish.final.y.true
-    return FinalPredictions(y_true, y_pos_score_list, weights, names)
+    return FinalPredictions(y_true, y_pos_score_list, y_mask_list, weights, names)
 
 
 def get_youden_threshold(y_true: NDArray, y_pos_score: NDArray) -> float:
@@ -88,34 +94,40 @@ def get_meta_model(
 ) -> LogisticRegression:
     meta_model = LogisticRegression(
         penalty='l2', C=0.5, random_state=42, solver='lbfgs'
-    ).fit(np.c_[*final.y_pos_score_list], final.y_true)
+    ).fit(np.c_[*final.y_pos_score_list, *final.y_mask_list], final.y_true)
 
     weights = meta_model.coef_[0]
     intercept = meta_model.intercept_[0]
     width = max(len(name) for name in final.names)
+    n_names = len(final.names)
     with config.logging(f'weights_stacking_{fold}'):
         for idx, name in enumerate(final.names):
-            logger.info(f'Weight for {f"{name}:":{width + 1}} {weights[idx]:.4f}')
+            logger.info(
+                f'Weight for {f"{name}:":{width + 1}} '
+                f'{weights[idx]:.4f} (Mask: {weights[idx + n_names]:.4f})'
+            )
         logger.info(f'Intercept (Bias): {intercept:.4f}')
 
     return meta_model
 
 
 def aggregate_pos_scores(
-    y_pos_score_list: list[NDArray],
+    final: FinalPredictions,
     *,
     weights: list[float] | None = None,
     meta_model: LogisticRegression | None = None,
 ) -> NDArray:
     if meta_model is not None:
-        y_pos_score = meta_model.predict_proba(np.c_[*y_pos_score_list])[:, 1]
+        y_pos_score = meta_model.predict_proba(
+            np.c_[*final.y_pos_score_list, *final.y_mask_list]
+        )[:, 1]
     else:
-        y_pos_score = np.average(y_pos_score_list, axis=0, weights=weights)
+        y_pos_score = np.average(final.y_pos_score_list, axis=0, weights=weights)
     return y_pos_score
 
 
 def aggregate_scores(
-    y_score_list: list[NDArray],
+    last: LastPredictions,
     *,
     weights: list[float] | None = None,
     meta_model: LogisticRegression | None = None,
@@ -123,15 +135,15 @@ def aggregate_scores(
     if meta_model is not None:
         # HACK: Binary classification only
         y_score = meta_model.predict_proba(
-            np.hstack([score[:, [1]] for score in y_score_list])
+            np.c_[*(score[:, 1] for score in last.y_score_list), *last.y_mask_list]
         )
         norm_weights, bias = meta_model.coef_[0], meta_model.intercept_[0].item()
     else:
-        y_score = np.average(y_score_list, axis=0, weights=weights)
+        y_score = np.average(last.y_score_list, axis=0, weights=weights)
         if weights is not None:
             norm_weights = np.array(weights) / sum(weights)
         else:
-            n_total = len(y_score_list)
+            n_total = len(last.y_score_list)
             norm_weights = np.full(n_total, 1 / n_total)
         bias = 0
     return y_score, norm_weights.tolist(), bias
@@ -148,12 +160,12 @@ def aggregate(
     meta_model: LogisticRegression | None = None,
 ) -> None:
     y_score, norm_weights, bias = aggregate_scores(
-        last.y_score_list, weights=weights, meta_model=meta_model
+        last, weights=weights, meta_model=meta_model
     )
     thresholds: dict[str, float | None] = {'original': None}
     if final is not None:
         y_pos_score = aggregate_pos_scores(
-            final.y_pos_score_list, weights=weights, meta_model=meta_model
+            final, weights=weights, meta_model=meta_model
         )
         thresholds |= get_thresholds(final.y_true, y_pos_score)
     for threshold_name, threshold in thresholds.items():
