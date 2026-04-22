@@ -1,0 +1,293 @@
+import numpy as np
+import pandas as pd
+
+from iatreion.configs import RrlEvalConfig, RrlEvalPlotConfig
+from iatreion.exceptions import IatreionException
+from iatreion.models import Line, Rrl
+
+from .rrl_eval_common import (
+    calc_score,
+    calc_signed_score,
+    deduplicate_by_keep,
+    get_max_label,
+    opposing_label,
+    probability_for_label,
+    series_item,
+)
+from .rrl_eval_data import get_data_model
+from .rrl_eval_types import (
+    ModuleExplanation,
+    RrlWaterfallBundle,
+    RuleExplanation,
+    SampleExplanation,
+)
+
+
+def get_requested_sample_id(config: RrlEvalConfig) -> str | None:
+    requested = getattr(config, 'sample_id', '')
+    requested = str(requested).strip()
+    return requested or None
+
+
+def select_default_sample_id(result: pd.DataFrame, keep: str) -> str:
+    deduped = deduplicate_by_keep(result, keep)
+    if deduped.empty:
+        raise IatreionException('No samples available for RRL interpretation.')
+    return str(deduped.index[0])
+
+
+def resolve_sample_id(config: RrlEvalConfig, result: pd.DataFrame) -> str:
+    requested = get_requested_sample_id(config)
+    if requested is None:
+        return select_default_sample_id(result, config.keep)
+
+    index_text = result.index.map(str)
+    if (index_text == requested).any():
+        return requested
+
+    available = deduplicate_by_keep(result, config.keep).index.astype(str).tolist()
+    preview = ', '.join(available[:5]) or '(none)'
+    raise IatreionException(
+        'Unknown RRL sample ID "$sample_id". First available IDs: $preview',
+        sample_id=requested,
+        preview=preview,
+    )
+
+
+def make_missing_sample(frame: pd.DataFrame, sample_id: str) -> pd.DataFrame:
+    return frame.iloc[:0].reindex(
+        pd.Index([sample_id], name=frame.index.name),
+    )
+
+
+def select_sample_frame(
+    frame: pd.DataFrame,
+    sample_id: str,
+    *,
+    keep: str,
+) -> pd.DataFrame:
+    matches = frame.loc[frame.index.map(str) == sample_id]
+    if matches.empty:
+        return make_missing_sample(frame, sample_id)
+    if keep == 'first':
+        return matches.iloc[[0]]
+    return matches.iloc[[-1]]
+
+
+def select_sample_data(
+    data: list[pd.DataFrame],
+    sample_id: str,
+    *,
+    keep: str,
+) -> list[pd.DataFrame]:
+    return [select_sample_frame(frame, sample_id, keep=keep) for frame in data]
+
+
+def build_sample_explanation(
+    sample_id: str,
+    names: list[str],
+    models: list[Rrl],
+    predictions: list[tuple[pd.DataFrame, pd.Series]],
+    active_lines: list[tuple[str, Line]],
+    result: pd.DataFrame,
+    confidence: pd.Series,
+) -> SampleExplanation:
+    final_label = get_max_label(result).item()
+    final_probability = series_item(calc_score(result))
+    final_confidence = series_item(confidence)
+    active_line_map: dict[str, list[Line]] = {name: [] for name in names}
+    for name, line in active_lines:
+        active_line_map[name].append(line)
+
+    modules: list[ModuleExplanation] = []
+    for name, rrl, (pred, conf) in zip(names, models, predictions, strict=True):
+        pred_label = get_max_label(pred).item()
+        pred_probability = series_item(calc_score(pred))
+        pred_row = pred.iloc[0]
+        target_probability = probability_for_label(pred_row, final_label)
+        bias_label = get_max_label(rrl.biases, rrl.labels)
+        bias_score = calc_score(rrl.biases)
+        bias_signed_score = calc_signed_score(rrl.biases, rrl.labels, final_label)
+        rules = tuple(
+            RuleExplanation(
+                label=get_max_label(line.weights, line.labels),
+                score=calc_score(line.weights),
+                signed_score=calc_signed_score(
+                    line.weights,
+                    line.labels,
+                    final_label,
+                ),
+                rule=line.print_rule(),
+            )
+            for line in active_line_map[name]
+        )
+        target_margin = float('nan')
+        if not np.isnan(bias_signed_score) and all(
+            not np.isnan(rule.signed_score) for rule in rules
+        ):
+            target_margin = bias_signed_score + sum(rule.signed_score for rule in rules)
+        modules.append(
+            ModuleExplanation(
+                name=name,
+                labels=tuple(rrl.labels),
+                weight=rrl.weight,
+                predicted_label=pred_label,
+                predicted_probability=pred_probability,
+                target_probability=target_probability,
+                confidence=series_item(conf),
+                bias_label=bias_label,
+                bias_score=bias_score,
+                bias_signed_score=bias_signed_score,
+                target_margin=target_margin,
+                rules=rules,
+            )
+        )
+
+    return SampleExplanation(
+        sample_id=sample_id,
+        final_label=final_label,
+        final_probability=final_probability,
+        final_confidence=final_confidence,
+        modules=tuple(modules),
+    )
+
+
+def get_sample_explanation(
+    config: RrlEvalConfig,
+    *,
+    sample_id: str | None = None,
+) -> SampleExplanation:
+    data, _, _, model = get_data_model(config)
+    full_result, _ = model.eval(data)
+    if sample_id is None:
+        sample_id = resolve_sample_id(config, full_result)
+    sample_data = select_sample_data(data, sample_id, keep=config.keep)
+    names, models, predictions, active_lines, result, confidence = model.interpret(
+        sample_data
+    )
+    return build_sample_explanation(
+        sample_id,
+        names,
+        models,
+        predictions,
+        active_lines,
+        result,
+        confidence,
+    )
+
+
+def get_rule_waterfall_data(config: RrlEvalPlotConfig) -> RrlWaterfallBundle:
+    sample = get_sample_explanation(config, sample_id=config.sample_id or None)
+    if not sample.final_label:
+        raise IatreionException(
+            'Cannot plot RRL waterfall for sample "$sample_id" because '
+            'the final label is empty.',
+            sample_id=sample.sample_id,
+        )
+
+    top_k = max(0, config.top_k)
+    module_rows: list[dict[str, object]] = []
+    contribution_rows: list[dict[str, object]] = []
+    sample_id_text = sample.sample_id
+    for module in sample.modules:
+        if len(module.labels) != 2 or np.isnan(module.target_margin):
+            raise IatreionException(
+                'RRL waterfall currently requires binary classification; '
+                'module "$name" has labels [$labels].',
+                name=module.name,
+                labels=', '.join(module.labels),
+            )
+
+        rules = sorted(
+            module.rules,
+            key=lambda rule: abs(rule.signed_score),
+            reverse=True,
+        )
+        display_rules = list(rules[:top_k])
+        hidden_rules = rules[top_k:]
+        if hidden_rules:
+            hidden_total = sum(rule.signed_score for rule in hidden_rules)
+            display_rules.append(
+                RuleExplanation(
+                    label=(
+                        sample.final_label
+                        if hidden_total >= 0
+                        else opposing_label(module.labels, sample.final_label)
+                    ),
+                    score=abs(hidden_total),
+                    signed_score=hidden_total,
+                    rule=f'{len(hidden_rules)} other active rules',
+                )
+            )
+
+        cumulative = 0.0
+        steps = [
+            (
+                'Bias',
+                'Initial Bias',
+                module.bias_label,
+                module.bias_score,
+                module.bias_signed_score,
+            )
+        ]
+        steps.extend(
+            (
+                'Other' if rule.rule.endswith('other active rules') else 'Rule',
+                rule.rule,
+                rule.label,
+                rule.score,
+                rule.signed_score,
+            )
+            for rule in display_rules
+        )
+        for order, (kind, display, label, score, signed_score) in enumerate(
+            steps,
+            start=1,
+        ):
+            start = cumulative
+            end = cumulative + signed_score
+            cumulative = end
+            contribution_rows.append(
+                {
+                    'Sample ID': sample_id_text,
+                    'Final Label': sample.final_label,
+                    'Final Probability': sample.final_probability,
+                    'Final Confidence': sample.final_confidence,
+                    'Module': module.name,
+                    'Kind': kind,
+                    'Display': display,
+                    'Label': label,
+                    'Score': score,
+                    'Signed Score': signed_score,
+                    'Abs Score': abs(signed_score),
+                    'Direction': 'Support' if signed_score >= 0 else 'Oppose',
+                    'Order': order,
+                    'Start': start,
+                    'End': end,
+                }
+            )
+
+        module_rows.append(
+            {
+                'Sample ID': sample_id_text,
+                'Final Label': sample.final_label,
+                'Final Probability': sample.final_probability,
+                'Final Confidence': sample.final_confidence,
+                'Module': module.name,
+                'Module Weight': module.weight,
+                'Module Label': module.predicted_label,
+                'Module Probability': module.predicted_probability,
+                'Target Probability': module.target_probability,
+                'Confidence': module.confidence,
+                'Bias Label': module.bias_label,
+                'Bias Score': module.bias_score,
+                'Bias Signed Score': module.bias_signed_score,
+                'Target Margin': module.target_margin,
+                'Active Rule Count': len(module.rules),
+                'Displayed Rule Count': len(display_rules),
+            }
+        )
+
+    module_table = pd.DataFrame(module_rows)
+    contribution_table = pd.DataFrame(contribution_rows)
+    return RrlWaterfallBundle(sample, module_table, contribution_table)

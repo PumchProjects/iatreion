@@ -517,8 +517,15 @@ class DiscreteRrlModel(Model):
         predictions: list[tuple[pd.DataFrame, pd.Series]] = []
         active_lines: list[tuple[DataName, Line]] = []
         for name, X, model in zip(names, data, models, strict=True):
+            if len(X) != 1:
+                raise IatreionException(
+                    'RRL interpretation requires exactly one sample '
+                    'for "$name"; got $n.',
+                    name=name,
+                    n=str(len(X)),
+                )
             lines: list[Line] = []
-            predictions.append(model.eval(X.head(1), lines))
+            predictions.append(model.eval(X, lines))
             active_lines += [(name, line) for line in lines]
         result, confidence = self.aggregate(models, predictions)
         return names, models, predictions, active_lines, result, confidence

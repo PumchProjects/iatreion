@@ -2,7 +2,9 @@ from itertools import count
 
 from cyclopts import App, Group
 
+from iatreion.api import get_rule_waterfall_data
 from iatreion.configs import (
+    RrlEvalPlotConfig,
     ShowDataConfig,
     ShowImportanceConfig,
     ShowPerformanceConfig,
@@ -22,6 +24,7 @@ from iatreion.show_helpers import (
     make_table_1,
     radar,
     roc_delong_comparison_plot,
+    rrl_rule_waterfall_plot,
     save,
     shap_dependence_plot,
     shap_summary_plot,
@@ -177,3 +180,25 @@ def shap_dependence(*, config: ShowShapConfig) -> None:
     """SHAP dependence plot for one feature."""
     table, fig = shap_dependence_plot(config)
     console.print(save(config, table, fig, index=False))
+
+
+@sub_app.command(group=interpretability, sort_key=next(counter))
+def rrl_waterfall(*, config: RrlEvalPlotConfig | None = None) -> None:
+    """Plot per-module RRL rule waterfalls for one sample."""
+    if config is None:
+        config = RrlEvalPlotConfig()
+
+    bundle = get_rule_waterfall_data(config)
+    fig = rrl_rule_waterfall_plot(bundle, title=config.title)
+    fig.savefig(config.get_output_path('png'), dpi=300)
+    bundle.module_table.to_csv(config.get_output_path('tsv'), sep='\t', index=False)
+    bundle.contribution_table.to_csv(
+        config.get_output_path('rules.tsv'),
+        sep='\t',
+        index=False,
+    )
+    console.print(
+        'Saved RRL waterfall plot to '
+        f'{config.get_output_path("png")} and tables to '
+        f'{config.get_output_path("tsv")} / {config.get_output_path("rules.tsv")}'
+    )
