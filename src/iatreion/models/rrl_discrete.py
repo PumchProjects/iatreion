@@ -92,7 +92,14 @@ class ContinuousItem(Item):
 
     @override
     def __str__(self) -> str:
-        return f'{self.name} {self.op} {self.th:.3f}'
+        match self.op:
+            case '<=':
+                op_str = '≤'
+            case '>=':
+                op_str = '≥'
+            case _:
+                op_str = self.op
+        return f'{self.name} {op_str} {self.th:.3f}'
 
     @override
     def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]':

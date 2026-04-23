@@ -6,6 +6,7 @@ import pandas as pd
 from matplotlib.figure import Figure
 
 from iatreion.api import RrlWaterfallBundle
+from iatreion.show_helpers.data import group_mapping
 
 _SUPPORT_COLOR = (1.0, 0.0, 0.31796406298163893)
 _OPPOSE_COLOR = (0.0, 0.5433775692459109, 0.983379062301401)
@@ -27,6 +28,14 @@ def _format_pct(value: float) -> str:
 
 def _format_score(value: float) -> str:
     return 'nan' if np.isnan(value) else f'{value:+.2f}'
+
+
+def _format_score_probability(score: float, probability: float) -> str:
+    return f'score = {_format_score(score)}, p = {_format_pct(probability)}'
+
+
+def _get_target_name(label: str) -> str:
+    return group_mapping.get(str(label), str(label))
 
 
 def _get_bar_color(delta: float) -> tuple[float, float, float]:
@@ -106,6 +115,7 @@ def _draw_module_waterfall(
     *,
     final_label: str,
 ) -> None:
+    target_name = _get_target_name(final_label)
     rows = (
         contributions[contributions['Kind'] != 'Bias']
         .sort_values('Order', ignore_index=True)
@@ -122,6 +132,11 @@ def _draw_module_waterfall(
         ax.set_yticks([])
         ax.grid(axis='x', linestyle=':', alpha=0.35)
         ax.set_axisbelow(True)
+        ax.xaxis.set_label_position('top')
+        ax.set_xlabel(
+            f'Signed score toward final label "{target_name}"',
+            labelpad=10,
+        )
         _draw_endpoint_annotation(
             ax,
             x=bias,
@@ -135,7 +150,10 @@ def _draw_module_waterfall(
             x=score,
             bar_edge_y=-0.3,
             text_y=-0.95,
-            text=f'score = {_format_score(score)}',
+            text=_format_score_probability(
+                score,
+                float(module_row['Target Probability']),
+            ),
             va='bottom',
         )
         ax.text(
@@ -147,17 +165,6 @@ def _draw_module_waterfall(
             transform=ax.transAxes,
             fontsize=10,
             style='italic',
-        )
-        ax.set_xlabel(f'Signed score toward final label "{final_label}"')
-        ax.set_title(
-            f'{module_row["Module"]} | pred={module_row["Module Label"]} '
-            f'{_format_pct(float(module_row["Module Probability"]))} | '
-            f'target={final_label} '
-            f'{_format_pct(float(module_row["Target Probability"]))} | '
-            f'conf={_format_pct(float(module_row["Confidence"]))} | '
-            f'weight={float(module_row["Module Weight"]):.4f}\n'
-            f'score={_format_score(score)} | active rules=0',
-            fontsize=10,
         )
         ax.tick_params(axis='y', which='both', length=0)
         return
@@ -234,30 +241,26 @@ def _draw_module_waterfall(
         x=score,
         bar_edge_y=height / 2,
         text_y=top_text_y,
-        text=f'score = {_format_score(score)}',
+        text=_format_score_probability(
+            score,
+            float(module_row['Target Probability']),
+        ),
         va='bottom',
     )
     ax.axvline(0.0, color='black', linewidth=0.8, linestyle=':')
     ax.set_yticks(y_pos, [_wrap_label(str(row['Display'])) for row in rows])
     ax.set_ylim(bottom_text_y + 0.25, top_text_y - 0.25)
-    ax.set_xlabel(f'Signed score toward final label "{final_label}"')
+    ax.xaxis.set_label_position('top')
+    ax.set_xlabel(
+        f'Signed score toward final label "{target_name}"',
+        labelpad=10,
+    )
     ax.grid(axis='x', linestyle=':', alpha=0.35)
     ax.set_axisbelow(True)
     ax.tick_params(axis='y', which='both', length=0)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_visible(False)
-    ax.set_title(
-        f'{module_row["Module"]} | pred={module_row["Module Label"]} '
-        f'{_format_pct(float(module_row["Module Probability"]))} | '
-        f'target={final_label} '
-        f'{_format_pct(float(module_row["Target Probability"]))} | '
-        f'conf={_format_pct(float(module_row["Confidence"]))} | '
-        f'weight={float(module_row["Module Weight"]):.4f}\n'
-        f'score={_format_score(score)} | '
-        f'active rules={int(module_row["Active Rule Count"])}',
-        fontsize=10,
-    )
 
 
 def rrl_rule_waterfall_plot(
@@ -265,6 +268,7 @@ def rrl_rule_waterfall_plot(
     *,
     title: str = '',
 ) -> Figure:
+    target_name = _get_target_name(bundle.sample.final_label)
     module_table = bundle.module_table.reset_index(drop=True)
     contribution_table = bundle.contribution_table
     heights = [
@@ -302,7 +306,7 @@ def rrl_rule_waterfall_plot(
         or (
             'RRL Rule Waterfall\n'
             f'sample={bundle.sample.sample_id}, '
-            f'final={bundle.sample.final_label} '
+            f'final={target_name} '
             f'{_format_pct(bundle.sample.final_probability)}, '
             f'conf={_format_pct(bundle.sample.final_confidence)}'
         ),
