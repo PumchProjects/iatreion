@@ -185,8 +185,9 @@ class Rule:
             self.items.append(Rule(rule[left:right], is_not=left_updated))
 
     def __str__(self) -> str:
-        inner = f' {self.op} '.join(str(item) for item in self.items)
-        return f'{"~" if self.is_not else ""}({inner})'
+        op_str = ' and ' if self.op == '&' else ' or '
+        inner = op_str.join(str(item) for item in self.items)
+        return f'{"not " if self.is_not else ""}({inner})'
 
     def eval(self, data: pd.DataFrame) -> 'pd.Series[bool]':
         result = self.items[0].eval(data)

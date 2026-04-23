@@ -220,33 +220,44 @@ def get_rule_waterfall_data(config: RrlEvalPlotConfig) -> RrlWaterfallBundle:
                 )
             )
 
-        cumulative = 0.0
-        steps = [
-            (
-                'Bias',
-                'Initial Bias',
-                module.bias_label,
-                module.bias_score,
-                module.bias_signed_score,
-            )
-        ]
-        steps.extend(
-            (
-                'Other' if rule.rule.endswith('other active rules') else 'Rule',
-                rule.rule,
-                rule.label,
-                rule.score,
-                rule.signed_score,
-            )
+        rule_rows = [
+            {
+                'Kind': (
+                    'Other' if rule.rule.endswith('other active rules') else 'Rule'
+                ),
+                'Display': rule.rule,
+                'Label': rule.label,
+                'Score': rule.score,
+                'Signed Score': rule.signed_score,
+            }
             for rule in display_rules
+        ]
+        cumulative = module.bias_signed_score
+        for row in reversed(rule_rows):
+            row['Start'] = cumulative
+            row['End'] = cumulative + row['Signed Score']
+            cumulative = row['End']
+
+        contribution_rows.append(
+            {
+                'Sample ID': sample_id_text,
+                'Final Label': sample.final_label,
+                'Final Probability': sample.final_probability,
+                'Final Confidence': sample.final_confidence,
+                'Module': module.name,
+                'Kind': 'Bias',
+                'Display': 'Initial Bias',
+                'Label': module.bias_label,
+                'Score': module.bias_score,
+                'Signed Score': module.bias_signed_score,
+                'Abs Score': abs(module.bias_signed_score),
+                'Direction': ('Support' if module.bias_signed_score >= 0 else 'Oppose'),
+                'Order': 0,
+                'Start': module.bias_signed_score,
+                'End': module.bias_signed_score,
+            }
         )
-        for order, (kind, display, label, score, signed_score) in enumerate(
-            steps,
-            start=1,
-        ):
-            start = cumulative
-            end = cumulative + signed_score
-            cumulative = end
+        for order, row in enumerate(rule_rows, start=1):
             contribution_rows.append(
                 {
                     'Sample ID': sample_id_text,
@@ -254,16 +265,16 @@ def get_rule_waterfall_data(config: RrlEvalPlotConfig) -> RrlWaterfallBundle:
                     'Final Probability': sample.final_probability,
                     'Final Confidence': sample.final_confidence,
                     'Module': module.name,
-                    'Kind': kind,
-                    'Display': display,
-                    'Label': label,
-                    'Score': score,
-                    'Signed Score': signed_score,
-                    'Abs Score': abs(signed_score),
-                    'Direction': 'Support' if signed_score >= 0 else 'Oppose',
+                    'Kind': row['Kind'],
+                    'Display': row['Display'],
+                    'Label': row['Label'],
+                    'Score': row['Score'],
+                    'Signed Score': row['Signed Score'],
+                    'Abs Score': abs(row['Signed Score']),
+                    'Direction': ('Support' if row['Signed Score'] >= 0 else 'Oppose'),
                     'Order': order,
-                    'Start': start,
-                    'End': end,
+                    'Start': row['Start'],
+                    'End': row['End'],
                 }
             )
 
