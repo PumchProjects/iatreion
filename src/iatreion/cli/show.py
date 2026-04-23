@@ -20,6 +20,7 @@ from iatreion.show_helpers import (
     feature_importance_barplot,
     feature_importance_heatmap,
     make_ci_delong_table,
+    make_feature_difference_table,
     make_mean_std_wilcoxon_table,
     make_table_1,
     radar,
@@ -82,6 +83,19 @@ def radar_mmse(*, config: ShowDataConfig) -> None:
     ]
     fig = radar(config, domains)
     save(config, fig=fig)
+
+
+@sub_app.command(group=data, sort_key=next(counter))
+def latex_feature_diff(
+    *,
+    config: ShowDataConfig,
+    top_k: int = 20,
+    method: str = 'welch',
+) -> None:
+    """Make a LaTeX table for the most significant
+    feature differences in binary groups."""
+    table = make_feature_difference_table(config, top_k=top_k, method=method)
+    console.print(save(config, table, index=False))
 
 
 @sub_app.command(group=performance, sort_key=next(counter))
