@@ -183,6 +183,7 @@ cython_debug/
 /logs*/
 
 # Custom scripts
+/dependencies*/
 /configs/
 /scripts/
 /test.py

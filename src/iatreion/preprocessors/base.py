@@ -43,7 +43,10 @@ class Preprocessor(ABC):
 
     def get_group_names(self) -> pd.DataFrame:
         if self.config.contains_group_columns:
-            return self.config._data[self.data_name][self.config.group_columns].copy()
+            # HACK: Add astype() to convert 1 & 2 to string during external validation
+            return self.config._data[self.data_name][self.config.group_columns].astype(
+                str
+            )
         if 'group_names' not in self.config._data:
             data = pd.read_excel(
                 self.config.group_data_path,
