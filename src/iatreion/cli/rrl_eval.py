@@ -1,7 +1,15 @@
+from collections import defaultdict
+
 from rich import box
 from rich.table import Column, Table
 
-from iatreion.api import get_batched_result, get_eval_result, get_models, get_result
+from iatreion.api import (
+    RrlTermOption,
+    get_batched_result,
+    get_eval_result,
+    get_result,
+    get_rule_options,
+)
 from iatreion.configs import RrlEvalConfig
 from iatreion.utils import logger
 
@@ -74,12 +82,19 @@ def display_eval_result(config: RrlEvalConfig) -> None:
 
 
 def display_models(config: RrlEvalConfig) -> None:
-    rule_list = get_models(config)
-    for name, rules in rule_list:
-        table = get_table(name, 'Label', 'Score', 'Rule')
-        table.add_row(*rules[0], 'Initial Bias', style='yellow')
-        for line in rules[1:]:
-            table.add_row(*line)
+    options_by_name: dict[str, list[RrlTermOption]] = defaultdict(list)
+    for option in get_rule_options(config):
+        options_by_name[option.module].append(option)
+    for name, options in options_by_name.items():
+        table = get_table(name, 'Index', 'Label', 'Score', 'Rule')
+        for option in options:
+            table.add_row(
+                option.display_index,
+                option.label,
+                f'{option.score:.2f}',
+                option.rule,
+                style='yellow' if option.kind == 'bias' else None,
+            )
         console.print(table)
 
 

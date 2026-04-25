@@ -10,7 +10,7 @@ import pandas as pd
 from numpy.typing import NDArray
 from scipy.special import expit, softmax
 
-from iatreion.configs import DataName, DiscreteRrlConfig
+from iatreion.configs import DataName, DiscreteRrlConfig, ZeroMeanFallback
 from iatreion.exceptions import IatreionException
 from iatreion.train_utils import TrainStepContext
 from iatreion.utils import decode_string, logger
@@ -402,19 +402,65 @@ class Rrl:
         )
         return labels, biases, schema
 
-    def eval(
-        self, data: pd.DataFrame, active_lines: list[Line] | None = None
-    ) -> tuple[pd.DataFrame, pd.Series]:
-        result = pd.DataFrame(
+    def _make_empty_result(self, data: pd.DataFrame) -> pd.DataFrame:
+        return pd.DataFrame(
             {
-                name: [bias] * len(data)
-                for label, bias in zip(self.labels, self.biases, strict=True)
+                name: [0.0] * len(data)
+                for label in self.labels
                 for name in (f'{label}_upper', f'{label}_lower')
             },
             dtype='Float64',
             index=data.index,
         )
-        for line in self.lines:
+
+    def _add_bias(self, result: pd.DataFrame) -> None:
+        for label, bias in zip(self.labels, self.biases, strict=True):
+            result[f'{label}_upper'] += bias
+            result[f'{label}_lower'] += bias
+
+    def _iter_enabled_lines(self, enabled_rule_indices: list[int] | None) -> list[Line]:
+        if enabled_rule_indices is None:
+            return self.lines
+
+        indices = set(enabled_rule_indices)
+        invalid = sorted(idx for idx in indices if idx < 0 or idx >= len(self.lines))
+        if invalid:
+            raise IatreionException(
+                'Invalid RRL rule indices: $indices. Available range: 0-$last.',
+                indices=', '.join(map(str, invalid)),
+                last=str(len(self.lines) - 1),
+            )
+        return [line for i, line in enumerate(self.lines) if i in indices]
+
+    def _apply_zero_mean_fallback(
+        self,
+        mean_result: pd.DataFrame,
+        zero_mean_fallback: ZeroMeanFallback,
+    ) -> None:
+        if zero_mean_fallback == 'uniform':
+            return
+
+        zero_rows = pd.Series(
+            np.isclose(mean_result.to_numpy(dtype=float), 0.0).all(axis=1),
+            index=mean_result.index,
+        )
+        if zero_rows.any():
+            bias_label = self.labels[np.argmax(self.biases).item()]
+            mean_result.loc[zero_rows, bias_label] += 1e-3
+
+    def eval(
+        self,
+        data: pd.DataFrame,
+        active_lines: list[Line] | None = None,
+        *,
+        bias_enabled: bool = True,
+        enabled_rule_indices: list[int] | None = None,
+        zero_mean_fallback: ZeroMeanFallback = 'uniform',
+    ) -> tuple[pd.DataFrame, pd.Series]:
+        result = self._make_empty_result(data)
+        if bias_enabled:
+            self._add_bias(result)
+        for line in self._iter_enabled_lines(enabled_rule_indices):
             result += line.eval(data, active_lines)
         mean_result = pd.DataFrame(
             {
@@ -423,6 +469,7 @@ class Rrl:
             },
             dtype=float,
         )
+        self._apply_zero_mean_fallback(mean_result, zero_mean_fallback)
         softmax_result = mean_result.apply(
             softmax, axis=1, raw=True, result_type='expand'
         )
@@ -504,9 +551,64 @@ class DiscreteRrlModel(Model):
         result, _ = self.get_model(self.ctx).eval(data)
         return result.to_numpy()
 
-    def eval(self, data: list[pd.DataFrame]) -> tuple[pd.DataFrame, pd.Series]:
+    def _validate_enabled_terms(
+        self,
+        names: list[DataName],
+        models: list[Rrl],
+        enabled_biases: dict[str, bool] | None,
+        enabled_rules: dict[str, list[int]] | None,
+    ) -> None:
+        available_names = set(names)
+        selected_names = set(enabled_biases or {}) | set(enabled_rules or {})
+        invalid_names = sorted(selected_names - available_names)
+        if invalid_names:
+            raise IatreionException(
+                'Unknown RRL module selection "$name". Available modules: $available.',
+                name=', '.join(invalid_names),
+                available=', '.join(names),
+            )
+
+        if enabled_rules is None:
+            return
+        model_map = dict(zip(names, models, strict=True))
+        for name, indices in enabled_rules.items():
+            line_count = len(model_map[name].lines)
+            invalid_indices = sorted(
+                {idx for idx in indices if idx < 0 or idx >= line_count}
+            )
+            if invalid_indices:
+                raise IatreionException(
+                    'Invalid RRL rule indices for "$name": $indices. '
+                    'Available range: 0-$last.',
+                    name=name,
+                    indices=', '.join(map(str, invalid_indices)),
+                    last=str(line_count - 1),
+                )
+
+    def eval(
+        self,
+        data: list[pd.DataFrame],
+        *,
+        enabled_biases: dict[str, bool] | None = None,
+        enabled_rules: dict[str, list[int]] | None = None,
+        zero_mean_fallback: ZeroMeanFallback = 'uniform',
+    ) -> tuple[pd.DataFrame, pd.Series]:
+        names = self.config.dataset.names
         models = self.get_models()
-        predictions = [model.eval(X) for X, model in zip(data, models, strict=True)]
+        self._validate_enabled_terms(names, models, enabled_biases, enabled_rules)
+        predictions = [
+            model.eval(
+                X,
+                bias_enabled=(
+                    True if enabled_biases is None else enabled_biases.get(name, True)
+                ),
+                enabled_rule_indices=(
+                    None if enabled_rules is None else enabled_rules.get(name)
+                ),
+                zero_mean_fallback=zero_mean_fallback,
+            )
+            for name, X, model in zip(names, data, models, strict=True)
+        ]
         results, confidence = self.aggregate(models, predictions)
         return results, confidence
 

@@ -6,7 +6,12 @@ from tkinter import ttk
 from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
 from typing import Literal, cast
 
-from iatreion.api import get_batched_result, get_eval_result, get_models, get_result
+from iatreion.api import (
+    get_batched_result,
+    get_eval_result,
+    get_result,
+    get_rule_options,
+)
 from iatreion.configs import DataName, RrlEvalConfig, name_data_mapping
 from iatreion.exceptions import IatreionException
 from iatreion.utils import get_config_path, load_dict, save_dict
@@ -77,7 +82,7 @@ def show_result(master: tk.Tk, config: RrlEvalConfig) -> None:
     master.wait_window(dialog)
 
 
-def show_eval_result(master: tk.Tk, config: RrlEvalConfig) -> None:
+def show_eval_output(master: tk.Tk, config: RrlEvalConfig) -> None:
     from matplotlib.backends.backend_tkagg import (
         FigureCanvasTkAgg,
         NavigationToolbar2Tk,
@@ -89,35 +94,205 @@ def show_eval_result(master: tk.Tk, config: RrlEvalConfig) -> None:
     frm.pack(fill=tk.BOTH, expand=True)
     left_frm = ttk.Frame(frm)
     left_frm.pack(side=tk.LEFT, fill=tk.Y)
-    text_widget = tk.Text(left_frm, width=18, font=('Consolas', 20))
+    text_widget = tk.Text(left_frm, width=36, font=('Consolas', 16))
     text_widget.pack(padx=10, pady=10, side=tk.LEFT, fill=tk.Y)
     text_widget.insert(tk.END, result)
     text_widget.config(state='disabled')
     right_frm = ttk.Frame(frm)
     right_frm.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     if fig is not None:
-        canvas = FigureCanvasTkAgg(fig, master=right_frm)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        toolbar = NavigationToolbar2Tk(canvas, right_frm)
+        fig_canvas = FigureCanvasTkAgg(fig, master=right_frm)
+        fig_canvas.draw()
+        fig_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        toolbar = NavigationToolbar2Tk(fig_canvas, right_frm)
         toolbar.update()
-        master.protocol('WM_DELETE_WINDOW', canvas.stop_event_loop)
+        master.protocol('WM_DELETE_WINDOW', fig_canvas.stop_event_loop)
     close_button = ttk.Button(dialog, text='关闭', command=dialog.destroy)
     close_button.pack(pady=5)
     master.wait_window(dialog)
 
 
+def select_eval_terms(master: tk.Tk, config: RrlEvalConfig) -> None:
+    options = get_rule_options(config)
+    valid_modules = {option.module for option in options}
+    config.enabled_biases = {
+        module: enabled
+        for module, enabled in config.enabled_biases.items()
+        if module in valid_modules
+    }
+    config.enabled_rules = {
+        module: indices
+        for module, indices in config.enabled_rules.items()
+        if module in valid_modules
+    }
+    dialog = create_dialog(master, '选择激活规则')
+    dialog.geometry('1000x650')
+
+    body = ttk.Frame(dialog, padding=(10, 10, 10, 5))
+    body.pack(fill=tk.BOTH, expand=True)
+
+    canvas = tk.Canvas(body, highlightthickness=0)
+    scrollbar = ttk.Scrollbar(body, orient=tk.VERTICAL, command=canvas.yview)
+    canvas.configure(yscrollcommand=scrollbar.set)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+    frm = ttk.Frame(canvas)
+    frm.grid_columnconfigure(5, weight=1)
+    window = canvas.create_window((0, 0), window=frm, anchor=tk.NW)
+
+    def update_scroll_region(_: tk.Event) -> None:
+        canvas.configure(scrollregion=canvas.bbox(tk.ALL))
+
+    def resize_inner(event: tk.Event) -> None:
+        canvas.itemconfigure(window, width=event.width)
+
+    def close_dialog() -> None:
+        dialog.destroy()
+
+    frm.bind('<Configure>', update_scroll_region)
+    canvas.bind('<Configure>', resize_inner)
+
+    headers = ('', '模块', '类型', '分组', '分数', '规则')
+    for column, header in enumerate(headers):
+        ttk.Label(frm, text=header).grid(
+            row=0, column=column, sticky=tk.W, padx=4, pady=(0, 4)
+        )
+
+    vars: dict[tuple[str, int | None], tk.BooleanVar] = {}
+    rule_counts: dict[str, int] = {}
+    for row, option in enumerate(options, start=1):
+        module = option.module
+        key = (module, option.index)
+        if option.kind == 'bias':
+            selected = config.enabled_biases.get(module, True)
+        else:
+            selected_rules = config.enabled_rules.get(module)
+            selected = selected_rules is None or option.index in selected_rules
+            rule_counts[module] = rule_counts.get(module, 0) + 1
+
+        var = tk.BooleanVar(value=selected)
+        vars[key] = var
+        ttk.Checkbutton(frm, variable=var).grid(
+            row=row, column=0, sticky=tk.W, padx=4, pady=2
+        )
+        ttk.Label(frm, text=names_mapping.get(module, module), width=14).grid(
+            row=row, column=1, sticky=tk.W, padx=4, pady=2
+        )
+        ttk.Label(frm, text=option.display_index, width=8).grid(
+            row=row, column=2, sticky=tk.W, padx=4, pady=2
+        )
+        ttk.Label(
+            frm,
+            text=groups_mapping.get(option.label, option.label),
+            width=18,
+        ).grid(row=row, column=3, sticky=tk.W, padx=4, pady=2)
+        ttk.Label(frm, text=f'{option.score:.2f}', width=8).grid(
+            row=row, column=4, sticky=tk.W, padx=4, pady=2
+        )
+        ttk.Label(frm, text=option.rule, wraplength=540).grid(
+            row=row, column=5, sticky=tk.EW, padx=4, pady=2
+        )
+
+    bottom_frm = ttk.Frame(dialog, padding=(10, 5, 10, 10))
+    bottom_frm.pack(fill=tk.X)
+
+    fallback_var = tk.BooleanVar(value=config.zero_mean_fallback == 'bias')
+    ttk.Checkbutton(
+        bottom_frm,
+        text='零分时使用 Bias 偏向',
+        variable=fallback_var,
+    ).pack(side=tk.LEFT, padx=5)
+
+    def set_all(value: bool) -> None:
+        for var in vars.values():
+            var.set(value)
+
+    def select_bias_only() -> None:
+        for module, index in vars:
+            vars[(module, index)].set(index is None)
+
+    def disable_bias() -> None:
+        for module, index in vars:
+            if index is None:
+                vars[(module, index)].set(False)
+
+    def apply_selection() -> None:
+        enabled_biases: dict[str, bool] = {}
+        selected_rules: dict[str, list[int]] = {}
+        for option in options:
+            selected = vars[(option.module, option.index)].get()
+            if option.kind == 'bias':
+                if not selected:
+                    enabled_biases[option.module] = False
+            elif selected:
+                assert option.index is not None
+                selected_rules.setdefault(option.module, []).append(option.index)
+
+        enabled_rules = {
+            module: selected
+            for module, total in rule_counts.items()
+            if len(selected := selected_rules.get(module, [])) != total
+        }
+        config.enabled_biases = enabled_biases
+        config.enabled_rules = enabled_rules
+        config.zero_mean_fallback = 'bias' if fallback_var.get() else 'uniform'
+
+    def show_selected_result() -> None:
+        apply_selection()
+        try:
+            show_eval_output(master, config)
+        except Exception as e:
+            show_error_message(str(e))
+            if config.debug:
+                raise e
+        if dialog.winfo_exists():
+            dialog.grab_set()
+
+    button_frm = ttk.Frame(bottom_frm)
+    button_frm.pack(side=tk.RIGHT)
+    ttk.Button(button_frm, text='全选', command=lambda: set_all(True)).pack(
+        side=tk.LEFT, padx=5
+    )
+    ttk.Button(button_frm, text='清空', command=lambda: set_all(False)).pack(
+        side=tk.LEFT, padx=5
+    )
+    ttk.Button(button_frm, text='只选 Bias', command=select_bias_only).pack(
+        side=tk.LEFT, padx=5
+    )
+    ttk.Button(button_frm, text='不选 Bias', command=disable_bias).pack(
+        side=tk.LEFT, padx=5
+    )
+    ttk.Button(button_frm, text='确定', command=show_selected_result).pack(
+        side=tk.LEFT, padx=5
+    )
+    ttk.Button(button_frm, text='关闭', command=close_dialog).pack(side=tk.LEFT, padx=5)
+
+    dialog.protocol('WM_DELETE_WINDOW', close_dialog)
+    master.wait_window(dialog)
+
+
+def show_eval_result(master: tk.Tk, config: RrlEvalConfig) -> None:
+    select_eval_terms(master, config)
+
+
 def show_models(master: tk.Tk, config: RrlEvalConfig) -> None:
-    rule_list = get_models(config)
+    options = get_rule_options(config)
     dialog = create_dialog(master, '查看模型')
     frm = ttk.Frame(dialog)
     frm.grid_columnconfigure(0, weight=1)
     frm.pack(fill=tk.X)
-    data: list[list[str]] = []
-    for name, rules in rule_list:
-        rules[0].append('#初始偏差#')
-        data += [[name, *rule] for rule in rules]
-    make_table(frm, 0, 0, data, '', '模块', '分组', '分数', '规则')
+    data = [
+        [
+            option.module,
+            option.display_index,
+            option.label,
+            f'{option.score:.2f}',
+            option.rule,
+        ]
+        for option in options
+    ]
+    make_table(frm, 0, 0, data, '', '模块', '索引', '分组', '分数', '规则')
     close_button = ttk.Button(dialog, text='关闭', command=dialog.destroy)
     close_button.pack(pady=5)
     master.wait_window(dialog)
@@ -232,6 +407,7 @@ def main() -> None:
                     save_batched_result(config)
                 case 'eval':
                     show_eval_result(root, config)
+                    save_config(config, config_path)
                 case 'show':
                     show_models(root, config)
         except IatreionException as e:

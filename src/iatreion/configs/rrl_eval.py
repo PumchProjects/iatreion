@@ -9,6 +9,8 @@ from .model_rrl_discrete import DiscreteRrlConfig
 from .preprocessor import PreprocessorConfig
 from .train import TrainConfig
 
+type ZeroMeanFallback = Literal['uniform', 'bias']
+
 
 @Parameter(name='*')
 @dataclass(kw_only=True)
@@ -57,6 +59,19 @@ class RrlEvalConfig:
 
     label_name: Annotated[str, Parameter(alias='-ln')] = ''
     'Label column name in the data files. If not set, determined automatically.'
+
+    enabled_biases: Annotated[dict[str, bool], Parameter(alias='-eb')] = field(
+        default_factory=dict
+    )
+    'Per-module switches for RRL bias terms. Unspecified modules keep the bias enabled.'
+
+    enabled_rules: Annotated[dict[str, list[int]], Parameter(alias='-er')] = field(
+        default_factory=dict
+    )
+    'Per-module enabled RRL rule indices. Unspecified modules use all rules.'
+
+    zero_mean_fallback: Annotated[ZeroMeanFallback, Parameter(alias='-zmf')] = 'uniform'
+    'How to resolve samples whose enabled RRL terms produce zero scores.'
 
     debug: Annotated[bool, Parameter(alias='-D')] = False
     'Whether to enable debug mode.'
