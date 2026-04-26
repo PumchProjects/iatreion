@@ -86,14 +86,8 @@ class TrainConfig:
     n_outer_splits: Annotated[int, Parameter(alias='-nos')] = 5
     'Number of splits for outer cross-validation.'
 
-    n_outer_repeats: Annotated[int, Parameter(alias='-nor')] = 1
-    'Number of repeats for outer cross-validation.'
-
     n_inner_splits: Annotated[int, Parameter(alias='-nis')] = 5
     "Number of splits for inner cross-validation, used when aggregate='stack'."
-
-    n_inner_repeats: Annotated[int, Parameter(alias='-nir')] = 1
-    "Number of repeats for inner cross-validation, used when aggregate='stack'."
 
     device_id: Annotated[int, Parameter(alias='-i')] = 0
     'Device ID for training. Default is 0.'
@@ -232,11 +226,11 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     @property
     def n_outer_folds(self) -> int:
-        return self.n_outer_splits * self.n_outer_repeats
+        return self.n_outer_splits
 
     @property
     def n_inner_folds(self) -> int:
-        return self.n_inner_splits * self.n_inner_repeats
+        return self.n_inner_splits
 
     @property
     def n_folds(self) -> int:

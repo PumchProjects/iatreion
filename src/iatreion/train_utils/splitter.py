@@ -6,7 +6,7 @@ from itertools import chain
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
-from sklearn.model_selection import RepeatedStratifiedKFold, train_test_split
+from sklearn.model_selection import StratifiedKFold, train_test_split
 
 from iatreion.configs import DataName, DatasetConfig, ImportanceMethod, TrainConfig
 from iatreion.utils import encode_string
@@ -125,13 +125,9 @@ def merge_data(
 
 
 def get_train_test(
-    n_splits: int, n_repeats: int, ref_y: pd.Series
+    n_splits: int, ref_y: pd.Series
 ) -> Generator[tuple[pd.Index, pd.Index], None, None]:
-    kf = RepeatedStratifiedKFold(
-        n_splits=n_splits,
-        n_repeats=n_repeats,
-        random_state=36851234,
-    )
+    kf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=36851234)
     for train, test in kf.split(ref_y, ref_y):
         yield ref_y.index[train], ref_y.index[test]
 
@@ -178,18 +174,12 @@ def get_train_iterator(
         if train.final:
             outer_splitter = [(ref_y_df.index, pd.Index([]))]
         else:
-            outer_splitter = get_train_test(
-                train.n_outer_splits, train.n_outer_repeats, ref_y_df
-            )
+            outer_splitter = get_train_test(train.n_outer_splits, ref_y_df)
 
         for outer_fold, (train_outer, test_outer) in enumerate(outer_splitter):
             if train.aggregate in ('concats', 'stack') and not train.final:
                 inner_splitter = chain(
-                    get_train_test(
-                        train.n_inner_splits,
-                        train.n_inner_repeats,
-                        ref_y_df[train_outer],
-                    ),
+                    get_train_test(train.n_inner_splits, ref_y_df[train_outer]),
                     [(train_outer, test_outer)],
                 )
             else:
