@@ -14,9 +14,6 @@ class RrlEvalPlotConfig(RrlEvalConfig):
     mode: Literal['plot'] = field(init=False, default='plot')
     'Mode of RRL evaluation.'
 
-    sample_id: Annotated[str, Parameter(alias='-si')] = ''
-    'Sample ID taken from the dataframe index.'
-
     top_k: Annotated[int, Parameter(alias='-top')] = 20
     'Number of active rules to display per module.'
 

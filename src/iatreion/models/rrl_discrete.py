@@ -1,6 +1,7 @@
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Self, override
@@ -13,6 +14,11 @@ from scipy.special import expit, softmax
 from iatreion.configs import DataName, DiscreteRrlConfig, ZeroMeanFallback
 from iatreion.exceptions import IatreionException
 from iatreion.train_utils import TrainStepContext
+from iatreion.train_utils.fusion import (
+    FUSION_ARTIFACT_FILE,
+    AvailableFusionArtifact,
+    ModalityCalibrator,
+)
 from iatreion.utils import decode_string, logger
 
 from .base import Model
@@ -322,7 +328,7 @@ class Rrl:
     label_template = re.compile(r'(?P<label>.*)\(b=(?P<bias>.*)\)')
 
     def __init__(
-        self, file: Path, weight: str, callback: Callable[[str], str] | None = None
+        self, file: Path, callback: Callable[[str], str] | None = None
     ) -> None:
         with file.open('r', encoding='utf-8') as f:
             texts = [line.rstrip('\n') for line in f if line.strip()]
@@ -331,32 +337,16 @@ class Rrl:
         match_obj = (
             None if metadata is None else self.metadata_template.fullmatch(metadata)
         )
+        self.weight = 1.0
         if match_obj is not None:
             self.temp = float(match_obj.group('temp'))
             tau = match_obj.group('tau')
             self.tau = None if tau is None else float(tau)
-            match weight:
-                case 'uniform':
-                    self.weight = 1.0
-                case 'train-f1':
-                    self.weight = float(match_obj.group('train_f1'))
-                case 'val-f1':
-                    self.weight = float(match_obj.group('val_f1'))
-                case 'train-adaboost':
-                    error = float(match_obj.group('train_err'))
-                    self.weight = 0.5 * np.log((1 - error) / (error + 1e-8))
-                case 'val-adaboost':
-                    error = float(match_obj.group('val_err'))
-                    self.weight = 0.5 * np.log((1 - error) / (error + 1e-8))
-                case _:
-                    raise ValueError(f'Unknown weight mode: {weight}!')
         else:
             self.temp = 0.01
             self.tau = None
-            self.weight = 1.0
             logger.warning(
-                f'[bold yellow]Using default temperature {self.temp}'
-                f' and weight {self.weight} for old versions',
+                f'[bold yellow]Using default temperature {self.temp} for old versions',
                 extra={'markup': True},
             )
 
@@ -448,7 +438,7 @@ class Rrl:
             bias_label = self.labels[np.argmax(self.biases).item()]
             mean_result.loc[zero_rows, bias_label] += 1e-3
 
-    def eval(
+    def score(
         self,
         data: pd.DataFrame,
         active_lines: list[Line] | None = None,
@@ -470,17 +460,62 @@ class Rrl:
             dtype=float,
         )
         self._apply_zero_mean_fallback(mean_result, zero_mean_fallback)
-        softmax_result = mean_result.apply(
-            softmax, axis=1, raw=True, result_type='expand'
-        )
         if self.tau is None:
             max_lower = result[[f'{label}_lower' for label in self.labels]].max(axis=1)
             min_upper = result[[f'{label}_upper' for label in self.labels]].min(axis=1)
             confidence: pd.Series = (max_lower - min_upper).map(expit)
         else:
             confidence = pd.Series(np.nan, index=data.index, dtype=float)
+        return mean_result, confidence
+
+    def eval(
+        self,
+        data: pd.DataFrame,
+        active_lines: list[Line] | None = None,
+        *,
+        bias_enabled: bool = True,
+        enabled_rule_indices: list[int] | None = None,
+        zero_mean_fallback: ZeroMeanFallback = 'uniform',
+    ) -> tuple[pd.DataFrame, pd.Series]:
+        mean_result, confidence = self.score(
+            data,
+            active_lines,
+            bias_enabled=bias_enabled,
+            enabled_rule_indices=enabled_rule_indices,
+            zero_mean_fallback=zero_mean_fallback,
+        )
         # Returned results all have "float64" dtype
-        return softmax_result, confidence
+        return self.softmax(mean_result), confidence
+
+    @staticmethod
+    def softmax(score: pd.DataFrame) -> pd.DataFrame:
+        return score.apply(softmax, axis=1, raw=True, result_type='expand')
+
+
+def transform_rrl_score_space(
+    rrl: Rrl,
+    *,
+    alpha: float,
+    calibrator: ModalityCalibrator,
+    positive_label: str,
+) -> Rrl:
+    transformed = deepcopy(rrl)
+    scale = alpha * calibrator.slope
+    transformed.biases = [scale * bias for bias in transformed.biases]
+    for line in transformed.lines:
+        line.weights = [scale * weight for weight in line.weights]
+
+    try:
+        positive_index = transformed.labels.index(positive_label)
+    except ValueError as exc:
+        raise IatreionException(
+            'RRL labels [$labels] do not contain positive fusion label "$label".',
+            labels=', '.join(transformed.labels),
+            label=positive_label,
+        ) from exc
+    transformed.biases[positive_index] += alpha * calibrator.intercept
+    transformed.weight = alpha
+    return transformed
 
 
 class DiscreteRrlModel(Model):
@@ -497,44 +532,50 @@ class DiscreteRrlModel(Model):
             else [None for _ in range(len(config.dataset.names))]
         )
         self.ctx: TrainStepContext | None = None
+        self._artifact: AvailableFusionArtifact | None = None
+
+    @property
+    def artifact(self) -> AvailableFusionArtifact:
+        if self._artifact is None:
+            self._artifact = AvailableFusionArtifact.load(
+                self.config.rrl_root / FUSION_ARTIFACT_FILE
+            )
+        return self._artifact
+
+    def _validate_artifact_names(self, names: list[DataName]) -> None:
+        missing = sorted(set(names) - set(self.artifact.names))
+        if not missing:
+            return
+        raise IatreionException(
+            'Available-fusion artifact does not contain module(s): $names.',
+            names=', '.join(missing),
+        )
 
     def get_model(self, ctx: TrainStepContext) -> Rrl:
-        return Rrl(self.config.rrl_root / ctx.rrl_file, self.config._weight)
+        return Rrl(self.config.rrl_root / ctx.rrl_file)
 
-    def get_models(self) -> list[Rrl]:
+    def get_raw_models(self) -> list[Rrl]:
         # HACK: Coupled with TrainStepContext.rrl_file
         # TODO: Unimplemented when TrainConfig.aggregate is 'concat'
         return [
-            Rrl(self.config.rrl_root / f'{name}.tsv', self.config._weight, callback)
+            Rrl(self.config.rrl_root / f'{name}.tsv', callback)
             for name, callback in zip(
                 self.config.dataset.names, self.callbacks, strict=True
             )
         ]
 
-    def aggregate(
-        self, models: list[Rrl], predictions: list[tuple[pd.DataFrame, pd.Series]]
-    ) -> tuple[pd.DataFrame, pd.Series]:
-        if not predictions:
-            raise IatreionException('No predictions to aggregate!')
-
-        results = predictions[0][0].copy()
-        results.iloc[:, :] = 0.0
-        confidence_parts: list[pd.Series] = []
-        for (pred, confidence), model in zip(predictions, models, strict=True):
-            if confidence.notna().any():
-                pred_weight = confidence.fillna(1.0) * model.weight
-                confidence_parts.append(confidence)
-            else:
-                pred_weight = pd.Series(model.weight, index=pred.index, dtype=float)
-            results += pred.mul(pred_weight, axis=0)
-
-        results = results.div(results.sum(axis=1) + 1e-8, axis=0)
-        if confidence_parts:
-            confidence = pd.concat(confidence_parts, axis=1).max(axis=1)
-            results.loc[confidence < 0.5] = np.nan
-        else:
-            confidence = pd.Series(np.nan, index=results.index, dtype=float)
-        return results, confidence
+    def get_models(self) -> list[Rrl]:
+        names = self.config.dataset.names
+        self._validate_artifact_names(names)
+        return [
+            transform_rrl_score_space(
+                rrl,
+                alpha=self.artifact.weights[name],
+                calibrator=self.artifact.calibrators[name],
+                positive_label=self.artifact.positive_label,
+            )
+            for name, rrl in zip(names, self.get_raw_models(), strict=True)
+        ]
 
     @override
     def _fit(self, X: NDArray, y: NDArray) -> None:
@@ -585,6 +626,25 @@ class DiscreteRrlModel(Model):
                     last=str(line_count - 1),
                 )
 
+    @staticmethod
+    def _combined_index(data: list[pd.DataFrame]) -> pd.Index:
+        index = data[0].index
+        for frame in data[1:]:
+            index = index.union(frame.index, sort=False)
+        return index
+
+    @staticmethod
+    def _available_mask(frame: pd.DataFrame, index: pd.Index) -> pd.Series:
+        available = ~frame.isna().all(axis=1)
+        return available.reindex(index, fill_value=False).astype(bool)
+
+    @staticmethod
+    def _confidence(confidence_parts: list[pd.Series], index: pd.Index) -> pd.Series:
+        aligned = [confidence.reindex(index) for confidence in confidence_parts]
+        if not aligned:
+            return pd.Series(np.nan, index=index, dtype=float)
+        return pd.concat(aligned, axis=1).max(axis=1)
+
     def eval(
         self,
         data: list[pd.DataFrame],
@@ -594,10 +654,16 @@ class DiscreteRrlModel(Model):
         zero_mean_fallback: ZeroMeanFallback = 'uniform',
     ) -> tuple[pd.DataFrame, pd.Series]:
         names = self.config.dataset.names
-        models = self.get_models()
-        self._validate_enabled_terms(names, models, enabled_biases, enabled_rules)
-        predictions = [
-            model.eval(
+        raw_models = self.get_raw_models()
+        self._validate_artifact_names(names)
+        self._validate_enabled_terms(names, raw_models, enabled_biases, enabled_rules)
+
+        index = self._combined_index(data)
+        y_pos_score_list: list[NDArray] = []
+        y_mask_list: list[NDArray] = []
+        confidence_parts: list[pd.Series] = []
+        for name, X, model in zip(names, data, raw_models, strict=True):
+            result, confidence = model.eval(
                 X,
                 bias_enabled=(
                     True if enabled_biases is None else enabled_biases.get(name, True)
@@ -607,10 +673,28 @@ class DiscreteRrlModel(Model):
                 ),
                 zero_mean_fallback=zero_mean_fallback,
             )
-            for name, X, model in zip(names, data, models, strict=True)
-        ]
-        results, confidence = self.aggregate(models, predictions)
-        return results, confidence
+            available = self._available_mask(X, index)
+            y_mask_list.append((~available).to_numpy(dtype=bool))
+            y_pos_score = result.reindex(index)[self.artifact.positive_label]
+            y_pos_score_list.append(y_pos_score.fillna(0.5).to_numpy())
+            confidence_parts.append(confidence.reindex(index))
+
+        result = pd.DataFrame(
+            self.artifact.predict_scores(names, y_pos_score_list, y_mask_list),
+            index=index,
+            columns=self.artifact.labels,
+        )
+        available_any = ~np.column_stack(y_mask_list).all(axis=1)
+        result.loc[~available_any] = np.nan
+        confidence = self._confidence(confidence_parts, index)
+        confidence.loc[~available_any] = np.nan
+        return result, confidence
+
+    def predict_labels(self, result: pd.DataFrame) -> pd.Series:
+        y_pos_score = result[self.artifact.positive_label].to_numpy()
+        labels = self.artifact.predict_labels(y_pos_score)
+        labels[pd.isna(result).all(axis=1).to_numpy()] = ''
+        return pd.Series(labels, index=result.index, name='Label')
 
     def interpret(
         self, data: list[pd.DataFrame]
@@ -623,10 +707,13 @@ class DiscreteRrlModel(Model):
         pd.Series,
     ]:
         names = self.config.dataset.names
-        models = self.get_models()
-        predictions: list[tuple[pd.DataFrame, pd.Series]] = []
-        active_lines: list[tuple[DataName, Line]] = []
-        for name, X, model in zip(names, data, models, strict=True):
+        self._validate_artifact_names(names)
+        raw_models = self.get_raw_models()
+
+        available_names: list[DataName] = []
+        available_data: list[pd.DataFrame] = []
+        available_models: list[Rrl] = []
+        for name, X, model in zip(names, data, raw_models, strict=True):
             if len(X) != 1:
                 raise IatreionException(
                     'RRL interpretation requires exactly one sample '
@@ -634,8 +721,41 @@ class DiscreteRrlModel(Model):
                     name=name,
                     n=str(len(X)),
                 )
+            if X.isna().all(axis=1).item():
+                continue
+            available_names.append(name)
+            available_data.append(X)
+            available_models.append(model)
+
+        if not available_names:
+            raise IatreionException('No available RRL modules for interpretation.')
+
+        normalized_weights = self.artifact.normalized_weights(available_names)
+        models = [
+            transform_rrl_score_space(
+                model,
+                alpha=normalized_weights[name],
+                calibrator=self.artifact.calibrators[name],
+                positive_label=self.artifact.positive_label,
+            )
+            for name, model in zip(available_names, available_models, strict=True)
+        ]
+
+        predictions: list[tuple[pd.DataFrame, pd.Series]] = []
+        active_lines: list[tuple[DataName, Line]] = []
+        score_parts: list[pd.DataFrame] = []
+        confidence_parts: list[pd.Series] = []
+        for name, X, model in zip(available_names, available_data, models, strict=True):
             lines: list[Line] = []
-            predictions.append(model.eval(X, lines))
+            score, confidence = model.score(X, lines)
+            predictions.append((model.softmax(score), confidence))
             active_lines += [(name, line) for line in lines]
-        result, confidence = self.aggregate(models, predictions)
-        return names, models, predictions, active_lines, result, confidence
+            score_parts.append(score)
+            confidence_parts.append(confidence)
+
+        final_score = score_parts[0].copy()
+        for score in score_parts[1:]:
+            final_score += score
+        result = Rrl.softmax(final_score)
+        confidence = self._confidence(confidence_parts, result.index)
+        return available_names, models, predictions, active_lines, result, confidence

@@ -73,9 +73,9 @@ class TrainerReturn:
     def __post_init__(self) -> None:
         if self.test_mask is not None:
             self.y_score[self.test_mask] = 1.0 / self.y_score.shape[1]
-            self.y_mask = self.test_mask.astype(int)
+            self.y_mask = self.test_mask.astype(bool)
         else:
-            self.y_mask = np.zeros_like(self.y_true, dtype=int)
+            self.y_mask = np.zeros_like(self.y_true, dtype=bool)
         if self.threshold is not None:
             self.y_pred = (self.y_score[:, 1] >= self.threshold).astype(int)
         else:

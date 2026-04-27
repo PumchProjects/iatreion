@@ -162,6 +162,8 @@ class Preprocessor(ABC):
                 na_values=['/', '#NUM!'],
                 dtype_backend='numpy_nullable',
             )
+            if self.config._final:
+                data = data[~data.index.duplicated(keep=self.config._keep)]
             self.config._data[self.data_name] = data
             if indices_names := self.config.get_indices_names(self.data_name):
                 self.config._final_indices.append(data[indices_names].astype(str))

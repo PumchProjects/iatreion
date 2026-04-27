@@ -40,10 +40,6 @@ def calc_score(arr: list[float] | pd.DataFrame) -> 'float | pd.Series[float]':
     return arr.max(axis=1)
 
 
-def deduplicate_by_keep(df: pd.DataFrame, keep: str) -> pd.DataFrame:
-    return df[~df.index.duplicated(keep=keep)]
-
-
 def calc_signed_score(
     weights: list[float],
     labels: list[str],

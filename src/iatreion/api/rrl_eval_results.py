@@ -8,7 +8,7 @@ from iatreion.configs import DataName, DiscreteRrlConfig, RrlEvalConfig
 from iatreion.train_utils import make_data_labels
 from iatreion.trainers import Recorder, TrainerReturn
 
-from .rrl_eval_common import calc_score, deduplicate_by_keep, get_max_label
+from .rrl_eval_common import calc_score, get_max_label
 from .rrl_eval_data import build_model, get_data_model
 from .rrl_eval_explain import get_sample_explanation
 
@@ -135,13 +135,12 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
 def get_batched_result(config: RrlEvalConfig) -> pd.DataFrame:
     data, additional_data, _, model = get_data_model(config)
     result, confidence = model.eval(data)
-    y_pred = get_max_label(result)
-    y_pred.name = 'Label'
+    y_pred = model.predict_labels(result)
     y_score = calc_score(result)
     y_score.name = 'Probability'
     confidence.name = 'Confidence'
     df = pd.concat(additional_data + [y_pred, y_score, confidence], axis=1)
-    return deduplicate_by_keep(df, config.keep)
+    return df
 
 
 def get_eval_result(
@@ -165,7 +164,9 @@ def get_eval_result(
     y_true = y_df.map(train_config.get_group_index_mapping()).to_numpy()
     y_score = X_df.to_numpy()
     recorder = Recorder(train_config)
-    eval_result = recorder.record(TrainerReturn(0.0, y_true, y_score))
+    eval_result = recorder.record(
+        TrainerReturn(0.0, y_true, y_score, threshold=model.artifact.clinical_threshold)
+    )
     fig = recorder.roc.fig if train_config.plot_roc else None
     summary = format_enabled_terms(config, model.config.dataset.names)
     return f'{summary}\n\n{eval_result}', fig, model.config

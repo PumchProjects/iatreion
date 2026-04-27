@@ -9,7 +9,14 @@ from iatreion.train_utils import TrainStepContext, get_data_names, get_train_ite
 from iatreion.utils import logger, task
 
 from .recorder import Finish, Recorder, TrainerReturn
-from .utils import record_average, record_concats, record_stack
+from .utils import (
+    publish_final_available_fusion_artifact,
+    record_average,
+    record_concats,
+    record_stack,
+    save_available_fusion_artifact,
+    validate_final_available_fusion_artifact,
+)
 
 
 @dataclass(frozen=True)
@@ -20,10 +27,21 @@ class TrainerSummary:
 
 class Trainer(ABC):
     def __init__(self, config: ModelConfig) -> None:
+        self.config = config
         self.dataset_config, self.train_config = config.dataset, config.train
         self.data_names = get_data_names(config.dataset, config.train)
         self.finishes: dict[str, Finish] = {}
         self.objectives: dict[str, float] = {}
+
+    def _uses_available_fusion_artifact(self) -> bool:
+        return self.train_config.num_class == 2
+
+    def _uses_final_rrl_available_fusion_artifact(self) -> bool:
+        return (
+            self.config.__class__.__name__ == 'RrlConfig'
+            and self.train_config.final
+            and self._uses_available_fusion_artifact()
+        )
 
     @abstractmethod
     def train_step(self, ctx: TrainStepContext) -> TrainerReturn: ...
@@ -47,6 +65,11 @@ class Trainer(ABC):
             self.objectives[f'{name}/{metric}_ub'] = upper
 
     def train(self) -> TrainerSummary:
+        if self._uses_final_rrl_available_fusion_artifact():
+            validate_final_available_fusion_artifact(
+                self.dataset_config, self.train_config
+            )
+
         iterator = get_train_iterator(self.dataset_config, self.train_config)
 
         recorders = defaultdict(lambda: Recorder(self.train_config))
@@ -85,10 +108,16 @@ class Trainer(ABC):
                     continue
                 match self.train_config.aggregate:
                     case 'average':
-                        record_average(outer_fold, recorders, outer_recorders)
+                        record_average(
+                            self.train_config, outer_fold, recorders, outer_recorders
+                        )
                     case 'concats':
                         record_concats(
-                            outer_fold, recorders, inner_recorders, outer_recorders
+                            self.train_config,
+                            outer_fold,
+                            recorders,
+                            inner_recorders,
+                            outer_recorders,
                         )
                     case 'stack':
                         record_stack(
@@ -100,6 +129,8 @@ class Trainer(ABC):
                         )
 
         if not self.train_config.final:
+            if self._uses_available_fusion_artifact():
+                save_available_fusion_artifact(self.train_config, outer_recorders)
             with task('Data:', len(outer_recorders)) as outer_advance:
                 for name, outer_recorder in outer_recorders.items():
                     self._store_finish(name, outer_recorder)
@@ -108,6 +139,10 @@ class Trainer(ABC):
                 for name, recorder in recorders.items():
                     self._store_finish(name, recorder)
                     aggregate_advance()
+        elif self._uses_final_rrl_available_fusion_artifact():
+            publish_final_available_fusion_artifact(
+                self.dataset_config, self.train_config
+            )
 
         return TrainerSummary(
             finishes=self.finishes,

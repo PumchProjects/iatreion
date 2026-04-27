@@ -8,7 +8,6 @@ from iatreion.models import Line, Rrl
 from .rrl_eval_common import (
     calc_score,
     calc_signed_score,
-    deduplicate_by_keep,
     get_max_label,
     opposing_label,
     probability_for_label,
@@ -23,29 +22,21 @@ from .rrl_eval_types import (
 )
 
 
-def get_requested_sample_id(config: RrlEvalConfig) -> str | None:
-    requested = getattr(config, 'sample_id', '')
-    requested = str(requested).strip()
-    return requested or None
-
-
-def select_default_sample_id(result: pd.DataFrame, keep: str) -> str:
-    deduped = deduplicate_by_keep(result, keep)
-    if deduped.empty:
-        raise IatreionException('No samples available for RRL interpretation.')
-    return str(deduped.index[0])
+def get_requested_sample_id(config: RrlEvalConfig, result: pd.DataFrame) -> str:
+    requested = config.sample_id.strip()
+    if not requested:
+        requested = str(result.index[0])
+    return requested
 
 
 def resolve_sample_id(config: RrlEvalConfig, result: pd.DataFrame) -> str:
-    requested = get_requested_sample_id(config)
-    if requested is None:
-        return select_default_sample_id(result, config.keep)
+    requested = get_requested_sample_id(config, result)
 
     index_text = result.index.map(str)
     if (index_text == requested).any():
         return requested
 
-    available = deduplicate_by_keep(result, config.keep).index.astype(str).tolist()
+    available = result.index.astype(str).tolist()
     preview = ', '.join(available[:5]) or '(none)'
     raise IatreionException(
         'Unknown RRL sample ID "$sample_id". First available IDs: $preview',
@@ -85,6 +76,7 @@ def select_sample_data(
 
 def build_sample_explanation(
     sample_id: str,
+    final_label: str,
     names: list[str],
     models: list[Rrl],
     predictions: list[tuple[pd.DataFrame, pd.Series]],
@@ -92,7 +84,6 @@ def build_sample_explanation(
     result: pd.DataFrame,
     confidence: pd.Series,
 ) -> SampleExplanation:
-    final_label = get_max_label(result).item()
     final_probability = series_item(calc_score(result))
     final_confidence = series_item(confidence)
     active_line_map: dict[str, list[Line]] = {name: [] for name in names}
@@ -152,21 +143,18 @@ def build_sample_explanation(
     )
 
 
-def get_sample_explanation(
-    config: RrlEvalConfig,
-    *,
-    sample_id: str | None = None,
-) -> SampleExplanation:
+def get_sample_explanation(config: RrlEvalConfig) -> SampleExplanation:
     data, _, _, model = get_data_model(config)
     full_result, _ = model.eval(data)
-    if sample_id is None:
-        sample_id = resolve_sample_id(config, full_result)
+    sample_id = resolve_sample_id(config, full_result)
     sample_data = select_sample_data(data, sample_id, keep=config.keep)
     names, models, predictions, active_lines, result, confidence = model.interpret(
         sample_data
     )
+    final_label = model.predict_labels(result).item()
     return build_sample_explanation(
         sample_id,
+        final_label,
         names,
         models,
         predictions,
@@ -177,7 +165,7 @@ def get_sample_explanation(
 
 
 def get_rule_waterfall_data(config: RrlEvalPlotConfig) -> RrlWaterfallBundle:
-    sample = get_sample_explanation(config, sample_id=config.sample_id or None)
+    sample = get_sample_explanation(config)
     if not sample.final_label:
         raise IatreionException(
             'Cannot plot RRL waterfall for sample "$sample_id" because '

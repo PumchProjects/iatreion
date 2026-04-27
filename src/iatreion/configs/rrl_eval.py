@@ -73,6 +73,9 @@ class RrlEvalConfig:
     zero_mean_fallback: Annotated[ZeroMeanFallback, Parameter(alias='-zmf')] = 'uniform'
     'How to resolve samples whose enabled RRL terms produce zero scores.'
 
+    sample_id: Annotated[str, Parameter(alias='-si')] = ''
+    'Sample ID taken from the dataframe index.'
+
     debug: Annotated[bool, Parameter(alias='-D')] = False
     'Whether to enable debug mode.'
 
@@ -99,6 +102,7 @@ class RrlEvalConfig:
             _data_paths={name: Path(path) for name, path in self.data.items()},
             _process_info_path=Path(self.process),
             _final=True,
+            _keep=self.keep,
         )
         rrl_config = DiscreteRrlConfig(dataset=dataset, train=train)
         return process_config, rrl_config

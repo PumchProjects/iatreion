@@ -50,7 +50,7 @@ class TrainConfig:
 'average': simple average predictions of different modalities.
 'concat': concatenate features of different modalities.
 'concats': concatenate features of different modalities and adjust classification threshold.
-'stack': late fusion by stacking predictions of different modalities as features for a meta-classifier.
+'stack': calibrated late fusion over available modality predictions.
 """
 
     preprocess: Annotated[bool, Parameter(negative='--no-pp')] = True
@@ -88,6 +88,14 @@ class TrainConfig:
 
     n_inner_splits: Annotated[int, Parameter(alias='-nis')] = 5
     "Number of splits for inner cross-validation, used when aggregate='stack'."
+
+    clinical_threshold_label: Annotated[str, Parameter(alias='-ctl')] = ''
+    'Class label whose recall is targeted by the pre-specified clinical threshold.'
+
+    clinical_threshold_recall: Annotated[
+        float, Parameter(validator=Number(gt=0, lt=1), alias='-ctr')
+    ] = 0.9
+    'Target recall for the pre-specified clinical threshold.'
 
     device_id: Annotated[int, Parameter(alias='-i')] = 0
     'Device ID for training. Default is 0.'
@@ -211,6 +219,10 @@ For discrete RRL, validation set is used for optimization when val_size is set.
         return {''.join(group): i for i, group in enumerate(self._groups)}
 
     @property
+    def clinical_threshold_index(self) -> int:
+        return self.get_group_index_mapping()[self.clinical_threshold_label]
+
+    @property
     def group_name_str(self) -> str:
         return ', '.join(''.join(group) for group in self._groups)
 
@@ -252,6 +264,13 @@ For discrete RRL, validation set is used for optimization when val_size is set.
         if self.num_class > 2:
             # HACK: Disable ROC plot for multiclass classification
             self.plot_roc = False
+        if not self.clinical_threshold_label:
+            self.clinical_threshold_label = self._sorted_group_names[0]
+        if self.clinical_threshold_label not in self.get_group_index_mapping():
+            raise ValueError(
+                'clinical_threshold_label must be one of '
+                f'{", ".join(self._sorted_group_names)}.'
+            )
         self.validate_preprocessing()
 
     @property

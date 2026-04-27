@@ -29,7 +29,7 @@ class ShowResultConfig(ShowConfig):
 'average': simple average predictions of different modalities.
 'concat': concatenate features of different modalities.
 'concats': concatenate features of different modalities and adjust classification threshold.
-'stack': late fusion by stacking predictions of different modalities as features for a meta-classifier.
+'stack': calibrated late fusion over available modality predictions.
 """
 
     true_refs: Annotated[list[bool], Parameter(alias='-tr', consume_multiple=True)] = (

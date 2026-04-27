@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast
 
 import pandas as pd
 from cyclopts import Parameter
@@ -163,6 +163,8 @@ discrete. This is used for determining the encoding method for the column.
     _process_info_path: Path | None = None
 
     _final: bool = False
+
+    _keep: Literal['first', 'last'] = 'last'
 
     _data: dict[str, pd.DataFrame] = field(default_factory=dict[str, pd.DataFrame])
 

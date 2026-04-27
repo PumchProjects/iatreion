@@ -40,7 +40,7 @@ class CsvdPreprocessor(Preprocessor):
         col_map: dict[str, str] = {}
         previous = ''
         for col in data.columns:
-            if col != 'hash_num':
+            if col != 'hash_num' and col not in self.config.group_columns:
                 new_col = self.parse_column_name(col, previous)
                 col_map[col] = new_col
                 previous = new_col

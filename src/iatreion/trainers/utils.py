@@ -1,14 +1,20 @@
 from dataclasses import dataclass
+from pathlib import Path
+from shutil import copyfile
 
 import numpy as np
 from numpy.typing import NDArray
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import f1_score, roc_curve
 
-from iatreion.configs import TrainConfig
+from iatreion.configs import DatasetConfig, TrainConfig
+from iatreion.exceptions import IatreionException
+from iatreion.train_utils.fusion import (
+    FUSION_ARTIFACT_FILE,
+    AvailableFusionArtifact,
+    get_clinical_recall_threshold,
+)
 from iatreion.utils import logger
 
-from .recorder import Recorder, TrainerReturn, get_display_name
+from .recorder import PredictionRecord, Recorder, TrainerReturn, get_display_name
 
 
 @dataclass
@@ -16,20 +22,23 @@ class LastPredictions:
     y_true: NDArray
     y_score_list: list[NDArray]
     y_mask_list: list[NDArray]
+    names: list[str]
     time: float
 
 
 def get_last_predictions(named_recorders: dict[str, Recorder]) -> LastPredictions:
+    names = []
     time_list = []
     y_score_list = []
     y_mask_list = []
-    for child in named_recorders.values():
+    for name, child in named_recorders.items():
+        names.append(name)
         time_list.append(child.result.time[-1])
         y_score_list.append(child.result.y_all[-1].score)
         y_mask_list.append(child.result.y_all[-1].mask)
     time = sum(time_list)
     y_true = child.result.y_all[-1].true
-    return LastPredictions(y_true, y_score_list, y_mask_list, time)
+    return LastPredictions(y_true, y_score_list, y_mask_list, names, time)
 
 
 @dataclass
@@ -37,7 +46,6 @@ class FinalPredictions:
     y_true: NDArray
     y_pos_score_list: list[NDArray]
     y_mask_list: list[NDArray]
-    weights: list[float]
     names: list[str]
 
 
@@ -45,129 +53,151 @@ def get_final_predictions(
     fold: int, named_recorders: dict[str, Recorder]
 ) -> FinalPredictions:
     names = []
-    weights = []
     y_pos_score_list = []
     y_mask_list = []
     for name, child in named_recorders.items():
         names.append(name)
         finish = child.finish(calc_ci=False)
-        weights.append(finish.final.f1)
         # HACK: Binary classification only
         y_pos_score_list.append(finish.final.y.score[:, 1])
         y_mask_list.append(finish.final.y.mask)
         finish.log(f'{name}_inner_{fold}')
     y_true = finish.final.y.true
-    return FinalPredictions(y_true, y_pos_score_list, y_mask_list, weights, names)
+    return FinalPredictions(y_true, y_pos_score_list, y_mask_list, names)
 
 
-def get_youden_threshold(y_true: NDArray, y_pos_score: NDArray) -> float:
-    fpr, tpr, thresholds = roc_curve(y_true, y_pos_score)
-    optimal_idx = np.argmax(tpr - fpr)
-    return thresholds[optimal_idx]
-
-
-def get_f1_threshold(y_true: NDArray, y_pos_score: NDArray) -> float:
-    thresholds = np.arange(0.0, 1.02, 0.01)
-    optimal_threshold = 0.5
-    optimal_f1 = 0.0
-    for threshold in thresholds:
-        y_pred = (y_pos_score >= threshold).astype(int)
-        # HACK: Binary classification only, set labels to [0, 1]
-        current_f1 = f1_score(
-            y_true, y_pred, labels=[0, 1], average='macro', zero_division=np.nan
-        )
-        if current_f1 > optimal_f1:
-            optimal_f1 = current_f1
-            optimal_threshold = threshold
-    return optimal_threshold
-
-
-def get_thresholds(y_true: NDArray, y_pos_score: NDArray) -> dict[str, float]:
-    return {
-        'youden_index': get_youden_threshold(y_true, y_pos_score),
-        'f1_score': get_f1_threshold(y_true, y_pos_score),
-    }
-
-
-def get_meta_model(
-    config: TrainConfig, fold: int, final: FinalPredictions
-) -> LogisticRegression:
-    meta_model = LogisticRegression(
-        penalty='l2', C=0.5, random_state=42, solver='lbfgs'
-    ).fit(np.c_[*final.y_pos_score_list, *final.y_mask_list], final.y_true)
-
-    weights = meta_model.coef_[0]
-    intercept = meta_model.intercept_[0]
-    width = max(len(name) for name in final.names)
-    n_names = len(final.names)
-    with config.logging(f'weights_stacking_{fold}'):
-        for idx, name in enumerate(final.names):
+def log_available_fusion_artifact(
+    config: TrainConfig, log_name: str, artifact: AvailableFusionArtifact
+) -> None:
+    width = max(len(name) for name in artifact.names)
+    with config.logging(log_name):
+        logger.info('Calibrated available-modality fusion')
+        for name in artifact.names:
+            calibrator = artifact.calibrators[name]
             logger.info(
-                f'Weight for {f"{name}:":{width + 1}} '
-                f'{weights[idx]:.4f} (Mask: {weights[idx + n_names]:.4f})'
+                f'Weight for {f"{name}:":{width + 1}} {artifact.weights[name]:.4f} '
+                f'(Calibration: slope={calibrator.slope:.4f}, '
+                f'intercept={calibrator.intercept:.4f})'
             )
-        logger.info(f'Intercept (Bias): {intercept:.4f}')
+        logger.info('Missing modalities are omitted and weights are renormalized.')
+        logger.info(
+            f'Clinical threshold: {artifact.clinical_threshold:.4f} '
+            f'for recall({artifact.clinical_threshold_label}) '
+            f'>= {artifact.clinical_threshold_recall:.4f}.'
+        )
 
-    return meta_model
+
+def fit_available_fusion_artifact(
+    config: TrainConfig,
+    fold: int,
+    final: FinalPredictions,
+    *,
+    log_prefix: str = 'weights_available_fusion',
+) -> AvailableFusionArtifact:
+    artifact = AvailableFusionArtifact.fit(
+        config,
+        final.names,
+        final.y_true,
+        final.y_pos_score_list,
+        final.y_mask_list,
+    )
+    log_available_fusion_artifact(config, f'{log_prefix}_{fold}', artifact)
+    return artifact
+
+
+def get_oof_predictions(named_recorders: dict[str, Recorder]) -> FinalPredictions:
+    names = []
+    y_pos_score_list = []
+    y_mask_list = []
+    for name, child in named_recorders.items():
+        names.append(name)
+        record = PredictionRecord.from_list(child.result.y_all)
+        y_pos_score_list.append(record.score[:, 1])
+        y_mask_list.append(record.mask)
+    y_true = record.true
+    return FinalPredictions(y_true, y_pos_score_list, y_mask_list, names)
+
+
+def save_available_fusion_artifact(
+    config: TrainConfig, named_recorders: dict[str, Recorder]
+) -> None:
+    final = get_oof_predictions(named_recorders)
+    artifact = AvailableFusionArtifact.fit(
+        config,
+        final.names,
+        final.y_true,
+        final.y_pos_score_list,
+        final.y_mask_list,
+    )
+    artifact.save(config._log_dir / FUSION_ARTIFACT_FILE)
+    log_available_fusion_artifact(config, 'weights_available_fusion_artifact', artifact)
+
+
+def get_thresholds(
+    config: TrainConfig, y_true: NDArray, y_pos_score: NDArray
+) -> dict[str, float]:
+    return {
+        'clinical_recall': get_clinical_recall_threshold(
+            y_true,
+            y_pos_score,
+            target_label=config.clinical_threshold_index,
+            target_recall=config.clinical_threshold_recall,
+        )
+    }
 
 
 def aggregate_pos_scores(
     final: FinalPredictions,
     *,
-    weights: list[float] | None = None,
-    meta_model: LogisticRegression | None = None,
+    fusion_artifact: AvailableFusionArtifact | None = None,
 ) -> NDArray:
-    if meta_model is not None:
-        y_pos_score = meta_model.predict_proba(
-            np.c_[*final.y_pos_score_list, *final.y_mask_list]
-        )[:, 1]
+    if fusion_artifact is not None:
+        y_pos_score = fusion_artifact.predict_pos_score(
+            final.names, final.y_pos_score_list, final.y_mask_list
+        )
     else:
-        y_pos_score = np.average(final.y_pos_score_list, axis=0, weights=weights)
+        y_pos_score = np.average(final.y_pos_score_list, axis=0)
     return y_pos_score
 
 
 def aggregate_scores(
     last: LastPredictions,
     *,
-    weights: list[float] | None = None,
-    meta_model: LogisticRegression | None = None,
+    fusion_artifact: AvailableFusionArtifact | None = None,
 ) -> tuple[NDArray, list[float], float]:
-    if meta_model is not None:
-        # HACK: Binary classification only
-        y_score = meta_model.predict_proba(
-            np.c_[*(score[:, 1] for score in last.y_score_list), *last.y_mask_list]
+    if fusion_artifact is not None:
+        y_score = fusion_artifact.predict_scores(
+            last.names,
+            [score[:, 1] for score in last.y_score_list],
+            last.y_mask_list,
         )
-        norm_weights, bias = meta_model.coef_[0], meta_model.intercept_[0].item()
+        norm_weights = [fusion_artifact.weights[name] for name in last.names]
+        bias = 0.0
     else:
-        y_score = np.average(last.y_score_list, axis=0, weights=weights)
-        if weights is not None:
-            norm_weights = np.array(weights) / sum(weights)
-        else:
-            n_total = len(last.y_score_list)
-            norm_weights = np.full(n_total, 1 / n_total)
-        bias = 0
-    return y_score, norm_weights.tolist(), bias
+        y_score = np.average(last.y_score_list, axis=0)
+        n_total = len(last.y_score_list)
+        norm_weights = np.full(n_total, 1 / n_total).tolist()
+        bias = 0.0
+    return y_score, norm_weights, bias
 
 
 def aggregate(
+    config: TrainConfig,
     fold: int,
     recorders: dict[str, Recorder],
     name: str,
     last: LastPredictions,
     final: FinalPredictions | None = None,
     *,
-    weights: list[float] | None = None,
-    meta_model: LogisticRegression | None = None,
+    fusion_artifact: AvailableFusionArtifact | None = None,
 ) -> None:
     y_score, norm_weights, bias = aggregate_scores(
-        last, weights=weights, meta_model=meta_model
+        last, fusion_artifact=fusion_artifact
     )
     thresholds: dict[str, float | None] = {'original': None}
     if final is not None:
-        y_pos_score = aggregate_pos_scores(
-            final, weights=weights, meta_model=meta_model
-        )
-        thresholds |= get_thresholds(final.y_true, y_pos_score)
+        y_pos_score = aggregate_pos_scores(final, fusion_artifact=fusion_artifact)
+        thresholds |= get_thresholds(config, final.y_true, y_pos_score)
     for threshold_name, threshold in thresholds.items():
         recorder_name = f'{name}_{threshold_name}'
         recorder = recorders[recorder_name]
@@ -181,13 +211,17 @@ def aggregate(
 
 
 def record_average(
-    fold: int, recorders: dict[str, Recorder], outer_recorders: dict[str, Recorder]
+    config: TrainConfig,
+    fold: int,
+    recorders: dict[str, Recorder],
+    outer_recorders: dict[str, Recorder],
 ) -> None:
     last = get_last_predictions(outer_recorders)
-    aggregate(fold, recorders, 'all_simple_average', last)
+    aggregate(config, fold, recorders, 'all_simple_average', last)
 
 
 def record_concats(
+    config: TrainConfig,
     fold: int,
     recorders: dict[str, Recorder],
     inner_recorders: dict[str, Recorder],
@@ -195,7 +229,18 @@ def record_concats(
 ) -> None:
     last = get_last_predictions(outer_recorders)
     final = get_final_predictions(fold, inner_recorders)
-    aggregate(fold, recorders, 'all_concats', last, final)
+    fusion_artifact = fit_available_fusion_artifact(
+        config, fold, final, log_prefix='weights_concats'
+    )
+    aggregate(
+        config,
+        fold,
+        recorders,
+        'all_concats',
+        last,
+        final,
+        fusion_artifact=fusion_artifact,
+    )
 
 
 def record_stack(
@@ -208,9 +253,51 @@ def record_stack(
     last = get_last_predictions(outer_recorders)
     final = get_final_predictions(fold, inner_recorders)
 
-    meta_model = get_meta_model(config, fold, final)
-    aggregate(fold, recorders, 'all_simple_average', last, final)
-    aggregate(
-        fold, recorders, 'all_weighted_average', last, final, weights=final.weights
+    fusion_artifact = fit_available_fusion_artifact(
+        config, fold, final, log_prefix='weights_stacking'
     )
-    aggregate(fold, recorders, 'all_stacking', last, final, meta_model=meta_model)
+    aggregate(
+        config,
+        fold,
+        recorders,
+        'all_stacking',
+        last,
+        final,
+        fusion_artifact=fusion_artifact,
+    )
+
+
+def get_final_available_fusion_artifact_source(
+    dataset: DatasetConfig, train: TrainConfig
+) -> Path:
+    return (
+        train.log_root
+        / dataset.name_str
+        / train.group_name_str
+        / 'rrl-discrete'
+        / train.ref_name_str
+        / FUSION_ARTIFACT_FILE
+    )
+
+
+def validate_final_available_fusion_artifact(
+    dataset: DatasetConfig, train: TrainConfig
+) -> None:
+    source = get_final_available_fusion_artifact_source(dataset, train)
+    if source.is_file():
+        return
+    raise IatreionException(
+        'Available-fusion artifact not found: $path. '
+        'Run internal discrete RRL scoring before final RRL training.',
+        path=str(source),
+    )
+
+
+def publish_final_available_fusion_artifact(
+    dataset: DatasetConfig, train: TrainConfig
+) -> None:
+    source = get_final_available_fusion_artifact_source(dataset, train)
+    target = train._log_dir / FUSION_ARTIFACT_FILE
+    target.parent.mkdir(parents=True, exist_ok=True)
+    copyfile(source, target)
+    logger.info(f'Published available-fusion artifact: {target}')
