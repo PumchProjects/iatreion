@@ -78,8 +78,16 @@ def get_data_names(dataset: DatasetConfig, train: TrainConfig) -> list[str]:
     if train.aggregate in ('concat', 'concats'):
         # HACK: Delicate config should change the name according to train.final
         return [dataset.name_str] if train.final else ['all_concat']
-    else:
+    if not train.eval_names:
         return dataset.names
+
+    invalid_names = sorted(set(train.eval_names) - set(dataset.names))
+    if invalid_names:
+        raise ValueError(
+            'eval_names must be selected from dataset names. Unknown: '
+            f'{", ".join(invalid_names)}.'
+        )
+    return train.eval_names
 
 
 @dataclass
@@ -169,7 +177,11 @@ def get_train_iterator(
     try:
         if train.aggregate in ('concat', 'concats'):
             X_df, _, f_df = merge_data(X_dfs, [ref_y_df], f_dfs)
-            X_dfs, f_dfs = [X_df], [f_df]
+            data_frames = dict.fromkeys(data_names, (X_df, f_df))
+        else:
+            data_frames = dict(
+                zip(dataset.names, zip(X_dfs, f_dfs, strict=True), strict=True)
+            )
 
         if train.final:
             outer_splitter = [(ref_y_df.index, pd.Index([]))]
@@ -191,8 +203,8 @@ def get_train_iterator(
                     and inner_fold < train.n_inner_folds
                 )
 
-                for index, name in enumerate(data_names):
-                    X_df, f_df = X_dfs[index], f_dfs[index]
+                for name in data_names:
+                    X_df, f_df = data_frames[name]
                     train_final, val_final = get_train_val(
                         train, ref_y_df, train_inner, X_df.index
                     )

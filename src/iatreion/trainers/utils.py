@@ -134,8 +134,16 @@ def save_available_fusion_artifact(
 
 
 def get_thresholds(
-    config: TrainConfig, y_true: NDArray, y_pos_score: NDArray
+    config: TrainConfig,
+    y_true: NDArray,
+    y_pos_score: NDArray,
+    *,
+    y_mask: NDArray | None = None,
 ) -> dict[str, float]:
+    if y_mask is not None:
+        observed = ~y_mask.astype(bool)
+        y_true = y_true[observed]
+        y_pos_score = y_pos_score[observed]
     return {
         'clinical_recall': get_clinical_recall_threshold(
             y_true,
@@ -144,6 +152,26 @@ def get_thresholds(
             target_recall=config.clinical_threshold_recall,
         )
     }
+
+
+def get_all_missing_mask(y_mask_list: list[NDArray]) -> NDArray:
+    return np.column_stack(y_mask_list).astype(bool).all(axis=1)
+
+
+def average_available_scores(
+    y_score_list: list[NDArray], y_mask_list: list[NDArray]
+) -> NDArray:
+    scores = np.stack(y_score_list)
+    available = ~np.column_stack(y_mask_list).astype(bool).T
+    numerator = (scores * available[:, :, None]).sum(axis=0)
+    denominator = available.sum(axis=0)[:, None]
+    average = np.full_like(numerator, 1.0 / numerator.shape[1], dtype=float)
+    return np.divide(
+        numerator,
+        denominator,
+        out=average,
+        where=denominator > 0,
+    )
 
 
 def aggregate_pos_scores(
@@ -156,7 +184,10 @@ def aggregate_pos_scores(
             final.names, final.y_pos_score_list, final.y_mask_list
         )
     else:
-        y_pos_score = np.average(final.y_pos_score_list, axis=0)
+        y_pos_score = average_available_scores(
+            [np.column_stack([1 - score, score]) for score in final.y_pos_score_list],
+            final.y_mask_list,
+        )[:, 1]
     return y_pos_score
 
 
@@ -174,7 +205,7 @@ def aggregate_scores(
         norm_weights = [fusion_artifact.weights[name] for name in last.names]
         bias = 0.0
     else:
-        y_score = np.average(last.y_score_list, axis=0)
+        y_score = average_available_scores(last.y_score_list, last.y_mask_list)
         n_total = len(last.y_score_list)
         norm_weights = np.full(n_total, 1 / n_total).tolist()
         bias = 0.0
@@ -196,13 +227,23 @@ def aggregate(
     )
     thresholds: dict[str, float | None] = {'original': None}
     if final is not None:
+        final_mask = get_all_missing_mask(final.y_mask_list)
         y_pos_score = aggregate_pos_scores(final, fusion_artifact=fusion_artifact)
-        thresholds |= get_thresholds(config, final.y_true, y_pos_score)
+        thresholds |= get_thresholds(
+            config, final.y_true, y_pos_score, y_mask=final_mask
+        )
+    last_mask = get_all_missing_mask(last.y_mask_list)
     for threshold_name, threshold in thresholds.items():
         recorder_name = f'{name}_{threshold_name}'
         recorder = recorders[recorder_name]
         recorder.record_weights_and_bias(norm_weights, bias)
-        results = TrainerReturn(last.time, last.y_true, y_score, threshold=threshold)
+        results = TrainerReturn(
+            last.time,
+            last.y_true,
+            y_score,
+            threshold=threshold,
+            test_mask=last_mask,
+        )
         display_name = get_display_name(recorder_name)
         logger.info(
             f'[bold green]{display_name} (Fold {fold}):', extra={'markup': True}
@@ -270,14 +311,16 @@ def record_stack(
 def get_final_available_fusion_artifact_source(
     dataset: DatasetConfig, train: TrainConfig
 ) -> Path:
-    return (
+    source = (
         train.log_root
         / dataset.name_str
         / train.group_name_str
         / 'rrl-discrete'
         / train.ref_name_str
-        / FUSION_ARTIFACT_FILE
     )
+    if train.eval_names:
+        source /= train.eval_name_str
+    return source / FUSION_ARTIFACT_FILE
 
 
 def validate_final_available_fusion_artifact(

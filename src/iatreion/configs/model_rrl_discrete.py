@@ -11,4 +11,8 @@ class DiscreteRrlConfig(ModelConfig):
     def __post_init__(self) -> None:
         self.train._encode = True
         if not self.train.final:
-            self.register_log_dir('rrl-discrete', file_name='test.log')
+            self.register_log_dir(
+                'rrl-discrete',
+                folder_name=self.train.eval_name_str or None,
+                file_name='test.log',
+            )

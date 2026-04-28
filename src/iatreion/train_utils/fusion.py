@@ -127,9 +127,10 @@ class AvailableFusionArtifact:
             clinical_threshold=0.5,
         )
         y_pos_score = artifact.predict_pos_score(names, y_pos_score_list, y_mask_list)
+        available_any = ~np.column_stack(y_mask_list).astype(bool).all(axis=1)
         threshold = get_clinical_recall_threshold(
-            y_true,
-            y_pos_score,
+            y_true[available_any],
+            y_pos_score[available_any],
             target_label=config.clinical_threshold_index,
             target_recall=config.clinical_threshold_recall,
         )

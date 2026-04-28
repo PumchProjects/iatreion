@@ -49,6 +49,9 @@ class PredictionRecord:
             mask=self.mask[index],
         )
 
+    def observed(self) -> Self:
+        return self[~self.mask.astype(bool)]
+
     def to_dict(self) -> dict[str, NDArray]:
         return {
             'y_true': self.true,
@@ -232,11 +235,15 @@ class RecordROC:
         return viz.roc_auc
 
     def record(self, y: PredictionRecord) -> float:
+        if y.true.shape[0] == 0 or np.unique(y.true).shape[0] < 2:
+            return np.nan
         if self.config.final:
             return self.record_final(y)
         return self.record_fold(y)
 
     def finish(self) -> tuple[float, Figure]:
+        if not self.tprs:
+            return np.nan, self.fig
         mean_tpr = np.nanmean(self.tprs, axis=0)
         mean_tpr[-1] = 1.0
         mean_auc = auc(self.mean_fpr, mean_tpr)
@@ -407,6 +414,19 @@ class Recorder:
     def _calc_metrics(
         self, y: PredictionRecord, *, plot_roc: bool = False
     ) -> dict[str, float]:
+        if y.true.shape[0] == 0:
+            metrics = {
+                'AUC': np.nan,
+                'ACC': np.nan,
+                'P': np.nan,
+                'R': np.nan,
+                'F1': np.nan,
+            }
+            if self.calc_sen_and_spc:
+                metrics['SEN'] = np.nan
+                metrics['SPC'] = np.nan
+            return metrics
+
         auc = self.roc.record(y) if plot_roc else self._calc_auc(y)
         precision, recall, f1, _ = precision_recall_fscore_support(
             y.true, y.pred, labels=self.labels, average='macro', zero_division=np.nan
@@ -521,8 +541,9 @@ class Recorder:
         return ci
 
     def record(self, results: TrainerReturn) -> str:
-        y = results.get_prediction()
-        self.result.y_all.append(y)
+        full_y = results.get_prediction()
+        y = full_y.observed()
+        self.result.y_all.append(full_y)
         self.result.time.append(results.time)
         if results.threshold is not None:
             if self.result.thresholds is None:
@@ -553,9 +574,10 @@ class Recorder:
     def finish(self, *, calc_ci: bool = True) -> Finish:
         complexity, width = self._summarize_complexity()
         mean_std = self._summarize_fold_metrics()
-        y = PredictionRecord.from_list(self.result.y_all)
+        full_y = PredictionRecord.from_list(self.result.y_all)
+        y = full_y.observed()
         point_estimates = self._calc_metrics(y)
-        final = self._build_final_record(complexity, y, point_estimates)
+        final = self._build_final_record(complexity, full_y, point_estimates)
         auc, roc = self.roc.finish() if self.config.plot_roc else (None, None)
         result = self.formatter.format_final_avg(
             final=final, mean_std=mean_std, auc=auc, width=width

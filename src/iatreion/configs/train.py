@@ -66,8 +66,7 @@ class TrainConfig:
 """
 
     normalize_continuous: Annotated[
-        bool,
-        Parameter(name='--normalize-continuous', negative='--no-normalize-continuous'),
+        bool, Parameter(negative='--no-normalize-continuous')
     ] = True
     'Whether to z-score normalize continuous features.'
 
@@ -82,6 +81,11 @@ class TrainConfig:
 
     true_ref: Annotated[bool, Parameter(alias='-tr')] = False
     'Align not only the test data, but also the training data to the reference data.'
+
+    eval_names: Annotated[list[str], Parameter(alias='-en', consume_multiple=True)] = (
+        field(default_factory=list)
+    )
+    'Optional subset of modalities to evaluate/fuse while keeping splits based on all input modalities.'
 
     n_outer_splits: Annotated[int, Parameter(alias='-nos')] = 5
     'Number of splits for outer cross-validation.'
@@ -235,6 +239,10 @@ For discrete RRL, validation set is used for optimization when val_size is set.
         if self.label_name is not None:
             descriptions.append(f'on {self.label_name}')
         return ', '.join(descriptions)
+
+    @property
+    def eval_name_str(self) -> str:
+        return ', '.join(self.eval_names)
 
     @property
     def n_outer_folds(self) -> int:
