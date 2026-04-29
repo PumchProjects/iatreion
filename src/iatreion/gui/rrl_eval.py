@@ -7,6 +7,7 @@ from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
 from typing import Literal, cast
 
 from iatreion.api import (
+    RrlTermOption,
     get_batched_result,
     get_eval_result,
     get_result,
@@ -124,44 +125,45 @@ def select_eval_terms(master: tk.Tk, config: RrlEvalConfig) -> None:
         if module in valid_modules
     }
     dialog = create_dialog(master, '选择激活规则')
-    dialog.geometry('1000x650')
 
     body = ttk.Frame(dialog, padding=(10, 10, 10, 5))
     body.pack(fill=tk.BOTH, expand=True)
 
-    canvas = tk.Canvas(body, highlightthickness=0)
-    scrollbar = ttk.Scrollbar(body, orient=tk.VERTICAL, command=canvas.yview)
-    canvas.configure(yscrollcommand=scrollbar.set)
+    headers = ('启用', '模块', '类型', '分组', '分数', '规则')
+    tree = ttk.Treeview(body, columns=headers, show='headings', selectmode='browse')
+    tree.tag_configure('disabled', foreground='gray')
+    scrollbar = ttk.Scrollbar(body, orient=tk.VERTICAL, command=tree.yview)
+    tree.configure(yscrollcommand=scrollbar.set)
+    tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-    frm = ttk.Frame(canvas)
-    frm.grid_columnconfigure(5, weight=1)
-    window = canvas.create_window((0, 0), window=frm, anchor=tk.NW)
-
-    def update_scroll_region(_: tk.Event) -> None:
-        canvas.configure(scrollregion=canvas.bbox(tk.ALL))
-
-    def resize_inner(event: tk.Event) -> None:
-        canvas.itemconfigure(window, width=event.width)
+    for header in headers:
+        tree.heading(header, text=header)
+        match header:
+            case '启用':
+                tree.column(header, width=60, stretch=False, anchor=tk.CENTER)
+            case '模块':
+                tree.column(header, width=130, stretch=False, anchor=tk.CENTER)
+            case '类型':
+                tree.column(header, width=80, stretch=False, anchor=tk.CENTER)
+            case '分组':
+                tree.column(header, width=160, stretch=False, anchor=tk.CENTER)
+            case '分数':
+                tree.column(header, width=80, stretch=False, anchor=tk.CENTER)
+            case '规则':
+                tree.column(header, width=520, stretch=True, anchor=tk.W)
 
     def close_dialog() -> None:
         dialog.destroy()
 
-    frm.bind('<Configure>', update_scroll_region)
-    canvas.bind('<Configure>', resize_inner)
+    def selected_text(selected: bool) -> str:
+        return '[x]' if selected else '[ ]'
 
-    headers = ('', '模块', '类型', '分组', '分数', '规则')
-    for column, header in enumerate(headers):
-        ttk.Label(frm, text=header).grid(
-            row=0, column=column, sticky=tk.W, padx=4, pady=(0, 4)
-        )
-
-    vars: dict[tuple[str, int | None], tk.BooleanVar] = {}
+    option_by_iid: dict[str, RrlTermOption] = {}
+    selected_by_iid: dict[str, bool] = {}
     rule_counts: dict[str, int] = {}
-    for row, option in enumerate(options, start=1):
+    for option in options:
         module = option.module
-        key = (module, option.index)
         if option.kind == 'bias':
             selected = config.enabled_biases.get(module, True)
         else:
@@ -169,28 +171,49 @@ def select_eval_terms(master: tk.Tk, config: RrlEvalConfig) -> None:
             selected = selected_rules is None or option.index in selected_rules
             rule_counts[module] = rule_counts.get(module, 0) + 1
 
-        var = tk.BooleanVar(value=selected)
-        vars[key] = var
-        ttk.Checkbutton(frm, variable=var).grid(
-            row=row, column=0, sticky=tk.W, padx=4, pady=2
+        iid = tree.insert(
+            '',
+            tk.END,
+            values=(
+                selected_text(selected),
+                names_mapping.get(module, module),
+                option.display_index,
+                groups_mapping.get(option.label, option.label),
+                f'{option.score:.2f}',
+                option.rule,
+            ),
         )
-        ttk.Label(frm, text=names_mapping.get(module, module), width=14).grid(
-            row=row, column=1, sticky=tk.W, padx=4, pady=2
-        )
-        ttk.Label(frm, text=option.display_index, width=8).grid(
-            row=row, column=2, sticky=tk.W, padx=4, pady=2
-        )
-        ttk.Label(
-            frm,
-            text=groups_mapping.get(option.label, option.label),
-            width=18,
-        ).grid(row=row, column=3, sticky=tk.W, padx=4, pady=2)
-        ttk.Label(frm, text=f'{option.score:.2f}', width=8).grid(
-            row=row, column=4, sticky=tk.W, padx=4, pady=2
-        )
-        ttk.Label(frm, text=option.rule, wraplength=540).grid(
-            row=row, column=5, sticky=tk.EW, padx=4, pady=2
-        )
+        option_by_iid[iid] = option
+        selected_by_iid[iid] = selected
+        if not selected:
+            tree.item(iid, tags=('disabled',))
+
+    def set_item_selected(iid: str, selected: bool) -> None:
+        values = list(tree.item(iid, 'values'))
+        values[0] = selected_text(selected)
+        tree.item(iid, values=values, tags=() if selected else ('disabled',))
+        selected_by_iid[iid] = selected
+
+    def toggle_item(iid: str) -> None:
+        set_item_selected(iid, not selected_by_iid[iid])
+
+    def toggle_clicked_item(event: tk.Event) -> str | None:
+        iid = tree.identify_row(event.y)
+        if iid:
+            toggle_item(iid)
+            tree.selection_set(iid)
+            tree.focus(iid)
+            return 'break'
+        return None
+
+    def toggle_focused_item(_: tk.Event) -> str:
+        iid = tree.focus()
+        if iid:
+            toggle_item(iid)
+        return 'break'
+
+    tree.bind('<ButtonRelease-1>', toggle_clicked_item)
+    tree.bind('<space>', toggle_focused_item)
 
     bottom_frm = ttk.Frame(dialog, padding=(10, 5, 10, 10))
     bottom_frm.pack(fill=tk.X)
@@ -203,23 +226,23 @@ def select_eval_terms(master: tk.Tk, config: RrlEvalConfig) -> None:
     ).pack(side=tk.LEFT, padx=5)
 
     def set_all(value: bool) -> None:
-        for var in vars.values():
-            var.set(value)
+        for iid in selected_by_iid:
+            set_item_selected(iid, value)
 
     def select_bias_only() -> None:
-        for module, index in vars:
-            vars[(module, index)].set(index is None)
+        for iid, option in option_by_iid.items():
+            set_item_selected(iid, option.kind == 'bias')
 
     def disable_bias() -> None:
-        for module, index in vars:
-            if index is None:
-                vars[(module, index)].set(False)
+        for iid, option in option_by_iid.items():
+            if option.kind == 'bias':
+                set_item_selected(iid, False)
 
     def apply_selection() -> None:
         enabled_biases: dict[str, bool] = {}
         selected_rules: dict[str, list[int]] = {}
-        for option in options:
-            selected = vars[(option.module, option.index)].get()
+        for iid, option in option_by_iid.items():
+            selected = selected_by_iid[iid]
             if option.kind == 'bias':
                 if not selected:
                     enabled_biases[option.module] = False
