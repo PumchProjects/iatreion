@@ -102,7 +102,6 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
         [
             sample.final_label,
             f'{sample.final_probability:.2%}',
-            f'{sample.final_confidence:.2%}',
         ]
     ]
     pred_list = [
@@ -110,7 +109,6 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
             module.name,
             module.predicted_label,
             f'{module.predicted_probability:.2%}',
-            f'{module.confidence:.2%}',
             f'{module.weight:.4f}',
         ]
         for module in sample.modules
@@ -134,12 +132,11 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
 
 def get_batched_result(config: RrlEvalConfig) -> pd.DataFrame:
     data, additional_data, _, model = get_data_model(config)
-    result, confidence = model.eval(data)
+    result = model.eval(data)
     y_pred = model.predict_labels(result)
     y_score = calc_score(result)
     y_score.name = 'Probability'
-    confidence.name = 'Confidence'
-    df = pd.concat(additional_data + [y_pred, y_score, confidence], axis=1)
+    df = pd.concat(additional_data + [y_pred, y_score], axis=1)
     return df
 
 
@@ -148,7 +145,7 @@ def get_eval_result(
 ) -> tuple[str, Figure | None, DiscreteRrlConfig]:
     data, _, group_names, model = get_data_model(config)
     assert group_names is not None
-    result, _ = model.eval(
+    result = model.eval(
         data,
         enabled_biases=config.enabled_biases,
         enabled_rules=config.enabled_rules,

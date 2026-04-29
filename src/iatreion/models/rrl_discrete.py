@@ -9,7 +9,7 @@ from typing import Self, override
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
-from scipy.special import expit, softmax
+from scipy.special import softmax
 
 from iatreion.configs import DataName, DiscreteRrlConfig, ZeroMeanFallback
 from iatreion.exceptions import IatreionException
@@ -19,7 +19,11 @@ from iatreion.train_utils.fusion import (
     AvailableFusionArtifact,
     ModalityCalibrator,
 )
-from iatreion.utils import decode_string, logger
+from iatreion.train_utils.imputation import (
+    SimpleImputerArtifact,
+    get_simple_imputer_path,
+)
+from iatreion.utils import decode_string
 
 from .base import Model
 
@@ -291,12 +295,12 @@ class Line:
             result = self.rule.eval(data)
             if active_lines is not None and not pd.isna(r := result.item()) and r:
                 active_lines.append(self)
-            table: dict[str, pd.Series] = {}
-            for label, weight in zip(self.labels, self.weights, strict=True):
-                col = result * weight
-                table[f'{label}_upper'] = col.fillna(max(0, weight))
-                table[f'{label}_lower'] = col.fillna(min(0, weight))
-            return pd.DataFrame(table)
+            active = result.fillna(False).astype(float)
+            table = {
+                label: active * weight
+                for label, weight in zip(self.labels, self.weights, strict=True)
+            }
+            return pd.DataFrame(table, dtype=float)
 
         gated = self.rule.eval_with_coverage(data, tau=self.tau)
         result = gated.truth & gated.valid
@@ -304,9 +308,8 @@ class Line:
             active_lines.append(self)
         active = result.astype(float)
         table = {
-            name: active * weight
+            label: active * weight
             for label, weight in zip(self.labels, self.weights, strict=True)
-            for name in (f'{label}_upper', f'{label}_lower')
         }
         return pd.DataFrame(table, dtype=float)
 
@@ -345,10 +348,11 @@ class Rrl:
         else:
             self.temp = 0.01
             self.tau = None
-            logger.warning(
-                f'[bold yellow]Using default temperature {self.temp} for old versions',
-                extra={'markup': True},
-            )
+        self.imputer: SimpleImputerArtifact | None = (
+            None
+            if self.tau is not None
+            else SimpleImputerArtifact.load(get_simple_imputer_path(file))
+        )
 
         self.labels, self.biases, schema = self._parse_table_header(headers)
         self.lines = [
@@ -394,19 +398,19 @@ class Rrl:
 
     def _make_empty_result(self, data: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(
-            {
-                name: [0.0] * len(data)
-                for label in self.labels
-                for name in (f'{label}_upper', f'{label}_lower')
-            },
+            {label: [0.0] * len(data) for label in self.labels},
             dtype='Float64',
             index=data.index,
         )
 
     def _add_bias(self, result: pd.DataFrame) -> None:
         for label, bias in zip(self.labels, self.biases, strict=True):
-            result[f'{label}_upper'] += bias
-            result[f'{label}_lower'] += bias
+            result[label] += bias
+
+    def impute(self, data: pd.DataFrame) -> pd.DataFrame:
+        if self.imputer is None:
+            return data
+        return self.imputer.apply(data)
 
     def _iter_enabled_lines(self, enabled_rule_indices: list[int] | None) -> list[Line]:
         if enabled_rule_indices is None:
@@ -424,19 +428,19 @@ class Rrl:
 
     def _apply_zero_mean_fallback(
         self,
-        mean_result: pd.DataFrame,
+        score: pd.DataFrame,
         zero_mean_fallback: ZeroMeanFallback,
     ) -> None:
         if zero_mean_fallback == 'uniform':
             return
 
         zero_rows = pd.Series(
-            np.isclose(mean_result.to_numpy(dtype=float), 0.0).all(axis=1),
-            index=mean_result.index,
+            np.isclose(score.to_numpy(dtype=float), 0.0).all(axis=1),
+            index=score.index,
         )
         if zero_rows.any():
             bias_label = self.labels[np.argmax(self.biases).item()]
-            mean_result.loc[zero_rows, bias_label] += 1e-3
+            score.loc[zero_rows, bias_label] += 1e-3
 
     def score(
         self,
@@ -446,27 +450,15 @@ class Rrl:
         bias_enabled: bool = True,
         enabled_rule_indices: list[int] | None = None,
         zero_mean_fallback: ZeroMeanFallback = 'uniform',
-    ) -> tuple[pd.DataFrame, pd.Series]:
+    ) -> pd.DataFrame:
         result = self._make_empty_result(data)
         if bias_enabled:
             self._add_bias(result)
         for line in self._iter_enabled_lines(enabled_rule_indices):
             result += line.eval(data, active_lines)
-        mean_result = pd.DataFrame(
-            {
-                label: (result[f'{label}_upper'] + result[f'{label}_lower']) / 2
-                for label in self.labels
-            },
-            dtype=float,
-        )
-        self._apply_zero_mean_fallback(mean_result, zero_mean_fallback)
-        if self.tau is None:
-            max_lower = result[[f'{label}_lower' for label in self.labels]].max(axis=1)
-            min_upper = result[[f'{label}_upper' for label in self.labels]].min(axis=1)
-            confidence: pd.Series = (max_lower - min_upper).map(expit)
-        else:
-            confidence = pd.Series(np.nan, index=data.index, dtype=float)
-        return mean_result, confidence
+        result = result.astype(float)
+        self._apply_zero_mean_fallback(result, zero_mean_fallback)
+        return result
 
     def eval(
         self,
@@ -476,8 +468,8 @@ class Rrl:
         bias_enabled: bool = True,
         enabled_rule_indices: list[int] | None = None,
         zero_mean_fallback: ZeroMeanFallback = 'uniform',
-    ) -> tuple[pd.DataFrame, pd.Series]:
-        mean_result, confidence = self.score(
+    ) -> pd.DataFrame:
+        score = self.score(
             data,
             active_lines,
             bias_enabled=bias_enabled,
@@ -485,7 +477,7 @@ class Rrl:
             zero_mean_fallback=zero_mean_fallback,
         )
         # Returned results all have "float64" dtype
-        return self.softmax(mean_result), confidence
+        return self.softmax(score)
 
     @staticmethod
     def softmax(score: pd.DataFrame) -> pd.DataFrame:
@@ -589,7 +581,7 @@ class DiscreteRrlModel(Model):
     def _predict_proba(self, X: NDArray) -> NDArray:
         assert self.ctx is not None
         data = pd.DataFrame(X, columns=self.ctx.db_enc.X_fname)
-        result, _ = self.get_model(self.ctx).eval(data)
+        result = self.get_model(self.ctx).eval(data)
         return result.to_numpy()
 
     def _validate_enabled_terms(
@@ -638,13 +630,6 @@ class DiscreteRrlModel(Model):
         available = ~frame.isna().all(axis=1)
         return available.reindex(index, fill_value=False).astype(bool)
 
-    @staticmethod
-    def _confidence(confidence_parts: list[pd.Series], index: pd.Index) -> pd.Series:
-        aligned = [confidence.reindex(index) for confidence in confidence_parts]
-        if not aligned:
-            return pd.Series(np.nan, index=index, dtype=float)
-        return pd.concat(aligned, axis=1).max(axis=1)
-
     def eval(
         self,
         data: list[pd.DataFrame],
@@ -652,7 +637,7 @@ class DiscreteRrlModel(Model):
         enabled_biases: dict[str, bool] | None = None,
         enabled_rules: dict[str, list[int]] | None = None,
         zero_mean_fallback: ZeroMeanFallback = 'uniform',
-    ) -> tuple[pd.DataFrame, pd.Series]:
+    ) -> pd.DataFrame:
         names = self.config.dataset.names
         raw_models = self.get_raw_models()
         self._validate_artifact_names(names)
@@ -661,10 +646,9 @@ class DiscreteRrlModel(Model):
         index = self._combined_index(data)
         y_pos_score_list: list[NDArray] = []
         y_mask_list: list[NDArray] = []
-        confidence_parts: list[pd.Series] = []
         for name, X, model in zip(names, data, raw_models, strict=True):
-            result, confidence = model.eval(
-                X,
+            result = model.eval(
+                model.impute(X),
                 bias_enabled=(
                     True if enabled_biases is None else enabled_biases.get(name, True)
                 ),
@@ -677,7 +661,6 @@ class DiscreteRrlModel(Model):
             y_mask_list.append((~available).to_numpy(dtype=bool))
             y_pos_score = result.reindex(index)[self.artifact.positive_label]
             y_pos_score_list.append(y_pos_score.fillna(0.5).to_numpy())
-            confidence_parts.append(confidence.reindex(index))
 
         result = pd.DataFrame(
             self.artifact.predict_scores(names, y_pos_score_list, y_mask_list),
@@ -686,9 +669,7 @@ class DiscreteRrlModel(Model):
         )
         available_any = ~np.column_stack(y_mask_list).all(axis=1)
         result.loc[~available_any] = np.nan
-        confidence = self._confidence(confidence_parts, index)
-        confidence.loc[~available_any] = np.nan
-        return result, confidence
+        return result
 
     def predict_labels(self, result: pd.DataFrame) -> pd.Series:
         y_pos_score = result[self.artifact.positive_label].to_numpy()
@@ -701,10 +682,9 @@ class DiscreteRrlModel(Model):
     ) -> tuple[
         list[DataName],
         list[Rrl],
-        list[tuple[pd.DataFrame, pd.Series]],
+        list[pd.DataFrame],
         list[tuple[DataName, Line]],
         pd.DataFrame,
-        pd.Series,
     ]:
         names = self.config.dataset.names
         self._validate_artifact_names(names)
@@ -724,7 +704,7 @@ class DiscreteRrlModel(Model):
             if X.isna().all(axis=1).item():
                 continue
             available_names.append(name)
-            available_data.append(X)
+            available_data.append(model.impute(X))
             available_models.append(model)
 
         if not available_names:
@@ -741,21 +721,18 @@ class DiscreteRrlModel(Model):
             for name, model in zip(available_names, available_models, strict=True)
         ]
 
-        predictions: list[tuple[pd.DataFrame, pd.Series]] = []
+        predictions: list[pd.DataFrame] = []
         active_lines: list[tuple[DataName, Line]] = []
         score_parts: list[pd.DataFrame] = []
-        confidence_parts: list[pd.Series] = []
         for name, X, model in zip(available_names, available_data, models, strict=True):
             lines: list[Line] = []
-            score, confidence = model.score(X, lines)
-            predictions.append((model.softmax(score), confidence))
+            score = model.score(X, lines)
+            predictions.append(model.softmax(score))
             active_lines += [(name, line) for line in lines]
             score_parts.append(score)
-            confidence_parts.append(confidence)
 
         final_score = score_parts[0].copy()
         for score in score_parts[1:]:
             final_score += score
         result = Rrl.softmax(final_score)
-        confidence = self._confidence(confidence_parts, result.index)
-        return available_names, models, predictions, active_lines, result, confidence
+        return available_names, models, predictions, active_lines, result

@@ -307,8 +307,7 @@ def rrl_rule_waterfall_plot(
             'RRL Rule Waterfall\n'
             f'sample={bundle.sample.sample_id}, '
             f'final={target_name} '
-            f'{_format_pct(bundle.sample.final_probability)}, '
-            f'conf={_format_pct(bundle.sample.final_confidence)}'
+            f'{_format_pct(bundle.sample.final_probability)}'
         ),
         fontsize=12,
     )

@@ -79,19 +79,17 @@ def build_sample_explanation(
     final_label: str,
     names: list[str],
     models: list[Rrl],
-    predictions: list[tuple[pd.DataFrame, pd.Series]],
+    predictions: list[pd.DataFrame],
     active_lines: list[tuple[str, Line]],
     result: pd.DataFrame,
-    confidence: pd.Series,
 ) -> SampleExplanation:
     final_probability = series_item(calc_score(result))
-    final_confidence = series_item(confidence)
     active_line_map: dict[str, list[Line]] = {name: [] for name in names}
     for name, line in active_lines:
         active_line_map[name].append(line)
 
     modules: list[ModuleExplanation] = []
-    for name, rrl, (pred, conf) in zip(names, models, predictions, strict=True):
+    for name, rrl, pred in zip(names, models, predictions, strict=True):
         pred_label = get_max_label(pred).item()
         pred_probability = series_item(calc_score(pred))
         pred_row = pred.iloc[0]
@@ -125,7 +123,6 @@ def build_sample_explanation(
                 predicted_label=pred_label,
                 predicted_probability=pred_probability,
                 target_probability=target_probability,
-                confidence=series_item(conf),
                 bias_label=bias_label,
                 bias_score=bias_score,
                 bias_signed_score=bias_signed_score,
@@ -138,19 +135,16 @@ def build_sample_explanation(
         sample_id=sample_id,
         final_label=final_label,
         final_probability=final_probability,
-        final_confidence=final_confidence,
         modules=tuple(modules),
     )
 
 
 def get_sample_explanation(config: RrlEvalConfig) -> SampleExplanation:
     data, _, _, model = get_data_model(config)
-    full_result, _ = model.eval(data)
+    full_result = model.eval(data)
     sample_id = resolve_sample_id(config, full_result)
     sample_data = select_sample_data(data, sample_id, keep=config.keep)
-    names, models, predictions, active_lines, result, confidence = model.interpret(
-        sample_data
-    )
+    names, models, predictions, active_lines, result = model.interpret(sample_data)
     final_label = model.predict_labels(result).item()
     return build_sample_explanation(
         sample_id,
@@ -160,7 +154,6 @@ def get_sample_explanation(config: RrlEvalConfig) -> SampleExplanation:
         predictions,
         active_lines,
         result,
-        confidence,
     )
 
 
@@ -231,7 +224,6 @@ def get_rule_waterfall_data(config: RrlEvalPlotConfig) -> RrlWaterfallBundle:
                 'Sample ID': sample_id_text,
                 'Final Label': sample.final_label,
                 'Final Probability': sample.final_probability,
-                'Final Confidence': sample.final_confidence,
                 'Module': module.name,
                 'Kind': 'Bias',
                 'Display': 'Initial Bias',
@@ -251,7 +243,6 @@ def get_rule_waterfall_data(config: RrlEvalPlotConfig) -> RrlWaterfallBundle:
                     'Sample ID': sample_id_text,
                     'Final Label': sample.final_label,
                     'Final Probability': sample.final_probability,
-                    'Final Confidence': sample.final_confidence,
                     'Module': module.name,
                     'Kind': row['Kind'],
                     'Display': row['Display'],
@@ -271,13 +262,11 @@ def get_rule_waterfall_data(config: RrlEvalPlotConfig) -> RrlWaterfallBundle:
                 'Sample ID': sample_id_text,
                 'Final Label': sample.final_label,
                 'Final Probability': sample.final_probability,
-                'Final Confidence': sample.final_confidence,
                 'Module': module.name,
                 'Module Weight': module.weight,
                 'Module Label': module.predicted_label,
                 'Module Probability': module.predicted_probability,
                 'Target Probability': module.target_probability,
-                'Confidence': module.confidence,
                 'Bias Label': module.bias_label,
                 'Bias Score': module.bias_score,
                 'Bias Signed Score': module.bias_signed_score,

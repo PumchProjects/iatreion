@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -18,6 +19,7 @@ from sklearn import preprocessing
 from iatreion.configs import TrainConfig
 from iatreion.utils import logger
 
+from .imputation import SimpleImputerArtifact, SimpleImputerColumn
 from .limix import LimiXWorkerClient
 
 type EncodedData = tuple[NDArray, NDArray]
@@ -56,6 +58,7 @@ class DBEncoder:
         self.numeric_flen = 0
         self.mean: pd.Series | None = None
         self.std: pd.Series | None = None
+        self.simple_imputer: SimpleImputerArtifact | None = None
         self._continuous_mean = pd.Series(dtype=float)
         self._continuous_std = pd.Series(dtype=float)
 
@@ -163,21 +166,37 @@ class DBEncoder:
                 return frames
 
     def _simple_impute(self, frames: _FrameSplits) -> _FrameSplits:
-        fill_values: dict[str, float] = {}
+        columns: list[SimpleImputerColumn] = []
         for name in self.unordered_columns:
             mode = frames.train[name].dropna().mode()
-            fill_values[name] = np.nan if mode.empty else float(mode.iloc[0])
+            fill_value = np.nan if mode.empty else float(mode.iloc[0])
+            columns.append(SimpleImputerColumn(name, fill_value))
         for name in self.ordered_columns:
-            fill_values[name] = float(frames.train[name].median(skipna=True))
+            fill_value = float(frames.train[name].median(skipna=True))
+            columns.append(
+                SimpleImputerColumn(
+                    name,
+                    fill_value,
+                    snap_upper=self._category_count(name) - 1,
+                )
+            )
         for name in self.continuous_columns:
-            fill_values[name] = float(frames.train[name].mean(skipna=True))
+            fill_value = float(frames.train[name].mean(skipna=True))
+            columns.append(SimpleImputerColumn(name, fill_value))
 
+        self.simple_imputer = SimpleImputerArtifact(columns)
         for frame in (frames.train, frames.val, frames.test):
             if frame is None:
                 continue
-            frame.fillna(fill_values, inplace=True)
-            self._snap_categorical_columns(frame, self.ordered_columns)
+            frame.loc[:, :] = self.simple_imputer.apply(
+                frame,
+                preserve_all_missing=False,
+            )
         return frames
+
+    def save_simple_imputer(self, path: Path) -> None:
+        if self.simple_imputer is not None:
+            self.simple_imputer.save(path)
 
     def _limix_impute(self, frames: _FrameSplits, y_train: NDArray) -> _FrameSplits:
         if self.limix_client is None:

@@ -70,10 +70,8 @@ def show_result(master: tk.Tk, config: RrlEvalConfig) -> None:
     frm = ttk.Frame(dialog)
     frm.grid_columnconfigure(1, weight=1)
     frm.pack(fill=tk.X)
-    make_table(frm, 0, 0, result_list, '最终结果', '分组', '概率', '置信度')
-    make_table(
-        frm, 0, 1, pred_list, '各模块结果', '模块', '分组', '概率', '置信度', '权重'
-    )
+    make_table(frm, 0, 0, result_list, '最终结果', '分组', '概率')
+    make_table(frm, 0, 1, pred_list, '各模块结果', '模块', '分组', '概率', '权重')
     make_table(frm, 1, 0, bias_list, '初始偏差', '模块', '分组', '分数')
     make_table(frm, 1, 1, support_list, '支持规则', '模块', '分组', '分数', '规则')
     make_table(frm, 2, 1, oppose_list, '反对规则', '模块', '分组', '分数', '规则')
