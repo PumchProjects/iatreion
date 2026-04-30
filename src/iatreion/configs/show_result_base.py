@@ -32,11 +32,6 @@ class ShowResultConfig(ShowConfig):
 'stack': calibrated late fusion over available modality predictions.
 """
 
-    true_refs: Annotated[list[bool], Parameter(alias='-tr', consume_multiple=True)] = (
-        field(default_factory=lambda: [False])
-    )
-    'Align not only the test data, but also the training data to the reference data.'
-
     results: Annotated[list[str], Parameter(alias='-r', consume_multiple=True)]
     'Result names to show.'
 
@@ -68,9 +63,7 @@ class ShowResultConfig(ShowConfig):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        self._register(
-            self.models, self.aggregates, self.true_refs, self.results, self.labels
-        )
+        self._register(self.models, self.aggregates, self.results, self.labels)
 
     def _make_config(self) -> Generator[tuple[TrainConfig, int], None, None]:
         # HACK: Empty prefix
@@ -82,7 +75,6 @@ class ShowResultConfig(ShowConfig):
         pad_len = self._pad_lists()
         for i in range(pad_len):
             train_config.aggregate = self.aggregates[i]
-            train_config.true_ref = self.true_refs[i]
             train_config._log_dir = config.get_exp_root(self.models[i])
             yield train_config, i
 

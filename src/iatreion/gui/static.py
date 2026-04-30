@@ -58,8 +58,7 @@ groups_mapping = {
     '2': 'Aβ-',
 }
 
-keep_mapping: dict[Literal['all', 'first', 'last'], str] = {
-    'all': '保留所有记录',
+keep_mapping: dict[Literal['first', 'last'], str] = {
     'first': '保留第一条记录',
     'last': '保留最后一条记录',
 }

@@ -79,9 +79,6 @@ class TrainConfig:
 'none': keep categorical codes unchanged.
 """
 
-    true_ref: Annotated[bool, Parameter(alias='-tr')] = False
-    'Align not only the test data, but also the training data to the reference data.'
-
     eval_names: Annotated[list[str], Parameter(alias='-en', consume_multiple=True)] = (
         field(default_factory=list)
     )
@@ -234,8 +231,6 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     def ref_name_str(self) -> str:
         # HACK: Don't include `preprocess` here since RRL needs preprocessed data while discrete RRL doesn't
         descriptions = [self.aggregate]
-        if self.true_ref:
-            descriptions.append('true-ref')
         if self.label_name is not None:
             descriptions.append(f'on {self.label_name}')
         return ', '.join(descriptions)
