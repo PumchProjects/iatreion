@@ -33,6 +33,7 @@ class ConfigBundle:
     suspected: tk.BooleanVar = field(default_factory=tk.BooleanVar)
     index: tk.StringVar = field(default_factory=tk.StringVar)
     label: tk.StringVar = field(default_factory=tk.StringVar)
+    sample_id: tk.StringVar = field(default_factory=tk.StringVar)
     debug: tk.BooleanVar = field(default_factory=tk.BooleanVar)
 
     def set_field(self, field: str) -> None:
@@ -66,6 +67,8 @@ class ConfigBundle:
                 self.index.set(self.config.index_name)
             case 'label':
                 self.label.set(self.config.label_name)
+            case 'sample_id':
+                self.sample_id.set(self.config.sample_id)
             case 'debug':
                 self.debug.set(self.config.debug)
             case _:
@@ -114,6 +117,9 @@ class ConfigBundle:
 
     def set_label(self) -> None:
         self.config.label_name = self.label.get()
+
+    def set_sample_id(self) -> None:
+        self.config.sample_id = self.sample_id.get()
 
     def set_debug(self) -> None:
         self.config.debug = self.debug.get()

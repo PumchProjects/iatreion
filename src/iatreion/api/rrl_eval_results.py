@@ -96,25 +96,48 @@ def format_enabled_terms(config: RrlEvalConfig, names: list[DataName]) -> str:
     return '\n'.join(lines)
 
 
-def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
+def get_result(
+    config: RrlEvalConfig,
+) -> tuple[
+    str,
+    list[list[str]],
+    list[list[str]],
+    list[list[str]],
+    list[list[str]],
+    list[list[str]],
+]:
     sample = get_sample_explanation(config)
     result_list = [
         [
             sample.final_label,
+            f'{sample.final_score:+.2f}',
+            f'{sample.final_boundary:+.2f}',
             f'{sample.final_probability:.2%}',
+            f'{sample.positive_probability:.2%}',
+            f'{sample.threshold:.2%}',
         ]
     ]
     pred_list = [
         [
             module.name,
-            module.predicted_label,
-            f'{module.predicted_probability:.2%}',
+            module.label,
+            f'{module.score:+.2f}',
+            f'{module.probability:.2%}',
             f'{module.weight:.4f}',
         ]
         for module in sample.modules
     ]
+    pred_list.append(
+        [
+            'Total',
+            sample.final_label,
+            f'{sample.final_score:+.2f}',
+            f'{sample.final_probability:.2%}',
+            '1.0000',
+        ]
+    )
     bias_list = [
-        [module.name, module.bias_label, f'{module.bias_score:.2f}']
+        [module.name, module.bias_label, f'{module.bias_signed_score:+.2f}']
         for module in sample.modules
     ]
     support_list: list[list[str]] = []
@@ -122,12 +145,19 @@ def get_result(config: RrlEvalConfig) -> tuple[list[list[str]], ...]:
     if sample.final_label:
         for module in sample.modules:
             for rule in module.rules:
-                row = [module.name, rule.label, f'{rule.score:.2f}', rule.rule]
-                if rule.label == sample.final_label:
+                row = [module.name, rule.label, f'{rule.signed_score:+.2f}', rule.rule]
+                if rule.signed_score >= 0:
                     support_list.append(row)
                 else:
                     oppose_list.append(row)
-    return result_list, pred_list, bias_list, support_list, oppose_list
+    return (
+        sample.sample_id,
+        result_list,
+        pred_list,
+        bias_list,
+        support_list,
+        oppose_list,
+    )
 
 
 def get_batched_result(config: RrlEvalConfig) -> pd.DataFrame:

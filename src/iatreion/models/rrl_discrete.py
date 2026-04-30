@@ -683,7 +683,9 @@ class DiscreteRrlModel(Model):
         list[DataName],
         list[Rrl],
         list[pd.DataFrame],
+        list[pd.DataFrame],
         list[tuple[DataName, Line]],
+        pd.DataFrame,
         pd.DataFrame,
     ]:
         names = self.config.dataset.names
@@ -735,4 +737,12 @@ class DiscreteRrlModel(Model):
         for score in score_parts[1:]:
             final_score += score
         result = Rrl.softmax(final_score)
-        return available_names, models, predictions, active_lines, result
+        return (
+            available_names,
+            models,
+            score_parts,
+            predictions,
+            active_lines,
+            final_score,
+            result,
+        )

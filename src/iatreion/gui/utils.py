@@ -3,9 +3,16 @@ from collections.abc import Callable
 from tkinter import messagebox, ttk
 from typing import cast
 
+import matplotlib.pyplot as plt
+
 from iatreion.configs import DataName
 
 from .static import groups_mapping, names_mapping
+
+
+def set_font() -> None:
+    # HACK: Ensure font rendering for CJK characters in the laptop.
+    plt.rcParams['font.family'] = 'DejaVu Sans, FZHei-B01'
 
 
 def make_row(
@@ -112,7 +119,7 @@ def make_table(
     for items in data:
         for i in range(len(headers)):
             if headers[i] == '模块':
-                items[i] = names_mapping[cast(DataName, items[i])]
+                items[i] = names_mapping.get(cast(DataName, items[i]), items[i])
             elif headers[i] == '分组':
                 items[i] = groups_mapping.get(items[i], '失败')
         tree.insert('', tk.END, values=items)

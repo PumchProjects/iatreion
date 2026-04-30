@@ -14,23 +14,27 @@ class RuleExplanation:
 @dataclass(frozen=True)
 class ModuleExplanation:
     name: str
-    labels: tuple[str, ...]
     weight: float
-    predicted_label: str
-    predicted_probability: float
-    target_probability: float
+    label: str
+    score: float
+    probability: float
     bias_label: str
     bias_score: float
     bias_signed_score: float
-    target_margin: float
     rules: tuple[RuleExplanation, ...]
 
 
 @dataclass(frozen=True)
 class SampleExplanation:
     sample_id: str
+    labels: tuple[str, str]
+    positive_label: str
     final_label: str
+    final_score: float
+    final_boundary: float
     final_probability: float
+    positive_probability: float
+    threshold: float
     modules: tuple[ModuleExplanation, ...]
 
 

@@ -6,6 +6,7 @@ import pandas as pd
 from matplotlib.figure import Figure
 
 from iatreion.api import RrlWaterfallBundle
+from iatreion.gui.static import names_mapping
 from iatreion.show_helpers.data import group_mapping
 
 _SUPPORT_COLOR = (1.0, 0.0, 0.31796406298163893)
@@ -108,27 +109,41 @@ def _draw_endpoint_annotation(
     )
 
 
-def _draw_module_waterfall(
+def _format_rule_label(row: dict[str, object]) -> str:
+    display = str(row['Display'])
+    module = str(row['Module'])
+    if module == 'All':
+        return display
+    return f'[{names_mapping.get(module, module)}] {display}'
+
+
+def _draw_global_waterfall(
     ax: plt.Axes,
     contributions: pd.DataFrame,
-    module_row: pd.Series,
     *,
-    final_label: str,
+    bundle: RrlWaterfallBundle,
 ) -> None:
-    target_name = _get_target_name(final_label)
+    sample = bundle.sample
+    target_name = _get_target_name(sample.final_label)
     rows = (
         contributions[contributions['Kind'] != 'Bias']
         .sort_values('Order', ignore_index=True)
         .to_dict('records')
     )
+    bias = float(contributions.loc[contributions['Kind'] == 'Bias', 'End'].iloc[0])
+    score = sample.final_score
+    boundary = sample.final_boundary
     if not rows:
-        score = float(module_row['Target Margin'])
-        bias = float(module_row['Bias Signed Score'])
-        span = max(abs(score), abs(bias), 1.0)
+        span = max(abs(score), abs(bias), abs(boundary), 1.0)
         pad = max(0.25, span * 0.08)
-        ax.set_xlim(min(bias, score) - pad, max(bias, score) + pad)
+        ax.set_xlim(
+            min(0.0, bias, score, boundary) - pad,
+            max(0.0, bias, score, boundary) + pad,
+        )
         ax.set_ylim(1.2, -1.2)
-        ax.axvline(0.0, color='black', linewidth=0.8, linestyle=':')
+        ax.axvline(boundary, color='black', linewidth=1.1, linestyle='--')
+        if not np.isclose(boundary, 0.0):
+            ax.axvline(0.0, color='#aaaaaa', linewidth=0.8, linestyle=':')
         ax.set_yticks([])
         ax.grid(axis='x', linestyle=':', alpha=0.35)
         ax.set_axisbelow(True)
@@ -152,9 +167,17 @@ def _draw_module_waterfall(
             text_y=-0.95,
             text=_format_score_probability(
                 score,
-                float(module_row['Target Probability']),
+                sample.final_probability,
             ),
             va='bottom',
+        )
+        ax.text(
+            boundary,
+            -0.95,
+            f'boundary = {_format_score(boundary)}',
+            ha='center',
+            va='bottom',
+            fontsize=9,
         )
         ax.text(
             0.5,
@@ -171,9 +194,7 @@ def _draw_module_waterfall(
 
     y_pos = np.arange(len(rows))
     height = 0.65
-    bias = float(module_row['Bias Signed Score'])
-    score = float(module_row['Target Margin'])
-    all_points = [0.0, bias, score]
+    all_points = [0.0, bias, score, boundary]
     for row in rows:
         all_points.extend([float(row['Start']), float(row['End'])])
     x_min = min(all_points)
@@ -243,12 +264,22 @@ def _draw_module_waterfall(
         text_y=top_text_y,
         text=_format_score_probability(
             score,
-            float(module_row['Target Probability']),
+            sample.final_probability,
         ),
         va='bottom',
     )
-    ax.axvline(0.0, color='black', linewidth=0.8, linestyle=':')
-    ax.set_yticks(y_pos, [_wrap_label(str(row['Display'])) for row in rows])
+    ax.axvline(boundary, color='black', linewidth=1.1, linestyle='--')
+    if not np.isclose(boundary, 0.0):
+        ax.axvline(0.0, color='#aaaaaa', linewidth=0.8, linestyle=':')
+    ax.text(
+        boundary,
+        top_text_y + 0.2,
+        f'boundary = {_format_score(boundary)}',
+        ha='center',
+        va='bottom',
+        fontsize=9,
+    )
+    ax.set_yticks(y_pos, [_wrap_label(_format_rule_label(row)) for row in rows])
     ax.set_ylim(bottom_text_y + 0.25, top_text_y - 0.25)
     ax.xaxis.set_label_position('top')
     ax.set_xlabel(
@@ -269,37 +300,21 @@ def rrl_rule_waterfall_plot(
     title: str = '',
 ) -> Figure:
     target_name = _get_target_name(bundle.sample.final_label)
-    module_table = bundle.module_table.reset_index(drop=True)
     contribution_table = bundle.contribution_table
-    heights = [
-        max(
-            3.2,
-            1.8
-            + 0.5 * len(contribution_table[contribution_table['Module'] == row.Module]),
-        )
-        for row in module_table.itertuples()
-    ]
+    rule_count = len(contribution_table[contribution_table['Kind'] != 'Bias'])
+    height = max(4.0, 2.8 + 0.5 * rule_count)
     fig, axes = plt.subplots(
-        len(module_table),
         1,
-        figsize=(12.0, sum(heights) + 1.2),
+        1,
+        figsize=(13.0, height),
         layout='constrained',
         squeeze=False,
     )
-    for ax, (_, module_row) in zip(
-        axes[:, 0],
-        module_table.iterrows(),
-        strict=True,
-    ):
-        module_contrib = contribution_table[
-            contribution_table['Module'] == module_row['Module']
-        ]
-        _draw_module_waterfall(
-            ax,
-            module_contrib,
-            module_row,
-            final_label=bundle.sample.final_label,
-        )
+    _draw_global_waterfall(
+        axes[0, 0],
+        contribution_table,
+        bundle=bundle,
+    )
 
     fig.suptitle(
         title
@@ -307,7 +322,8 @@ def rrl_rule_waterfall_plot(
             'RRL Rule Waterfall\n'
             f'sample={bundle.sample.sample_id}, '
             f'final={target_name} '
-            f'{_format_pct(bundle.sample.final_probability)}'
+            f'{_format_pct(bundle.sample.final_probability)}, '
+            f'threshold={_format_pct(bundle.sample.threshold)}'
         ),
         fontsize=12,
     )

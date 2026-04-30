@@ -12,9 +12,11 @@ from iatreion.api import (
     get_eval_result,
     get_result,
     get_rule_options,
+    get_rule_waterfall_data,
 )
 from iatreion.configs import DataName, RrlEvalConfig, name_data_mapping
 from iatreion.exceptions import IatreionException
+from iatreion.show_helpers import rrl_rule_waterfall_plot
 from iatreion.utils import get_config_path, load_dict, save_dict
 
 from .bundle import ConfigBundle
@@ -34,6 +36,7 @@ from .utils import (
     make_row,
     make_table,
     select_items,
+    set_font,
     show_error_message,
 )
 
@@ -65,19 +68,99 @@ def save_batched_result(config: RrlEvalConfig) -> None:
         result.to_excel(path, float_format='%.4f')
 
 
+def show_waterfall(master: tk.Tk, config: RrlEvalConfig) -> None:
+    from matplotlib.backends.backend_tkagg import (
+        FigureCanvasTkAgg,
+        NavigationToolbar2Tk,
+    )
+
+    bundle = get_rule_waterfall_data(config)
+    fig = rrl_rule_waterfall_plot(bundle)
+    dialog = create_dialog(master, f'RRL Waterfall - {bundle.sample.sample_id}')
+    frm = ttk.Frame(dialog)
+    frm.pack(fill=tk.BOTH, expand=True)
+    fig_canvas = FigureCanvasTkAgg(fig, master=frm)
+    fig_canvas.draw()
+    fig_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+    toolbar = NavigationToolbar2Tk(fig_canvas, frm)
+    toolbar.update()
+
+    def close_dialog() -> None:
+        dialog.destroy()
+
+    ttk.Button(dialog, text='关闭', command=close_dialog).pack(pady=5)
+    master.protocol('WM_DELETE_WINDOW', fig_canvas.stop_event_loop)
+    master.wait_window(dialog)
+
+
 def show_result(master: tk.Tk, config: RrlEvalConfig) -> None:
-    result_list, pred_list, bias_list, support_list, oppose_list = get_result(config)
-    dialog = create_dialog(master, '预测结果')
+    (
+        sample_id,
+        result_list,
+        pred_list,
+        bias_list,
+        support_list,
+        oppose_list,
+    ) = get_result(config)
+    dialog = create_dialog(master, f'预测结果 - {sample_id}')
     frm = ttk.Frame(dialog)
     frm.grid_columnconfigure(1, weight=1)
     frm.pack(fill=tk.X)
-    make_table(frm, 0, 0, result_list, '最终结果', '分组', '概率')
-    make_table(frm, 0, 1, pred_list, '各模块结果', '模块', '分组', '概率', '权重')
+    make_table(
+        frm,
+        0,
+        0,
+        pred_list,
+        '各模块结果',
+        '模块',
+        '分组',
+        '分数',
+        '概率',
+        '权重',
+    )
+    make_table(
+        frm,
+        0,
+        1,
+        result_list,
+        '最终结果',
+        '分组',
+        '分数',
+        '边界',
+        '概率',
+        '阳性概率',
+        '阈值',
+    )
     make_table(frm, 1, 0, bias_list, '初始偏差', '模块', '分组', '分数')
     make_table(frm, 1, 1, support_list, '支持规则', '模块', '分组', '分数', '规则')
     make_table(frm, 2, 1, oppose_list, '反对规则', '模块', '分组', '分数', '规则')
-    close_button = ttk.Button(dialog, text='关闭', command=dialog.destroy)
-    close_button.pack(pady=5)
+
+    top_k = tk.StringVar(value=str(config.top_k))
+
+    def show_result_waterfall() -> None:
+        try:
+            config.top_k = int(top_k.get() or 0)
+            show_waterfall(master, config)
+        except Exception as e:
+            show_error_message(str(e))
+            if config.debug:
+                raise e
+        if dialog.winfo_exists():
+            dialog.grab_set()
+
+    button_frm = ttk.Frame(dialog)
+    button_frm.pack(pady=5)
+    ttk.Label(button_frm, text='Waterfall规则数:').pack(side=tk.LEFT, padx=5)
+    ttk.Entry(button_frm, textvariable=top_k, width=6).pack(side=tk.LEFT, padx=5)
+    ttk.Button(
+        button_frm,
+        text='Waterfall',
+        command=show_result_waterfall,
+    ).pack(side=tk.LEFT, padx=5)
+    ttk.Button(button_frm, text='关闭', command=dialog.destroy).pack(
+        side=tk.LEFT,
+        padx=5,
+    )
     master.wait_window(dialog)
 
 
@@ -289,7 +372,6 @@ def select_eval_terms(master: tk.Tk, config: RrlEvalConfig) -> None:
     )
     ttk.Button(button_frm, text='关闭', command=close_dialog).pack(side=tk.LEFT, padx=5)
 
-    dialog.protocol('WM_DELETE_WINDOW', close_dialog)
     master.wait_window(dialog)
 
 
@@ -354,7 +436,8 @@ def main() -> None:
             make_row(frm, i, label, bundle.data[data_name], '选择文件', command)
         row = start + len(data_names)
         make_row(frm, row, '患者ID列名:', bundle.index)
-        make_row(frm, row + 1, '患者分组列名:', bundle.label)
+        make_row(frm, row + 1, '患者ID:', bundle.sample_id)
+        make_row(frm, row + 2, '患者分组列名:', bundle.label)
 
     def set_names() -> None:
         selected_names = select_items(
@@ -417,10 +500,12 @@ def main() -> None:
     make_data_rows()
 
     def run_inference() -> None:
-        bundle.set_index()
-        bundle.set_label()
-        save_config(config, config_path)
         try:
+            bundle.set_index()
+            bundle.set_label()
+            bundle.set_sample_id()
+            save_config(config, config_path)
+            set_font()
             match config.mode:
                 case 'single':
                     show_result(root, config)
@@ -470,7 +555,7 @@ def main() -> None:
     button_frm.pack()
 
     make_button(button_frm, '查看模型', set_mode('show'))
-    make_button(button_frm, '分析首例', set_mode('single'))
+    make_button(button_frm, '分析样本', set_mode('single'))
     make_button(button_frm, '批量预测', set_mode('eval'))
     make_button(button_frm, '批量导出', set_mode('batch'))
 

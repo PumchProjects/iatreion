@@ -14,9 +14,6 @@ class RrlEvalPlotConfig(RrlEvalConfig):
     mode: Literal['plot'] = field(init=False, default='plot')
     'Mode of RRL evaluation.'
 
-    top_k: Annotated[int, Parameter(alias='-top')] = 20
-    'Number of active rules to display per module.'
-
     title: Annotated[str, Parameter(alias='-pt')] = ''
     'Optional title for the generated figure.'
 

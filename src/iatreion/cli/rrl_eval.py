@@ -17,7 +17,14 @@ from .common import console
 
 
 def get_table(title: str, *headers: str) -> Table:
-    right_columns = {'Score', 'Probability', 'Weight'}
+    right_columns = {
+        'Boundary',
+        'Positive Probability',
+        'Probability',
+        'Score',
+        'Threshold',
+        'Weight',
+    }
     return Table(
         *(
             Column(header=name, justify='right' if name in right_columns else 'left')
@@ -30,13 +37,35 @@ def get_table(title: str, *headers: str) -> Table:
 
 
 def display_result(config: RrlEvalConfig) -> None:
-    result_list, pred_list, bias_list, support_list, oppose_list = get_result(config)
+    (
+        sample_id,
+        result_list,
+        pred_list,
+        bias_list,
+        support_list,
+        oppose_list,
+    ) = get_result(config)
 
-    result_table = get_table('Result', 'Label', 'Probability')
+    result_table = get_table(
+        f'Result (sample={sample_id})',
+        'Label',
+        'Score',
+        'Boundary',
+        'Probability',
+        'Positive Probability',
+        'Threshold',
+    )
     result_table.add_row(*result_list[0], style='bold green')
     console.print(result_table)
 
-    pred_table = get_table('Predictions', 'Module', 'Label', 'Probability', 'Weight')
+    pred_table = get_table(
+        'Predictions',
+        'Module',
+        'Label',
+        'Score',
+        'Probability',
+        'Weight',
+    )
     for line in pred_list:
         pred_table.add_row(*line)
     console.print(pred_table)

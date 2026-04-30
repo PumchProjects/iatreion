@@ -16,6 +16,7 @@ from iatreion.configs import FoldScope, ImportanceMethod, ShowImportanceConfig
 from iatreion.exceptions import IatreionException
 from iatreion.models import ImportanceScore
 
+# HACK: Ensure font rendering for CJK characters in the server.
 plt.rcParams['font.family'] = 'DejaVu Sans, Noto Sans CJK JP'
 
 type FoldKey = tuple[int, int]

@@ -76,6 +76,9 @@ class RrlEvalConfig:
     sample_id: Annotated[str, Parameter(alias='-si')] = ''
     'Sample ID taken from the dataframe index.'
 
+    top_k: Annotated[int, Parameter(alias='-top')] = 20
+    'Number of active rules to display in the RRL waterfall plot.'
+
     debug: Annotated[bool, Parameter(alias='-D')] = False
     'Whether to enable debug mode.'
 
