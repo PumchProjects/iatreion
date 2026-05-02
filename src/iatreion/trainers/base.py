@@ -12,8 +12,8 @@ from .recorder import Finish, Recorder, TrainerReturn
 from .utils import (
     publish_final_available_fusion_artifact,
     record_average,
-    record_concats,
-    record_stack,
+    record_calibrated_concat,
+    record_calibrated_fusion,
     save_available_fusion_artifact,
     validate_final_available_fusion_artifact,
 )
@@ -111,16 +111,16 @@ class Trainer(ABC):
                         record_average(
                             self.train_config, outer_fold, recorders, outer_recorders
                         )
-                    case 'concats':
-                        record_concats(
+                    case 'calibrated-concat':
+                        record_calibrated_concat(
                             self.train_config,
                             outer_fold,
                             recorders,
                             inner_recorders,
                             outer_recorders,
                         )
-                    case 'stack':
-                        record_stack(
+                    case 'calibrated-fusion':
+                        record_calibrated_fusion(
                             self.train_config,
                             outer_fold,
                             recorders,

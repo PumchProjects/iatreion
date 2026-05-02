@@ -261,7 +261,7 @@ def record_average(
     aggregate(config, fold, recorders, 'all_simple_average', last)
 
 
-def record_concats(
+def record_calibrated_concat(
     config: TrainConfig,
     fold: int,
     recorders: dict[str, Recorder],
@@ -271,20 +271,20 @@ def record_concats(
     last = get_last_predictions(outer_recorders)
     final = get_final_predictions(fold, inner_recorders)
     fusion_artifact = fit_available_fusion_artifact(
-        config, fold, final, log_prefix='weights_concats'
+        config, fold, final, log_prefix='weights_calibrated_concat'
     )
     aggregate(
         config,
         fold,
         recorders,
-        'all_concats',
+        'all_calibrated_concat',
         last,
         final,
         fusion_artifact=fusion_artifact,
     )
 
 
-def record_stack(
+def record_calibrated_fusion(
     config: TrainConfig,
     fold: int,
     recorders: dict[str, Recorder],
@@ -295,13 +295,13 @@ def record_stack(
     final = get_final_predictions(fold, inner_recorders)
 
     fusion_artifact = fit_available_fusion_artifact(
-        config, fold, final, log_prefix='weights_stacking'
+        config, fold, final, log_prefix='weights_calibrated_fusion'
     )
     aggregate(
         config,
         fold,
         recorders,
-        'all_stacking',
+        'all_calibrated_fusion',
         last,
         final,
         fusion_artifact=fusion_artifact,

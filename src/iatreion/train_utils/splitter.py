@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
 from iatreion.configs import DataName, DatasetConfig, ImportanceMethod, TrainConfig
+from iatreion.configs.train import INNER_SPLIT_AGGREGATES
 from iatreion.utils import encode_string
 
 from .limix import LimiXWorkerClient, LimiXWorkerConfig
@@ -75,7 +76,7 @@ def read_data(
 
 
 def get_data_names(dataset: DatasetConfig, train: TrainConfig) -> list[str]:
-    if train.aggregate in ('concat', 'concats'):
+    if train.aggregate in ('concat', 'calibrated-concat'):
         # HACK: Delicate config should change the name according to train.final
         return [dataset.name_str] if train.final else ['all_concat']
     if not train.eval_names:
@@ -175,7 +176,7 @@ def get_train_iterator(
         )
 
     try:
-        if train.aggregate in ('concat', 'concats'):
+        if train.aggregate in ('concat', 'calibrated-concat'):
             X_df, _, f_df = merge_data(X_dfs, [ref_y_df], f_dfs)
             data_frames = dict.fromkeys(data_names, (X_df, f_df))
         else:
@@ -189,7 +190,7 @@ def get_train_iterator(
             outer_splitter = get_train_test(train.n_outer_splits, ref_y_df)
 
         for outer_fold, (train_outer, test_outer) in enumerate(outer_splitter):
-            if train.aggregate in ('concats', 'stack') and not train.final:
+            if train.aggregate in INNER_SPLIT_AGGREGATES and not train.final:
                 inner_splitter = chain(
                     get_train_test(train.n_inner_splits, ref_y_df[train_outer]),
                     [(train_outer, test_outer)],
@@ -199,7 +200,7 @@ def get_train_iterator(
 
             for inner_fold, (train_inner, test_inner) in enumerate(inner_splitter):
                 is_inner = (
-                    train.aggregate in ('concats', 'stack')
+                    train.aggregate in INNER_SPLIT_AGGREGATES
                     and inner_fold < train.n_inner_folds
                 )
 

@@ -26,9 +26,16 @@ type SamplerName = Literal[
     'svmsmote',
     'kmeanssmote',
 ]
-type AggregationMethod = Literal['average', 'concat', 'concats', 'stack']
+type AggregationMethod = Literal[
+    'average', 'concat', 'calibrated-concat', 'calibrated-fusion'
+]
 type MissingValueStrategy = Literal['simple', 'limix', 'none']
 type DiscreteProcessingStrategy = Literal['onehot', 'minmax', 'none']
+
+INNER_SPLIT_AGGREGATES: tuple[AggregationMethod, ...] = (
+    'calibrated-concat',
+    'calibrated-fusion',
+)
 
 
 @Parameter(name='*')
@@ -49,8 +56,10 @@ class TrainConfig:
     """Aggregation strategy for multimodal samples of the same patient.
 'average': simple average predictions of different modalities.
 'concat': concatenate features of different modalities.
-'concats': concatenate features of different modalities and adjust classification threshold.
-'stack': calibrated late fusion over available modality predictions.
+'calibrated-concat': concatenate features into one RRL, calibrate its logit,
+and tune the clinical threshold.
+'calibrated-fusion': train one RRL per modality, calibrate each modality logit,
+and combine available modalities with equal-weight late fusion.
 """
 
     preprocess: Annotated[bool, Parameter(negative='--no-pp')] = True
@@ -88,7 +97,7 @@ class TrainConfig:
     'Number of splits for outer cross-validation.'
 
     n_inner_splits: Annotated[int, Parameter(alias='-nis')] = 5
-    "Number of splits for inner cross-validation, used when aggregate='stack'."
+    "Number of splits for inner cross-validation, used when aggregate='calibrated-fusion' or 'calibrated-concat'."
 
     clinical_threshold_label: Annotated[str, Parameter(alias='-ctl')] = ''
     'Class label whose recall is targeted by the pre-specified clinical threshold.'
@@ -252,7 +261,7 @@ For discrete RRL, validation set is used for optimization when val_size is set.
         # HACK: Coupled with get_train_iterator()
         if self.final:
             return 1
-        if self.aggregate in ('concats', 'stack'):
+        if self.aggregate in INNER_SPLIT_AGGREGATES:
             return self.n_outer_folds * (self.n_inner_folds + 1)
         return self.n_outer_folds
 

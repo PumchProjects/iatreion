@@ -28,8 +28,10 @@ class ShowResultConfig(ShowConfig):
     """Aggregation strategy for multimodal samples of the same patient.
 'average': simple average predictions of different modalities.
 'concat': concatenate features of different modalities.
-'concats': concatenate features of different modalities and adjust classification threshold.
-'stack': calibrated late fusion over available modality predictions.
+'calibrated-concat': concatenate features into one RRL, calibrate its logit,
+and tune the clinical threshold.
+'calibrated-fusion': train one RRL per modality, calibrate each modality logit,
+and combine available modalities with equal-weight late fusion.
 """
 
     results: Annotated[list[str], Parameter(alias='-r', consume_multiple=True)]
