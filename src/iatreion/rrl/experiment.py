@@ -131,30 +131,16 @@ def print_rules(
 ) -> Any:
     train_loader = get_data_loader(args, *ctx.train_data)
     db_enc = ctx.db_enc
-    if args.print_rule:
-        with open(
-            args.train._log_dir / ctx.rrl_file, 'w', encoding='utf-8'
-        ) as rrl_file:
-            rule2weights = rrl.rule_print(
-                db_enc.X_fname,
-                db_enc.X_compl_fname,
-                db_enc.y_fname,
-                train_loader,
-                file=rrl_file,
-                mean=db_enc.mean,
-                std=db_enc.std,
-                metrics=metrics,
-            )
-    else:
+    with open(args.train._log_dir / ctx.rrl_file, 'w', encoding='utf-8') as rrl_file:
         rule2weights = rrl.rule_print(
             db_enc.X_fname,
             db_enc.X_compl_fname,
             db_enc.y_fname,
             train_loader,
+            file=rrl_file,
             mean=db_enc.mean,
             std=db_enc.std,
             metrics=metrics,
-            display=False,
         )
     return rule2weights
 

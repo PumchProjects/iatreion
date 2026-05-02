@@ -77,9 +77,6 @@ class RrlConfig(ModelConfig):
     weighted: bool = False
     'Use weighted loss for imbalanced data.'
 
-    print_rule: bool = False
-    'Print the rules.'
-
     conjunction_only: bool = False
     'Use only conjunction logical layers. When false, each logical layer includes both conjunction and disjunction branches.'
 
