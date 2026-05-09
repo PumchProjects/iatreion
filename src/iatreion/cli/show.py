@@ -13,10 +13,13 @@ from iatreion.configs import (
 from iatreion.show_helpers import (
     acc_mcnemar_ci_barplot,
     acc_wilcoxon_std_barplot,
-    auc_delong_ci_barplot,
-    auc_wilcoxon_std_barplot,
+    auprc_wilcoxon_pvalue_heatmap,
+    auprc_wilcoxon_std_barplot,
+    auroc_delong_ci_barplot,
+    auroc_delong_pvalue_heatmap,
+    auroc_wilcoxon_pvalue_heatmap,
+    auroc_wilcoxon_std_barplot,
     bar,
-    delong_pvalue_heatmap,
     feature_importance_barplot,
     feature_importance_heatmap,
     make_ci_delong_table,
@@ -31,7 +34,6 @@ from iatreion.show_helpers import (
     shap_summary_plot,
     shap_waterfall_plot,
     violin,
-    wilcoxon_pvalue_heatmap,
 )
 
 from .common import console
@@ -100,29 +102,36 @@ def latex_feature_diff(
 
 @sub_app.command(group=performance, sort_key=next(counter))
 def latex_mean_std_wilcoxon(*, config: ShowPerformanceConfig) -> None:
-    """Make a LaTeX table for mean/std metrics and Wilcoxon test."""
+    """Make a LaTeX table for mean/std metrics and AUROC Wilcoxon test."""
     table = make_mean_std_wilcoxon_table(config)
     console.print(save(config, table, index=False))
 
 
 @sub_app.command(group=performance, sort_key=next(counter))
 def latex_ci_delong(*, config: ShowPerformanceConfig) -> None:
-    """Make a LaTeX table for 95% CI metrics and DeLong test."""
+    """Make a LaTeX table for 95% CI metrics and AUROC DeLong test."""
     table = make_ci_delong_table(config)
     console.print(save(config, table, index=False))
 
 
 @sub_app.command(group=performance, sort_key=next(counter))
-def heatmap_wilcoxon_pvalue(*, config: ShowPerformanceConfig) -> None:
-    """Make pairwise Wilcoxon p-value heatmap for all models."""
-    matrix, fig = wilcoxon_pvalue_heatmap(config)
+def heatmap_auroc_wilcoxon_pvalue(*, config: ShowPerformanceConfig) -> None:
+    """Make pairwise AUROC Wilcoxon p-value heatmap for all models."""
+    matrix, fig = auroc_wilcoxon_pvalue_heatmap(config)
     console.print(save(config, matrix, fig, float_format=lambda value: f'{value:.4f}'))
 
 
 @sub_app.command(group=performance, sort_key=next(counter))
-def heatmap_delong_pvalue(*, config: ShowPerformanceConfig) -> None:
-    """Make pairwise DeLong p-value heatmap for all models."""
-    matrix, fig = delong_pvalue_heatmap(config)
+def heatmap_auprc_wilcoxon_pvalue(*, config: ShowPerformanceConfig) -> None:
+    """Make pairwise AUPRC Wilcoxon p-value heatmap for all models."""
+    matrix, fig = auprc_wilcoxon_pvalue_heatmap(config)
+    console.print(save(config, matrix, fig, float_format=lambda value: f'{value:.4f}'))
+
+
+@sub_app.command(group=performance, sort_key=next(counter))
+def heatmap_auroc_delong_pvalue(*, config: ShowPerformanceConfig) -> None:
+    """Make pairwise AUROC DeLong p-value heatmap for all models."""
+    matrix, fig = auroc_delong_pvalue_heatmap(config)
     console.print(save(config, matrix, fig, float_format=lambda value: f'{value:.4f}'))
 
 
@@ -134,9 +143,9 @@ def roc_delong_comparison(*, config: ShowPerformanceConfig) -> None:
 
 
 @sub_app.command(group=performance, sort_key=next(counter))
-def bar_auc_delong_ci(*, config: ShowPerformanceConfig) -> None:
-    """Bar plot for AUC + DeLong + 95% CI."""
-    table, fig = auc_delong_ci_barplot(config)
+def bar_auroc_delong_ci(*, config: ShowPerformanceConfig) -> None:
+    """Bar plot for AUROC + DeLong + 95% CI."""
+    table, fig = auroc_delong_ci_barplot(config)
     console.print(save(config, table, fig, index=False))
 
 
@@ -148,9 +157,16 @@ def bar_acc_mcnemar_ci(*, config: ShowPerformanceConfig) -> None:
 
 
 @sub_app.command(group=performance, sort_key=next(counter))
-def bar_auc_wilcoxon_std(*, config: ShowPerformanceConfig) -> None:
-    """Bar plot for AUC + Wilcoxon + fold std."""
-    table, fig = auc_wilcoxon_std_barplot(config)
+def bar_auroc_wilcoxon_std(*, config: ShowPerformanceConfig) -> None:
+    """Bar plot for AUROC + Wilcoxon + fold std."""
+    table, fig = auroc_wilcoxon_std_barplot(config)
+    console.print(save(config, table, fig, index=False))
+
+
+@sub_app.command(group=performance, sort_key=next(counter))
+def bar_auprc_wilcoxon_std(*, config: ShowPerformanceConfig) -> None:
+    """Bar plot for AUPRC + Wilcoxon + fold std."""
+    table, fig = auprc_wilcoxon_std_barplot(config)
     console.print(save(config, table, fig, index=False))
 
 

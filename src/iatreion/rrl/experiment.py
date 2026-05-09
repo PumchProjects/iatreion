@@ -116,6 +116,7 @@ def train_model(
             class_weights=class_weights,
             log_iter=args.log_iter,
             save_interval=args.save_interval,
+            validation_metric=args.validation_metric,
             early_stop_patience=args.early_stop_patience,
             early_stop_min_delta=args.early_stop_min_delta,
             label_smoothing=args.label_smoothing,

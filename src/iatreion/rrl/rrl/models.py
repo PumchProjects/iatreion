@@ -159,7 +159,7 @@ class RRL:
         self.gamma = gamma
         self.use_disjunction = use_disjunction
         self.use_missing_aware = use_missing_aware
-        self.best_f1 = -1.0
+        self.best_validation_score = -np.inf
         self.best_loss = 1e20
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -240,6 +240,7 @@ class RRL:
         class_weights=None,
         log_iter=50,
         save_interval=100,
+        validation_metric='f1',
         early_stop_patience=None,
         early_stop_min_delta=0.0,
         label_smoothing=0.0,
@@ -326,21 +327,35 @@ class RRL:
                 self.clip()
 
                 if valid_loader is not None and cnt > 0 and cnt % save_interval == 0:
-                    _, acc_b, f1_b = self.test(
+                    _, acc_b, f1_b, auroc_b, auprc_b = self.test(
                         test_loader=valid_loader, set_name='Validation'
                     )
                     avg_epoch_loss_rrl = epoch_loss_rrl / max(ba_cnt, 1)
-                    improved = (f1_b - self.best_f1) > early_stop_min_delta
-                    same_f1_better_loss = (
-                        np.abs(f1_b - self.best_f1) <= early_stop_min_delta
+                    validation_scores = {
+                        'f1': f1_b,
+                        'auroc': auroc_b,
+                        'auprc': auprc_b,
+                    }
+                    validation_score = validation_scores[validation_metric]
+                    improved = (
+                        np.isfinite(validation_score)
+                        and (validation_score - self.best_validation_score)
+                        > early_stop_min_delta
+                    )
+                    same_score_better_loss = (
+                        np.isfinite(validation_score)
+                        and np.abs(validation_score - self.best_validation_score)
+                        <= early_stop_min_delta
                         and self.best_loss > avg_epoch_loss_rrl
                     )
-                    if improved or same_f1_better_loss:
+                    if improved or same_score_better_loss:
                         logger.info(
-                            f'[bold yellow]New best model found! {self.best_f1:.2%} -> {f1_b:.2%}',
+                            f'[bold yellow]New best model found! '
+                            f'{validation_metric.upper()} '
+                            f'{self.best_validation_score:.2%} -> {validation_score:.2%}',
                             extra={'markup': True},
                         )
-                        self.best_f1 = f1_b
+                        self.best_validation_score = validation_score
                         self.best_loss = avg_epoch_loss_rrl
                         self.save_model(1.0 - acc_b, f1_b)
                         no_improve_checks = 0
@@ -349,7 +364,7 @@ class RRL:
                         if no_improve_checks >= early_stop_patience:
                             logger.info(
                                 f'[bold yellow]Early stopping triggered at epoch {epo}, step {cnt}: '
-                                f'no validation F1 improvement > {early_stop_min_delta} '
+                                f'no validation {validation_metric.upper()} improvement > {early_stop_min_delta} '
                                 f'for {early_stop_patience} checks.',
                                 extra={'markup': True},
                             )
@@ -364,6 +379,12 @@ class RRL:
                         self.writer.add_scalar(
                             'F1_Score_RRL', f1_b, cnt // save_interval
                         )
+                        self.writer.add_scalar(
+                            'AUROC_RRL', auroc_b, cnt // save_interval
+                        )
+                        self.writer.add_scalar(
+                            'AUPRC_RRL', auprc_b, cnt // save_interval
+                        )
                     if early_stopped:
                         break
 
@@ -371,7 +392,9 @@ class RRL:
             if (
                 valid_loader is None and epo % save_interval == 0
             ):  # use the data_loader as the valid loader
-                _, acc_b, f1_b = self.test(test_loader=data_loader, set_name='Training')
+                _, acc_b, f1_b, _auroc_b, _auprc_b = self.test(
+                    test_loader=data_loader, set_name='Training'
+                )
                 avg_epoch_loss_rrl = epoch_loss_rrl / max(ba_cnt, 1)
                 if avg_epoch_loss_rrl < best_loss:
                     logger.info(
@@ -397,9 +420,15 @@ class RRL:
             if early_stopped:
                 break
 
-        if valid_loader is not None and self.best_f1 < 0:
-            _, acc_b, f1_b = self.test(test_loader=valid_loader, set_name='Validation')
-            self.best_f1 = f1_b
+        if valid_loader is not None and not np.isfinite(self.best_validation_score):
+            _, acc_b, f1_b, auroc_b, auprc_b = self.test(
+                test_loader=valid_loader, set_name='Validation'
+            )
+            self.best_validation_score = {
+                'f1': f1_b,
+                'auroc': auroc_b,
+                'auprc': auprc_b,
+            }[validation_metric]
             self.best_loss = epoch_loss_rrl / max(ba_cnt, 1)
             self.save_model(1.0 - acc_b, f1_b)
 
@@ -447,19 +476,48 @@ class RRL:
         f1_score_b = metrics.f1_score(
             y_true, y_pred_b_arg, average='macro', zero_division=0
         )
+        auroc_score_b = self.score_predictions(y_true, y_pred_b, metric='auroc')
+        auprc_score_b = self.score_predictions(y_true, y_pred_b, metric='auprc')
 
         labels = list(range(self.dim_list[-1]))
         logger.debug('-' * 60)
         logger.debug(
             f'On {set_name} Set:\n\tAccuracy of RRL  Model: {accuracy_b}'
             f'\n\tF1 Score of RRL  Model: {f1_score_b}'
+            f'\n\tAUROC of RRL  Model: {auroc_score_b}'
+            f'\n\tAUPRC of RRL  Model: {auprc_score_b}'
         )
         logger.debug(
             f'On {set_name} Set:\nPerformance of  RRL Model: \n{metrics.confusion_matrix(y_true, y_pred_b_arg, labels=labels)}\n{metrics.classification_report(y_true, y_pred_b_arg, zero_division=0)}'
         )
         logger.debug('-' * 60)
 
-        return y_pred_b, accuracy_b, f1_score_b
+        return y_pred_b, accuracy_b, f1_score_b, auroc_score_b, auprc_score_b
+
+    def score_predictions(self, y_true, y_score, *, metric):
+        try:
+            if metric == 'auroc':
+                if self.dim_list[-1] <= 2:
+                    return metrics.roc_auc_score(y_true, y_score[:, 1])
+                return metrics.roc_auc_score(
+                    y_true,
+                    y_score,
+                    average='macro',
+                    multi_class='ovr',
+                    labels=list(range(self.dim_list[-1])),
+                )
+            if self.dim_list[-1] <= 2:
+                target = (y_true == self.dim_list[-1] - 1).astype(int)
+                if np.unique(target).shape[0] < 2:
+                    return np.nan
+                return metrics.average_precision_score(target, y_score[:, 1])
+            return metrics.average_precision_score(
+                np.eye(self.dim_list[-1], dtype=int)[y_true],
+                y_score,
+                average='macro',
+            )
+        except ValueError:
+            return np.nan
 
     def save_model(self, *metrics):
         state_dict = {
@@ -529,7 +587,9 @@ class RRL:
         if not display:
             return layer.rule2weights
 
-        _, acc, f1 = self.test(test_loader=train_loader, set_name='Training')
+        _, acc, f1, _auroc, _auprc = self.test(
+            test_loader=train_loader, set_name='Training'
+        )
         temp = torch.exp(self.net.t).item()
         metadata = (
             'Meta(et={:.4f},ft={:.4f},ev={:.4f},fv={:.4f},t={:.5f},tau={:.4f})'

@@ -21,9 +21,11 @@ def roc_delong_comparison_plot(
     results, _ = _prepare_results(config)
     best = max(
         results,
-        key=lambda result: -np.inf if np.isnan(result.full_auc) else result.full_auc,
+        key=lambda result: (
+            -np.inf if np.isnan(result.full_auroc) else result.full_auroc
+        ),
     )
-    if np.isnan(best.full_auc):
+    if np.isnan(best.full_auroc):
         best = results[0]
 
     y_true_binary = _to_binary_target(best.y_true)
@@ -40,8 +42,10 @@ def roc_delong_comparison_plot(
             pvalue = _delong_pvalue(best.y_true, best.y_score_pos, result.y_score_pos)
             pvalue_text = _format_pvalue(pvalue)
 
-        auc_text = 'nan' if np.isnan(result.full_auc) else f'{result.full_auc:.3f}'
-        legend = f'{result.label} (AUC={auc_text}, p={pvalue_text})'
+        auroc_text = (
+            'nan' if np.isnan(result.full_auroc) else f'{result.full_auroc:.3f}'
+        )
+        legend = f'{result.label} (AUROC={auroc_text}, p={pvalue_text})'
         ax.plot(
             fpr,
             tpr,
@@ -51,7 +55,7 @@ def roc_delong_comparison_plot(
         rows.append(
             {
                 'Model': result.label,
-                'AUC': _format_rate(result.full_auc),
+                'AUROC': _format_rate(result.full_auroc),
                 pvalue_col: pvalue_text,
             }
         )

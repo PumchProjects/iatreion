@@ -114,14 +114,16 @@ def _build_metric_significance_barplot(
     return pd.DataFrame(rows), fig
 
 
-def auc_delong_ci_barplot(config: ShowPerformanceConfig) -> tuple[pd.DataFrame, Figure]:
+def auroc_delong_ci_barplot(
+    config: ShowPerformanceConfig,
+) -> tuple[pd.DataFrame, Figure]:
     results, ref = _prepare_results(config)
     return _build_metric_significance_barplot(
         results,
         ref,
-        metric='AUC',
+        metric='AUROC',
         title=config.title,
-        ylabel='AUC',
+        ylabel='AUROC',
         summary_getter=_get_ci_metric_summary,
         pvalue_getter=lambda left, right: _delong_pvalue(
             left.y_true, left.y_score_pos, right.y_score_pos
@@ -148,20 +150,39 @@ def acc_mcnemar_ci_barplot(
     )
 
 
-def auc_wilcoxon_std_barplot(
+def auroc_wilcoxon_std_barplot(
     config: ShowPerformanceConfig,
 ) -> tuple[pd.DataFrame, Figure]:
     results, ref = _prepare_results(config)
     return _build_metric_significance_barplot(
         results,
         ref,
-        metric='AUC',
+        metric='AUROC',
         title=config.title,
-        ylabel='AUC',
+        ylabel='AUROC',
         summary_getter=_get_mean_std_metric_summary,
         pvalue_getter=lambda left, right: _wilcoxon_pvalue(
-            _get_fold_metric_values(left, 'AUC'),
-            _get_fold_metric_values(right, 'AUC'),
+            _get_fold_metric_values(left, 'AUROC'),
+            _get_fold_metric_values(right, 'AUROC'),
+        ),
+        test_name='Wilcoxon',
+    )
+
+
+def auprc_wilcoxon_std_barplot(
+    config: ShowPerformanceConfig,
+) -> tuple[pd.DataFrame, Figure]:
+    results, ref = _prepare_results(config)
+    return _build_metric_significance_barplot(
+        results,
+        ref,
+        metric='AUPRC',
+        title=config.title,
+        ylabel='AUPRC',
+        summary_getter=_get_mean_std_metric_summary,
+        pvalue_getter=lambda left, right: _wilcoxon_pvalue(
+            _get_fold_metric_values(left, 'AUPRC'),
+            _get_fold_metric_values(right, 'AUPRC'),
         ),
         test_name='Wilcoxon',
     )

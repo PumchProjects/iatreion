@@ -25,7 +25,16 @@ type MetricSummaryGetter = Callable[
     ['LoadedResult', str], tuple[float, float, float, str]
 ]
 
-DEFAULT_BINARY_METRICS: list[str] = ['AUC', 'ACC', 'P', 'R', 'F1', 'SEN', 'SPC']
+DEFAULT_BINARY_METRICS: list[str] = [
+    'AUROC',
+    'AUPRC',
+    'ACC',
+    'P',
+    'R',
+    'F1',
+    'SEN',
+    'SPC',
+]
 RATE_PATTERN = r'(?:nan|[+-]?\d+(?:\.\d+)?)'
 MEAN_STD_PATTERN = re.compile(
     rf'^(?P<metric>[A-Z0-9]+)\s+(?P<mean>{RATE_PATTERN})%\s+\S+\s+'
@@ -53,11 +62,10 @@ class LoadedResult:
     mean_std: MeanStdMetrics
     ci: CiMetrics
     fold_metrics: dict[str, NDArray[np.floating]]
-    auc_folds: NDArray[np.floating]
     y_true: NDArray[np.integer]
     y_pred: NDArray[np.integer]
     y_score_pos: NDArray[np.floating]
-    full_auc: float
+    full_auroc: float
 
 
 def _parse_rate(value: str) -> float:
@@ -181,30 +189,18 @@ def _extract_pos_score(y_score: NDArray[np.floating]) -> NDArray[np.floating]:
     return y_score[:, 1]
 
 
-def _predict_labels(y_score: NDArray[np.floating]) -> NDArray[np.integer]:
-    if y_score.ndim == 1:
-        return (y_score >= 0.5).astype(int)
-    if y_score.ndim != 2:
-        raise IatreionException(
-            'y_score should be 1D or 2D, got $ndim.', ndim=str(y_score.ndim)
-        )
-    if y_score.shape[1] == 1:
-        return (y_score[:, 0] >= 0.5).astype(int)
-    return np.argmax(y_score, axis=1).astype(int)
-
-
 def _to_binary_target(y_true: NDArray[np.integer]) -> NDArray[np.integer]:
     labels = np.unique(y_true)
     if labels.size != 2:
         raise IatreionException(
-            'AUC comparison currently supports binary tasks only; got $n classes.',
+            'Score comparison currently supports binary tasks only; got $n classes.',
             n=str(labels.size),
         )
     pos_label = labels[-1]
     return (y_true == pos_label).astype(int)
 
 
-def _safe_auc(y_true: NDArray[np.integer], y_score: NDArray[np.floating]) -> float:
+def _safe_auroc(y_true: NDArray[np.integer], y_score: NDArray[np.floating]) -> float:
     try:
         return float(roc_auc_score(_to_binary_target(y_true), y_score))
     except ValueError:
@@ -227,6 +223,7 @@ def _load_result(source: ResultSource) -> LoadedResult:
     arrays = _load_npz(source.result_file)
     try:
         y_true = np.asarray(arrays['y_true']).astype(int).reshape(-1)
+        y_pred = np.asarray(arrays['y_pred']).astype(int).reshape(-1)
         y_score = np.asarray(arrays['y_score']).astype(float)
     except KeyError as error:
         raise IatreionException(
@@ -238,15 +235,18 @@ def _load_result(source: ResultSource) -> LoadedResult:
     fold_metrics = {
         key: np.asarray(value).astype(float).reshape(-1)
         for key, value in arrays.items()
-        if key not in {'y_true', 'y_score'} and np.asarray(value).ndim == 1
+        if key not in {'y_true', 'y_pred', 'y_score', 'y_mask'}
+        and np.asarray(value).ndim == 1
     }
-    if 'AUC' not in fold_metrics:
+    for metric in ('AUROC', 'AUPRC'):
+        if metric in fold_metrics:
+            continue
         raise IatreionException(
-            'Missing key "$key" in "$path".', key='AUC', path=str(source.result_file)
+            'Missing key "$key" in "$path".',
+            key=metric,
+            path=str(source.result_file),
         )
-    auc_folds = fold_metrics['AUC']
     y_score_pos = _extract_pos_score(y_score)
-    y_pred = _predict_labels(y_score)
     if y_true.shape[0] != y_score_pos.shape[0]:
         raise IatreionException(
             'Mismatched sample size in "$path": y_true=$n_true, y_score=$n_score.',
@@ -263,11 +263,10 @@ def _load_result(source: ResultSource) -> LoadedResult:
         mean_std=mean_std,
         ci=ci,
         fold_metrics=fold_metrics,
-        auc_folds=auc_folds,
         y_true=y_true,
         y_pred=y_pred,
         y_score_pos=y_score_pos,
-        full_auc=_safe_auc(y_true, y_score_pos),
+        full_auroc=_safe_auroc(y_true, y_score_pos),
     )
 
 
@@ -407,18 +406,30 @@ def _prepare_results(
     return results, ref
 
 
-def _compare_wilcoxon_auc(
+def _compare_wilcoxon_auroc(
     reference: LoadedResult, target: LoadedResult
 ) -> tuple[float, float]:
-    delta = np.nanmean(target.auc_folds) - np.nanmean(reference.auc_folds)
-    pvalue = _wilcoxon_pvalue(reference.auc_folds, target.auc_folds)
+    reference_values = _get_fold_metric_values(reference, 'AUROC')
+    target_values = _get_fold_metric_values(target, 'AUROC')
+    delta = np.nanmean(target_values) - np.nanmean(reference_values)
+    pvalue = _wilcoxon_pvalue(reference_values, target_values)
     return delta, pvalue
 
 
-def _compare_delong_auc(
+def _compare_wilcoxon_auprc(
     reference: LoadedResult, target: LoadedResult
 ) -> tuple[float, float]:
-    delta = target.full_auc - reference.full_auc
+    reference_values = _get_fold_metric_values(reference, 'AUPRC')
+    target_values = _get_fold_metric_values(target, 'AUPRC')
+    delta = np.nanmean(target_values) - np.nanmean(reference_values)
+    pvalue = _wilcoxon_pvalue(reference_values, target_values)
+    return delta, pvalue
+
+
+def _compare_delong_auroc(
+    reference: LoadedResult, target: LoadedResult
+) -> tuple[float, float]:
+    delta = target.full_auroc - reference.full_auroc
     pvalue = _delong_pvalue(reference.y_true, reference.y_score_pos, target.y_score_pos)
     return delta, pvalue
 

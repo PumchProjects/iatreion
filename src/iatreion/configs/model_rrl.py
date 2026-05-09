@@ -9,6 +9,7 @@ from cyclopts.validators import Number
 from .model_base import ModelConfig
 
 type MissingAwareMode = Literal['original', 'improved']
+type RrlValidationMetric = Literal['f1', 'auroc', 'auprc']
 
 
 @Parameter(name='*')
@@ -36,13 +37,16 @@ class RrlConfig(ModelConfig):
     'The number of iterations (batches) to log once.'
 
     save_interval: Annotated[int, Parameter(alias='-si')] = 100
-    'The number of epochs to save the model based on training loss (when val_size=None), or the number of iterations (batches) to save the model based on validation F1 (when val_size is set).'
+    'The number of epochs to save the model based on training loss (when val_size=None), or the number of iterations (batches) to save the model based on the validation metric (when val_size is set).'
+
+    validation_metric: Annotated[RrlValidationMetric, Parameter(alias='-vm')] = 'f1'
+    'Validation metric used for checkpoint selection and early stopping when val_size is set.'
 
     early_stop_patience: Annotated[int | None, Parameter(alias='-esp')] = None
-    'Number of validation checks with no sufficient F1 improvement before early stopping. Disabled when None or <= 0.'
+    'Number of validation checks with no sufficient validation-metric improvement before early stopping. Disabled when None or <= 0.'
 
     early_stop_min_delta: Annotated[float, Parameter(alias='-esd')] = 0.0
-    'Minimum required increase in validation F1 to reset early-stopping patience.'
+    'Minimum required increase in the validation metric to reset early-stopping patience.'
 
     label_smoothing: Annotated[float, Parameter(alias='-ls')] = 0.0
     'Label smoothing factor for cross-entropy loss.'
@@ -117,6 +121,7 @@ class RrlConfig(ModelConfig):
                 f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}'
                 f'_conjOnly{self.conjunction_only}_L{self.structure}'
                 f'_missingMode{self.missing_aware_mode}_tau{self.coverage_tau}_kappa{self.coverage_kappa}'
-                f'_esp{self.early_stop_patience}_esd{self.early_stop_min_delta}_ls{self.label_smoothing}_mgn{self.max_grad_norm}'
+                f'_vm{self.validation_metric}_esp{self.early_stop_patience}_esd{self.early_stop_min_delta}'
+                f'_ls{self.label_smoothing}_mgn{self.max_grad_norm}'
             )
         self.register_log_dir('rrl', folder_name=self._folder_name)

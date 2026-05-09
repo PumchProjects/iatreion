@@ -11,6 +11,7 @@ from sklearn.metrics import (
     RocCurveDisplay,
     accuracy_score,
     auc,
+    average_precision_score,
     confusion_matrix,
     precision_recall_fscore_support,
     recall_score,
@@ -113,8 +114,12 @@ class FinalRecord:
     bias: float | None = None
 
     @property
-    def auc(self) -> float:
-        return self.metrics['AUC']
+    def auroc(self) -> float:
+        return self.metrics['AUROC']
+
+    @property
+    def auprc(self) -> float:
+        return self.metrics['AUPRC']
 
     @property
     def acc(self) -> float:
@@ -191,12 +196,12 @@ class RecordROC:
         self.n_folds = config.n_inner_folds if is_inner else config.n_outer_folds
         self.show_legends = self.n_folds <= 5
         self.tprs: list[NDArray] = []
-        self.aucs: list[float] = []
+        self.aurocs: list[float] = []
         self.mean_fpr = np.linspace(0, 1, 100)
         self.fig, self.ax = plt.subplots(figsize=(6, 6), layout='constrained')
 
     def record_fold(self, y: PredictionRecord) -> float:
-        fold = len(self.aucs) + 1
+        fold = len(self.aurocs) + 1
         viz = RocCurveDisplay.from_predictions(
             y.true,
             y.pos_score,
@@ -209,7 +214,7 @@ class RecordROC:
         interp_tpr = np.interp(self.mean_fpr, viz.fpr, viz.tpr)
         interp_tpr[0] = 0.0
         self.tprs.append(interp_tpr)
-        self.aucs.append(viz.roc_auc)
+        self.aurocs.append(viz.roc_auc)
         return viz.roc_auc
 
     def record_final(self, y: PredictionRecord) -> float:
@@ -231,7 +236,7 @@ class RecordROC:
         )
         self.ax.legend(loc='lower right')
 
-        self.aucs.append(viz.roc_auc)
+        self.aurocs.append(viz.roc_auc)
         return viz.roc_auc
 
     def record(self, y: PredictionRecord) -> float:
@@ -246,13 +251,13 @@ class RecordROC:
             return np.nan, self.fig
         mean_tpr = np.nanmean(self.tprs, axis=0)
         mean_tpr[-1] = 1.0
-        mean_auc = auc(self.mean_fpr, mean_tpr)
-        std_auc = np.nanstd(self.aucs)
+        mean_auroc = auc(self.mean_fpr, mean_tpr)
+        std_auroc = np.nanstd(self.aurocs)
         self.ax.plot(
             self.mean_fpr,
             mean_tpr,
             color='b',
-            label=rf'Mean ROC (AUC = {mean_auc:0.2f} $\pm$ {std_auc:0.2f})',
+            label=rf'Mean ROC (AUROC = {mean_auroc:0.2f} $\pm$ {std_auroc:0.2f})',
             lw=2,
             alpha=0.8,
         )
@@ -276,7 +281,7 @@ class RecordROC:
         )
         self.ax.legend(loc='lower right')
 
-        return mean_auc, self.fig
+        return mean_auroc, self.fig
 
 
 class RecordFormatter:
@@ -353,7 +358,7 @@ class RecordFormatter:
         *,
         final: FinalRecord,
         mean_std: dict[str, tuple[float, float]],
-        auc: float | None,
+        auroc: float | None,
         width: int,
     ) -> str:
         return self._format(
@@ -361,7 +366,9 @@ class RecordFormatter:
             final.complexity,
             final.time,
             width,
-            '' if auc is None else f'Interpolated AUC {self._format_percentage(auc)}\n',
+            ''
+            if auroc is None
+            else f'Interpolated AUROC {self._format_percentage(auroc)}\n',
             *self._format_mean_std(mean_std, width),
         )
 
@@ -399,7 +406,7 @@ class Recorder:
         self.result = RunningRecord()
         self.formatter = RecordFormatter()
 
-    def _calc_auc(self, y: PredictionRecord) -> float:
+    def _calc_auroc(self, y: PredictionRecord) -> float:
         try:
             return roc_auc_score(
                 y.true,
@@ -411,12 +418,30 @@ class Recorder:
         except ValueError:
             return np.nan
 
+    def _calc_auprc(self, y: PredictionRecord) -> float:
+        try:
+            if self.config.num_class <= 2:
+                target = (y.true == self.labels[-1]).astype(int)
+                if np.unique(target).shape[0] < 2:
+                    return np.nan
+                return float(average_precision_score(target, y.pos_score))
+            return float(
+                average_precision_score(
+                    np.eye(self.config.num_class, dtype=int)[y.true],
+                    y.score,
+                    average='macro',
+                )
+            )
+        except ValueError:
+            return np.nan
+
     def _calc_metrics(
         self, y: PredictionRecord, *, plot_roc: bool = False
     ) -> dict[str, float]:
         if y.true.shape[0] == 0:
             metrics = {
-                'AUC': np.nan,
+                'AUROC': np.nan,
+                'AUPRC': np.nan,
                 'ACC': np.nan,
                 'P': np.nan,
                 'R': np.nan,
@@ -427,12 +452,14 @@ class Recorder:
                 metrics['SPC'] = np.nan
             return metrics
 
-        auc = self.roc.record(y) if plot_roc else self._calc_auc(y)
+        auroc = self.roc.record(y) if plot_roc else self._calc_auroc(y)
+        auprc = self._calc_auprc(y)
         precision, recall, f1, _ = precision_recall_fscore_support(
             y.true, y.pred, labels=self.labels, average='macro', zero_division=np.nan
         )
         metrics = {
-            'AUC': auc,
+            'AUROC': auroc,
+            'AUPRC': auprc,
             'ACC': accuracy_score(y.true, y.pred),
             'P': precision,
             'R': recall,
@@ -440,10 +467,10 @@ class Recorder:
         }
         if self.calc_sen_and_spc:
             metrics['SEN'] = recall_score(
-                y.true, y.pred, labels=self.labels, pos_label=0, zero_division=np.nan
+                y.true, y.pred, labels=self.labels, pos_label=1, zero_division=np.nan
             )
             metrics['SPC'] = recall_score(
-                y.true, y.pred, labels=self.labels, pos_label=1, zero_division=np.nan
+                y.true, y.pred, labels=self.labels, pos_label=0, zero_division=np.nan
             )
         return metrics
 
@@ -472,7 +499,7 @@ class Recorder:
 
     def _summarize_complexity(self) -> tuple[dict[str, tuple[float, str]], int]:
         complexity: dict[str, tuple[float, str]] = {}
-        width = 4
+        width = 5
         for key, (values, fmt) in self.result.complexity.items():
             complexity[key] = (np.nanmean(values).item(), fmt)
             width = max(width, len(key))
@@ -578,9 +605,9 @@ class Recorder:
         y = full_y.observed()
         point_estimates = self._calc_metrics(y)
         final = self._build_final_record(complexity, full_y, point_estimates)
-        auc, roc = self.roc.finish() if self.config.plot_roc else (None, None)
+        auroc, roc = self.roc.finish() if self.config.plot_roc else (None, None)
         result = self.formatter.format_final_avg(
-            final=final, mean_std=mean_std, auc=auc, width=width
+            final=final, mean_std=mean_std, auroc=auroc, width=width
         )
         ci = None
         if calc_ci:

@@ -85,7 +85,7 @@ def sample_importance_data(
     return X[index], y[index]
 
 
-def _calc_auc_score(num_class: int, y_true: NDArray, y_score: NDArray) -> float:
+def _calc_auroc_score(num_class: int, y_true: NDArray, y_score: NDArray) -> float:
     try:
         if num_class <= 2:
             return float(roc_auc_score(y_true, y_score[:, 1]))
@@ -112,7 +112,7 @@ def calc_permutation_importance(
         max_samples=config.importance_max_samples,
         seed=config.train.seed,
     )
-    baseline = _calc_auc_score(
+    baseline = _calc_auroc_score(
         config.train.num_class, y_sample, predict_proba(X_sample)
     )
     feature_names = ctx.db_enc.X_fname
@@ -128,12 +128,12 @@ def calc_permutation_importance(
             for _ in range(repeats):
                 permuted = X_sample.copy()
                 permuted[:, idx] = rng.permutation(permuted[:, idx])
-                auc = _calc_auc_score(
+                auroc = _calc_auroc_score(
                     config.train.num_class, y_sample, predict_proba(permuted)
                 )
-                if np.isnan(auc):
+                if np.isnan(auroc):
                     continue
-                deltas.append(baseline - auc)
+                deltas.append(baseline - auroc)
                 permutation_task()
             score[name] = float(np.mean(deltas)) if deltas else np.nan
     return score

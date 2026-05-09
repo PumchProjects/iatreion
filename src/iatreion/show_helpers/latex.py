@@ -9,8 +9,8 @@ from .performance import (
     MetricFormatter,
     MetricValues,
     ResultComparator,
-    _compare_delong_auc,
-    _compare_wilcoxon_auc,
+    _compare_delong_auroc,
+    _compare_wilcoxon_auroc,
     _format_ci,
     _format_delta_pp,
     _format_mean_std,
@@ -33,7 +33,7 @@ def _build_comparison_table(
 ) -> pd.DataFrame:
     metric_dicts = [metric_dict_getter(result) for result in results]
     metric_names = _resolve_metrics(metrics, metric_dicts)
-    delta_col = f'Delta AUC (pp) vs {ref.label}'
+    delta_col = f'Delta AUROC (pp) vs {ref.label}'
     pvalue_col = f'{pvalue_name} p vs {ref.label}'
 
     rows: list[dict[str, str]] = []
@@ -74,7 +74,7 @@ def make_mean_std_wilcoxon_table(config: ShowPerformanceConfig) -> pd.DataFrame:
         metric_formatter=_format_mean_std_values,
         missing_metric_values=(np.nan, np.nan),
         pvalue_name='Wilcoxon',
-        comparator=_compare_wilcoxon_auc,
+        comparator=_compare_wilcoxon_auroc,
     )
 
 
@@ -88,5 +88,5 @@ def make_ci_delong_table(config: ShowPerformanceConfig) -> pd.DataFrame:
         metric_formatter=_format_ci_values,
         missing_metric_values=(np.nan, np.nan, np.nan),
         pvalue_name='DeLong',
-        comparator=_compare_delong_auc,
+        comparator=_compare_delong_auroc,
     )

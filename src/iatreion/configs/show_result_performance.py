@@ -13,7 +13,7 @@ class ShowPerformanceConfig(ShowResultConfig):
     'Reference label for comparison.'
 
     metrics: Annotated[list[str], Parameter(alias='-met', consume_multiple=True)] = (
-        field(default_factory=lambda: ['AUC', 'SEN', 'SPC'])
+        field(default_factory=lambda: ['AUROC', 'AUPRC', 'SEN', 'SPC'])
     )
     'Metrics to include in the analysis.'
 

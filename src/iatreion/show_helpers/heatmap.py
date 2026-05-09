@@ -10,8 +10,9 @@ from iatreion.configs import ShowPerformanceConfig
 from .performance import (
     LoadedResult,
     ResultComparator,
-    _compare_delong_auc,
-    _compare_wilcoxon_auc,
+    _compare_delong_auroc,
+    _compare_wilcoxon_auprc,
+    _compare_wilcoxon_auroc,
     _format_pvalue,
     _prepare_results,
 )
@@ -61,17 +62,28 @@ def _plot_pvalue_heatmap(
     return fig
 
 
-def wilcoxon_pvalue_heatmap(
+def auroc_wilcoxon_pvalue_heatmap(
     config: ShowPerformanceConfig,
 ) -> tuple[pd.DataFrame, Figure]:
     results, _ = _prepare_results(config)
-    matrix, annot = _build_pairwise_pvalue_matrix(results, _compare_wilcoxon_auc)
+    matrix, annot = _build_pairwise_pvalue_matrix(results, _compare_wilcoxon_auroc)
     fig = _plot_pvalue_heatmap(matrix, annot, config.title)
     return matrix, fig
 
 
-def delong_pvalue_heatmap(config: ShowPerformanceConfig) -> tuple[pd.DataFrame, Figure]:
+def auprc_wilcoxon_pvalue_heatmap(
+    config: ShowPerformanceConfig,
+) -> tuple[pd.DataFrame, Figure]:
     results, _ = _prepare_results(config)
-    matrix, annot = _build_pairwise_pvalue_matrix(results, _compare_delong_auc)
+    matrix, annot = _build_pairwise_pvalue_matrix(results, _compare_wilcoxon_auprc)
+    fig = _plot_pvalue_heatmap(matrix, annot, config.title)
+    return matrix, fig
+
+
+def auroc_delong_pvalue_heatmap(
+    config: ShowPerformanceConfig,
+) -> tuple[pd.DataFrame, Figure]:
+    results, _ = _prepare_results(config)
+    matrix, annot = _build_pairwise_pvalue_matrix(results, _compare_delong_auroc)
     fig = _plot_pvalue_heatmap(matrix, annot, config.title)
     return matrix, fig
