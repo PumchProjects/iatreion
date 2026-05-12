@@ -219,18 +219,6 @@ class Preprocessor(ABC):
             return stem_to_name(self.stem_pattern, mapping)
         return None
 
-    @staticmethod
-    def remove_useless_columns(data: pd.DataFrame) -> pd.DataFrame:
-        nunique = data.nunique()
-        columns = nunique[nunique <= 1].index
-        if not columns.empty:
-            logger.warning(
-                f'[bold yellow]Removing useless columns:[/] {", ".join(columns)}',
-                extra={'markup': True},
-            )
-            data = data.drop(columns=columns)
-        return data
-
     def save_info(self, data: pd.DataFrame) -> pd.DataFrame:
         augmented_vector_name = [(self.config.index_name, 'index', '')]
         for name in data.columns[: -len(self.config.group_columns)]:
@@ -262,12 +250,7 @@ class Preprocessor(ABC):
             extra={'markup': True},
         )
         data = self.get_data_outer()
-        subset = data.columns
         data = self.merge_group_names(data)
-        # Drop rows with less than 50% non-NaN values
-        threshold = int(len(subset) * 0.5)
-        data = data.dropna(axis=0, thresh=threshold, subset=subset)
-        data = self.remove_useless_columns(data)
         logger.info('Saving data...')
         data = self.save_info(data)
         self.save_data(data)

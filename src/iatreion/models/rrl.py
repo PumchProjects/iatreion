@@ -11,6 +11,7 @@ from iatreion.rrl.experiment import (
 )
 from iatreion.rrl.rrl.models import RRL
 from iatreion.train_utils import TrainStepContext
+from iatreion.train_utils.feature_selection import get_feature_selection_path
 from iatreion.train_utils.imputation import get_simple_imputer_path
 from iatreion.utils import set_seed_torch
 
@@ -48,6 +49,9 @@ class RrlModel(Model):
         train_model(self.config, self.save_model_callback, ctx)
         self.load_model()
         self.rule2weights = print_rules(self.config, ctx, self.model, self.metrics)
+        ctx.db_enc.save_feature_selection(
+            get_feature_selection_path(self.config.train._log_dir / ctx.rrl_file)
+        )
         if self.config.missing_aware_mode == 'original':
             imputer_path = get_simple_imputer_path(
                 self.config.train._log_dir / ctx.rrl_file

@@ -105,7 +105,6 @@ class HistoryPreprocessor(Preprocessor):
     def process_data(
         self,
         data: pd.DataFrame,
-        threshold: float,
         unordered_columns: list[str],
         multiple_choice_columns: list[str] | None = None,
     ) -> pd.DataFrame:
@@ -120,13 +119,6 @@ class HistoryPreprocessor(Preprocessor):
             elif is_string_dtype(data[col]):
                 data = self.process_single_choice(data, col)
             # Keep continuous columns as is
-
-        if not self.config._final:
-            # Drop columns with less than `threshold` non-NaN values
-            thresh = int(len(data) * threshold)
-            data = data.dropna(axis=1, thresh=thresh)
-            # Drop rows having any NaN values implicitly
-
         return data
 
     def get_life_data(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -136,7 +128,6 @@ class HistoryPreprocessor(Preprocessor):
         object_columns = ['V62', 'V63', 'V123']
         data = self.convert_object_to_int(data, object_columns)
 
-        threshold = 0.88
         unordered_columns = ['V60', 'V68', 'V81', 'V84', 'V115', 'V116', 'V120']
         multiple_choice_columns = [
             'V22',
@@ -153,18 +144,15 @@ class HistoryPreprocessor(Preprocessor):
             'V101',
             'V105',
         ]
-        data = self.process_data(
-            data, threshold, unordered_columns, multiple_choice_columns
-        )
+        data = self.process_data(data, unordered_columns, multiple_choice_columns)
 
         return data
 
     def get_diet_and_medication_data(self, data: pd.DataFrame) -> pd.DataFrame:
         data = self.select_columns(data, range(125, 171))
 
-        threshold = 0.89
         unordered_columns = [f'V{i}' for i in range(136, 171)]
-        data = self.process_data(data, threshold, unordered_columns)
+        data = self.process_data(data, unordered_columns)
 
         return data
 
@@ -174,9 +162,8 @@ class HistoryPreprocessor(Preprocessor):
         # Fit the val_pattern
         data.replace('4(5>3人)', '4(5=超过3人)', inplace=True)
 
-        threshold = 0.86
         unordered_columns = ['V173', 'V174', 'V176']
-        data = self.process_data(data, threshold, unordered_columns)
+        data = self.process_data(data, unordered_columns)
 
         return data
 
@@ -188,12 +175,9 @@ class HistoryPreprocessor(Preprocessor):
             {'V240': {'0(1=无)': '1(2=无)', '1(2=减少)': '0(1=减少)'}}, inplace=True
         )
 
-        threshold = 0.9
         unordered_columns = ['V238', 'V279', 'V280', 'V297']
         multiple_choice_columns = ['V293']
-        data = self.process_data(
-            data, threshold, unordered_columns, multiple_choice_columns
-        )
+        data = self.process_data(data, unordered_columns, multiple_choice_columns)
 
         return data
 
@@ -217,12 +201,9 @@ class HistoryPreprocessor(Preprocessor):
         replace_columns = ['V373', 'V377', 'V378']
         data.replace({col: replace_pattern for col in replace_columns}, inplace=True)
 
-        threshold = 0.0
         unordered_columns = ['V312']
         multiple_choice_columns = ['V379', 'V380', 'V392', 'V393']
-        data = self.process_data(
-            data, threshold, unordered_columns, multiple_choice_columns
-        )
+        data = self.process_data(data, unordered_columns, multiple_choice_columns)
 
         return data
 

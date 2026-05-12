@@ -48,22 +48,8 @@ class CsvdPreprocessor(Preprocessor):
         return data
 
     def filter(self, data: pd.DataFrame) -> pd.DataFrame:
-        # Drop unnecessary columns
         drop_columns = ['检查日期', '性别', '年龄']
         data = self.drop_columns(data, drop_columns, ['hash_num'])
-        if not self.config._final:
-            # Drop columns with less than 80% non-NaN values
-            threshold = int(len(data) * 0.8)
-            data = data.dropna(axis=1, thresh=threshold)
-            # Drop rows having any NaN values implicitly
-        return data
-
-    def filter_manual(self, data: pd.DataFrame) -> pd.DataFrame:
-        if not self.config._final:
-            # Drop columns with less than 85% non-NaN values (including unnamed columns)
-            threshold = int(len(data) * 0.85)
-            data = data.dropna(axis=1, thresh=threshold)
-            # Drop rows having any NaN values implicitly
         return data
 
     @override
@@ -71,13 +57,10 @@ class CsvdPreprocessor(Preprocessor):
         # Set "/" as NaN
         data = self.read_data()
 
-        if self.is_manual:
-            # Filter columns and rows
-            data = self.filter_manual(data)
-        else:
+        if not self.is_manual:
             # Parse column names
             data = self.rename(data)
-            # Filter columns and rows
+            # Drop unnecessary columns
             data = self.filter(data)
 
         return data

@@ -1,4 +1,5 @@
 from .dataset import DataName, DatasetConfig
+from .feature_selection import FeatureSelectionConfig
 from .model_base import FoldScope, ImportanceMethod, ModelConfig
 from .model_limix import LimiXConfig
 from .model_rf import RandomForestConfig

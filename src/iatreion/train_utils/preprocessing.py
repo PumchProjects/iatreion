@@ -8,6 +8,7 @@ from sklearn import preprocessing
 
 from iatreion.configs import TrainConfig
 
+from .feature_selection import FeatureSelectionArtifact, SupervisedFeatureSelector
 from .imputation import SimpleImputerArtifact, SimpleImputerColumn
 from .limix import LimiXWorkerClient
 
@@ -48,6 +49,7 @@ class DBEncoder:
         self.mean: pd.Series | None = None
         self.std: pd.Series | None = None
         self.simple_imputer: SimpleImputerArtifact | None = None
+        self.feature_selection: FeatureSelectionArtifact | None = None
         self._continuous_mean = pd.Series(dtype=float)
         self._continuous_std = pd.Series(dtype=float)
 
@@ -78,11 +80,7 @@ class DBEncoder:
         y_val_encoded = None if y_val is None else self.label_enc.transform(y_val)
         y_test_encoded = None if y_test is None else self.label_enc.transform(y_test)
 
-        test_frame = (
-            pd.DataFrame(index=pd.Index([], dtype=X_train.index.dtype))
-            if X_test is None
-            else X_test
-        )
+        test_frame = X_train.iloc[:0].copy() if X_test is None else X_test
 
         if not self.train.preprocess:
             X_train, y_train_encoded = self._try_undersample_train(
@@ -101,6 +99,7 @@ class DBEncoder:
             test=self._prepare_frame(test_frame),
         )
 
+        frames = self._apply_feature_selection(frames, y_train_encoded)
         frames = self._apply_missing_value_strategy(frames, y_train_encoded)
         frames = self._normalize_continuous_data(frames)
         frames.train, y_train_encoded = self._try_undersample_train(
@@ -143,6 +142,56 @@ class DBEncoder:
     def _prepare_frame(self, X_df: pd.DataFrame) -> pd.DataFrame:
         frame = X_df.loc[:, self.feature_columns].copy()
         return frame.apply(pd.to_numeric, errors='coerce').astype(float)
+
+    def _apply_feature_selection(
+        self,
+        frames: _FrameSplits,
+        y_train: NDArray,
+    ) -> _FrameSplits:
+        selector = SupervisedFeatureSelector(
+            self.train,
+            feature_columns=self.feature_columns,
+            unordered_columns=self.unordered_columns,
+            ordered_columns=self.ordered_columns,
+            continuous_columns=self.continuous_columns,
+            category_counts={
+                name: self._category_count(name) for name in self.unordered_columns
+            },
+        )
+        selector.fit(frames.train, y_train)
+        selected = selector.selected_features
+        self.feature_selection = selector.artifact
+        self._restrict_feature_columns(selected)
+        return _FrameSplits(
+            train=selector.transform(frames.train),
+            val=None if frames.val is None else selector.transform(frames.val),
+            test=selector.transform(frames.test),
+        )
+
+    def _restrict_feature_columns(self, selected: list[str]) -> None:
+        selected_set = set(selected)
+        self.unordered_columns = [
+            name for name in self.unordered_columns if name in selected_set
+        ]
+        self.ordered_columns = [
+            name for name in self.ordered_columns if name in selected_set
+        ]
+        self.continuous_columns = [
+            name for name in self.continuous_columns if name in selected_set
+        ]
+        self.discrete_columns = [*self.unordered_columns, *self.ordered_columns]
+        self.feature_columns = [*self.discrete_columns, *self.continuous_columns]
+        self.category_labels = {
+            name: labels
+            for name, labels in self.category_labels.items()
+            if name in selected_set
+        }
+        self.binary_discrete_columns = [
+            name for name in self.discrete_columns if self._category_count(name) <= 2
+        ]
+        self.categorical_discrete_columns = [
+            name for name in self.discrete_columns if self._category_count(name) > 2
+        ]
 
     def _apply_missing_value_strategy(
         self,
@@ -189,6 +238,10 @@ class DBEncoder:
     def save_simple_imputer(self, path: Path) -> None:
         if self.simple_imputer is not None:
             self.simple_imputer.save(path)
+
+    def save_feature_selection(self, path: Path) -> None:
+        if self.feature_selection is not None:
+            self.feature_selection.save(path)
 
     def _limix_impute(self, frames: _FrameSplits, y_train: NDArray) -> _FrameSplits:
         if self.limix_client is None:

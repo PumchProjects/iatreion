@@ -22,6 +22,8 @@ from iatreion.utils import (
     set_seed,
 )
 
+from .feature_selection import FeatureSelectionConfig
+
 type UnderSamplerName = Literal['random']
 type AggregationMethod = Literal[
     'average', 'concat', 'calibrated-concat', 'calibrated-fusion'
@@ -84,6 +86,11 @@ and combine available modalities with equal-weight late fusion.
 'minmax': min-max scale categorical codes to [0, 1].
 'none': keep categorical codes unchanged.
 """
+
+    feature_selection: FeatureSelectionConfig = field(
+        default_factory=FeatureSelectionConfig
+    )
+    'Supervised feature-selection settings.'
 
     eval_names: Annotated[list[str], Parameter(alias='-en', consume_multiple=True)] = (
         field(default_factory=list)
@@ -294,7 +301,11 @@ For discrete RRL, validation set is used for optimization when val_size is set.
                 'clinical_threshold_label must be one of '
                 f'{", ".join(self._sorted_group_names)}.'
             )
+        self.validate_feature_selection()
         self.validate_preprocessing()
+
+    def validate_feature_selection(self) -> None:
+        self.feature_selection.validate()
 
     @property
     def resolved_limix_inference_config_path(self) -> Path:
