@@ -3,21 +3,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from imblearn.combine import SMOTEENN, SMOTETomek
-from imblearn.over_sampling import (
-    ADASYN,
-    SMOTE,
-    SMOTEN,
-    SMOTENC,
-    SVMSMOTE,
-    BorderlineSMOTE,
-    KMeansSMOTE,
-)
 from numpy.typing import NDArray
 from sklearn import preprocessing
 
 from iatreion.configs import TrainConfig
-from iatreion.utils import logger
 
 from .imputation import SimpleImputerArtifact, SimpleImputerColumn
 from .limix import LimiXWorkerClient
@@ -96,6 +85,9 @@ class DBEncoder:
         )
 
         if not self.train.preprocess:
+            X_train, y_train_encoded = self._try_undersample_train(
+                X_train, y_train_encoded
+            )
             self.X_fname = X_train.columns.to_list()
             return (
                 (X_train.values, y_train_encoded),
@@ -111,7 +103,7 @@ class DBEncoder:
 
         frames = self._apply_missing_value_strategy(frames, y_train_encoded)
         frames = self._normalize_continuous_data(frames)
-        frames.train, y_train_encoded = self._try_resample_train(
+        frames.train, y_train_encoded = self._try_undersample_train(
             frames.train, y_train_encoded
         )
 
@@ -290,76 +282,28 @@ class DBEncoder:
             self._continuous_std = pd.Series(1.0, index=index)
         return frames
 
-    def _try_resample_train(
+    def _try_undersample_train(
         self, X: pd.DataFrame, y: NDArray
     ) -> tuple[pd.DataFrame, NDArray]:
-        if self.train.over_sampler is None:
+        if self.train.under_sampler is None:
             return X, y
 
-        if self.train.min_n_samples <= 0:
-            strategy: str | dict[int, int] = 'auto'
-        else:
-            strategy = {
-                int(cls): self.train.min_n_samples
-                for cls in np.unique(y)
-                if np.sum(y == cls) < self.train.min_n_samples
-            }
-            if not strategy:
-                return X, y
+        y = np.asarray(y)
+        classes, counts = np.unique(y, return_counts=True)
+        target = self.train.target_n_samples or int(counts.min())
+        selected_parts: list[NDArray[np.integer]] = []
+        rng = np.random.default_rng(self.train.seed)
 
-        categorical = [name in self.discrete_columns for name in X.columns]
-        if not any(categorical):
-            match self.train.over_sampler:
-                case 'adasyn':
-                    sampler = ADASYN(sampling_strategy=strategy, random_state=42)
-                case 'smote':
-                    sampler = SMOTE(sampling_strategy=strategy, random_state=42)
-                case 'smotetomek':
-                    sampler = SMOTETomek(
-                        sampling_strategy=strategy, random_state=42, n_jobs=4
-                    )
-                case 'smoteenn':
-                    sampler = SMOTEENN(
-                        sampling_strategy=strategy, random_state=42, n_jobs=4
-                    )
-                case 'borderlinesmote-1':
-                    sampler = BorderlineSMOTE(
-                        sampling_strategy=strategy,
-                        random_state=42,
-                        kind='borderline-1',
-                    )
-                case 'borderlinesmote-2':
-                    sampler = BorderlineSMOTE(
-                        sampling_strategy=strategy,
-                        random_state=42,
-                        kind='borderline-2',
-                    )
-                case 'svmsmote':
-                    sampler = SVMSMOTE(sampling_strategy=strategy, random_state=42)
-                case 'kmeanssmote':
-                    sampler = KMeansSMOTE(
-                        sampling_strategy=strategy, random_state=42, n_jobs=4
-                    )
-        elif all(categorical):
-            sampler = SMOTEN(sampling_strategy=strategy, random_state=42)
-        else:
-            sampler = SMOTENC(
-                categorical_features=categorical,
-                sampling_strategy=strategy,
-                random_state=42,
-            )
+        for cls, count in zip(classes, counts, strict=True):
+            cls_indices = np.flatnonzero(y == cls)
+            if count > target:
+                cls_indices = rng.choice(cls_indices, size=target, replace=False)
+            selected_parts.append(cls_indices)
 
-        try:
-            X_resampled, y_resampled = sampler.fit_resample(X, y)
-        except (ValueError, RuntimeError) as error:
-            logger.warning(
-                f'[bold yellow]Dataset might be too small, disabling SMOTE:[/] {error}',
-                extra={'markup': True},
-            )
+        selected = np.sort(np.concatenate(selected_parts))
+        if selected.size == len(y):
             return X, y
-
-        resampled = pd.DataFrame(X_resampled, columns=X.columns)
-        return resampled, np.asarray(y_resampled)
+        return X.iloc[selected].copy(), y[selected]
 
     def _encode_output_frame(
         self, frame: pd.DataFrame, *, fit: bool = False

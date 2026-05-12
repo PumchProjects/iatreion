@@ -113,9 +113,9 @@ class RrlConfig(ModelConfig):
             self.train.missing_value_strategy = 'none'
             self.train.validate_preprocessing()
         if self.debug:
-            over_sampler = str(self.train.over_sampler).upper()
+            under_sampler = str(self.train.under_sampler).upper()
             self._folder_name = (
-                f'e{self.epoch}_os{over_sampler}_mns{self.train.min_n_samples}_bs{self.batch_size}'
+                f'e{self.epoch}_us{under_sampler}_tns{self.train.target_n_samples}_bs{self.batch_size}'
                 f'_lr{self.learning_rate}_lrdr{self.lr_decay_rate}_lrde{self.lr_decay_epoch}_wd{self.weight_decay}'
                 f'_si{self.save_interval}_useNOT{self.use_not}_valSize{self.train.val_size}_useSkip{self.skip}'
                 f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}'

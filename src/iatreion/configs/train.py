@@ -5,7 +5,13 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from cyclopts import Parameter
-from cyclopts.types import Directory, ExistingDirectory, ExistingFile, PositiveInt
+from cyclopts.types import (
+    Directory,
+    ExistingDirectory,
+    ExistingFile,
+    NonNegativeInt,
+    PositiveInt,
+)
 from cyclopts.validators import Number
 
 from iatreion.utils import (
@@ -16,16 +22,7 @@ from iatreion.utils import (
     set_seed,
 )
 
-type SamplerName = Literal[
-    'adasyn',
-    'smote',
-    'smotetomek',
-    'smoteenn',
-    'borderlinesmote-1',
-    'borderlinesmote-2',
-    'svmsmote',
-    'kmeanssmote',
-]
+type UnderSamplerName = Literal['random']
 type AggregationMethod = Literal[
     'average', 'concat', 'calibrated-concat', 'calibrated-fusion'
 ]
@@ -82,7 +79,7 @@ and combine available modalities with equal-weight late fusion.
     discrete_processing: Annotated[
         DiscreteProcessingStrategy, Parameter(alias='-dp')
     ] = 'onehot'
-    """Processing strategy for non-continuous features after resampling.
+    """Processing strategy for non-continuous features after optional under-sampling.
 'onehot': one-hot encode categorical features.
 'minmax': min-max scale categorical codes to [0, 1].
 'none': keep categorical codes unchanged.
@@ -113,11 +110,11 @@ and combine available modalities with equal-weight late fusion.
     final: Annotated[bool, Parameter(alias='-f')] = False
     'Whether to use the whole dataset for training or testing.'
 
-    over_sampler: Annotated[SamplerName | None, Parameter(alias='-os')] = None
-    'Over-sampling method to use.'
+    under_sampler: Annotated[UnderSamplerName | None, Parameter(alias='-us')] = None
+    'Under-sampling method to use.'
 
-    min_n_samples: Annotated[int, Parameter(alias='-mns')] = 0
-    'Minimum number of samples for each class after resampling.'
+    target_n_samples: Annotated[NonNegativeInt, Parameter(alias='-tns')] = 0
+    'Maximum number of samples to keep for each class after under-sampling. Use 0 to balance to the smallest class.'
 
     limix_python_path: Annotated[ExistingFile | None, Parameter(alias='-lpp')] = None
     'Python interpreter used for LimiX-based missing-value imputation.'
@@ -310,10 +307,6 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     def validate_preprocessing(self) -> None:
         if not self.preprocess:
             return
-        if self.over_sampler is not None and self.missing_value_strategy == 'none':
-            raise ValueError(
-                'Over-sampling requires missing_value_strategy to be "simple" or "limix".'
-            )
         if self.missing_value_strategy != 'limix':
             return
 
