@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from logging import FileHandler, Formatter, Logger, getLogger
 from pathlib import Path
 from types import MethodType
@@ -25,7 +26,20 @@ def get_custom_logger(name: str | None = None) -> Logger:
 
 logger = get_custom_logger('iatreion')
 logger.setLevel(logging.DEBUG)
-logger.addHandler(RichHandler(logging.INFO))
+
+_console_min_level = ContextVar[int | None]('console_min_level', default=None)
+_progress_enabled = ContextVar('progress_enabled', default=True)
+
+
+class ConsoleLevelFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        min_level = _console_min_level.get()
+        return min_level is None or record.levelno >= min_level
+
+
+rich_handler = RichHandler(logging.INFO)
+rich_handler.addFilter(ConsoleLevelFilter())
+logger.addHandler(rich_handler)
 
 
 def add_file_handler(filename: Path, *, format: bool = True) -> FileHandler:
@@ -42,6 +56,26 @@ def remove_file_handler(file_handler: FileHandler) -> None:
     file_handler.close()
 
 
+@contextmanager
+def suppress_console_logs(
+    min_level: int = logging.WARNING,
+) -> Generator[None, None, None]:
+    token = _console_min_level.set(min_level)
+    try:
+        yield
+    finally:
+        _console_min_level.reset(token)
+
+
+@contextmanager
+def disable_progress() -> Generator[None, None, None]:
+    token = _progress_enabled.set(False)
+    try:
+        yield
+    finally:
+        _progress_enabled.reset(token)
+
+
 progress = Progress(
     SpinnerColumn(),
     *Progress.get_default_columns(),
@@ -52,7 +86,7 @@ progress = Progress(
 
 @contextmanager
 def task(description: str, total: int) -> Generator[Callable[[], None], None, None]:
-    if total <= 1:
+    if total <= 1 or not _progress_enabled.get():
         yield lambda: None
         return
     task_id = progress.add_task(description, total=total)

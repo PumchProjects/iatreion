@@ -29,6 +29,7 @@ def order(d: dict, /) -> dict:
 
 
 def save_dict(config_dict: dict[str, Any], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open('wb') as f:
         tomli_w.dump(order(config_dict), f)
 

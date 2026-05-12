@@ -1,7 +1,6 @@
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from dataclasses import dataclass
 from functools import reduce
-from itertools import chain
 
 import numpy as np
 import pandas as pd
@@ -77,8 +76,7 @@ def read_data(
 
 def get_data_names(dataset: DatasetConfig, train: TrainConfig) -> list[str]:
     if train.aggregate in ('concat', 'calibrated-concat'):
-        # HACK: Delicate config should change the name according to train.final
-        return [dataset.name_str] if train.final else ['all_concat']
+        return ['all_concat']
     if not train.eval_names:
         return dataset.names
 
@@ -89,6 +87,15 @@ def get_data_names(dataset: DatasetConfig, train: TrainConfig) -> list[str]:
             f'{", ".join(invalid_names)}.'
         )
     return train.eval_names
+
+
+@dataclass
+class FoldSpec:
+    outer_fold: int
+    inner_fold: int
+    is_inner: bool
+    train_index: pd.Index
+    test_index: pd.Index
 
 
 @dataclass
@@ -141,6 +148,70 @@ def get_train_test(
         yield ref_y.index[train], ref_y.index[test]
 
 
+def get_cv_fold_specs(
+    n_splits: int,
+    ref_y: pd.Series,
+    *,
+    pool_index: pd.Index | None = None,
+) -> list[FoldSpec]:
+    y = ref_y if pool_index is None else ref_y.loc[pool_index]
+    return [
+        FoldSpec(
+            outer_fold=fold,
+            inner_fold=0,
+            is_inner=False,
+            train_index=train_index,
+            test_index=test_index,
+        )
+        for fold, (train_index, test_index) in enumerate(get_train_test(n_splits, y))
+    ]
+
+
+def get_nested_fold_specs(train: TrainConfig, ref_y: pd.Series) -> list[FoldSpec]:
+    if train.final:
+        return [
+            FoldSpec(
+                outer_fold=0,
+                inner_fold=0,
+                is_inner=False,
+                train_index=ref_y.index,
+                test_index=pd.Index([]),
+            )
+        ]
+
+    specs: list[FoldSpec] = []
+    for outer_fold, (train_outer, test_outer) in enumerate(
+        get_train_test(train.n_outer_splits, ref_y)
+    ):
+        if train.aggregate in INNER_SPLIT_AGGREGATES:
+            for inner_fold, (train_inner, test_inner) in enumerate(
+                get_train_test(train.n_inner_splits, ref_y.loc[train_outer])
+            ):
+                specs.append(
+                    FoldSpec(
+                        outer_fold=outer_fold,
+                        inner_fold=inner_fold,
+                        is_inner=True,
+                        train_index=train_inner,
+                        test_index=test_inner,
+                    )
+                )
+            inner_fold = train.n_inner_folds
+        else:
+            inner_fold = 0
+
+        specs.append(
+            FoldSpec(
+                outer_fold=outer_fold,
+                inner_fold=inner_fold,
+                is_inner=False,
+                train_index=train_outer,
+                test_index=test_outer,
+            )
+        )
+    return specs
+
+
 def get_train_val(
     config: TrainConfig, y_df: pd.Series, train_index: pd.Index, X_index: pd.Index
 ) -> tuple[pd.Index, pd.Index | None]:
@@ -157,7 +228,9 @@ def get_train_val(
 
 
 def get_train_iterator(
-    dataset: DatasetConfig, train: TrainConfig
+    dataset: DatasetConfig,
+    train: TrainConfig,
+    fold_specs: Iterable[FoldSpec] | None = None,
 ) -> Generator[TrainStepContext, None, None]:
     X_dfs, _, ref_y_df, f_dfs = read_data(dataset, train)
     data_names = get_data_names(dataset, train)
@@ -184,56 +257,43 @@ def get_train_iterator(
                 zip(dataset.names, zip(X_dfs, f_dfs, strict=True), strict=True)
             )
 
-        if train.final:
-            outer_splitter = [(ref_y_df.index, pd.Index([]))]
-        else:
-            outer_splitter = get_train_test(train.n_outer_splits, ref_y_df)
+        specs = (
+            list(fold_specs)
+            if fold_specs is not None
+            else get_nested_fold_specs(train, ref_y_df)
+        )
 
-        for outer_fold, (train_outer, test_outer) in enumerate(outer_splitter):
-            if train.aggregate in INNER_SPLIT_AGGREGATES and not train.final:
-                inner_splitter = chain(
-                    get_train_test(train.n_inner_splits, ref_y_df[train_outer]),
-                    [(train_outer, test_outer)],
+        for spec in specs:
+            for name in data_names:
+                X_df, f_df = data_frames[name]
+                train_final, val_final = get_train_val(
+                    train, ref_y_df, spec.train_index, X_df.index
                 )
-            else:
-                inner_splitter = [(train_outer, test_outer)]
+                X_train = X_df.loc[train_final]
+                y_train = ref_y_df.loc[train_final]
+                X_val = None if val_final is None else X_df.loc[val_final]
+                y_val = None if val_final is None else ref_y_df.loc[val_final]
+                X_test = X_df.reindex(spec.test_index)
+                y_test = ref_y_df.loc[spec.test_index]
+                test_mask = np.isnan(X_test).all(axis=1)
 
-            for inner_fold, (train_inner, test_inner) in enumerate(inner_splitter):
-                is_inner = (
-                    train.aggregate in INNER_SPLIT_AGGREGATES
-                    and inner_fold < train.n_inner_folds
+                db_enc = DBEncoder(
+                    train, f_df, cat_sep=dataset.cat_sep, limix_client=limix_client
                 )
-
-                for name in data_names:
-                    X_df, f_df = data_frames[name]
-                    train_final, val_final = get_train_val(
-                        train, ref_y_df, train_inner, X_df.index
-                    )
-                    X_train = X_df.loc[train_final]
-                    y_train = ref_y_df.loc[train_final]
-                    X_val = None if val_final is None else X_df.loc[val_final]
-                    y_val = None if val_final is None else ref_y_df.loc[val_final]
-                    X_test = X_df.reindex(test_inner)
-                    y_test = ref_y_df.loc[test_inner]
-                    test_mask = np.isnan(X_test).all(axis=1)
-
-                    db_enc = DBEncoder(
-                        train, f_df, cat_sep=dataset.cat_sep, limix_client=limix_client
-                    )
-                    train_data, val_data, test_data = db_enc.fit_transform(
-                        X_train, y_train, X_val, y_val, X_test, y_test
-                    )
-                    yield TrainStepContext(
-                        outer_fold=outer_fold,
-                        inner_fold=inner_fold,
-                        is_inner=is_inner,
-                        name=name,
-                        db_enc=db_enc,
-                        train_data=train_data,
-                        val_data=val_data,
-                        test_data=test_data,
-                        test_mask=test_mask,
-                    )
+                train_data, val_data, test_data = db_enc.fit_transform(
+                    X_train, y_train, X_val, y_val, X_test, y_test
+                )
+                yield TrainStepContext(
+                    outer_fold=spec.outer_fold,
+                    inner_fold=spec.inner_fold,
+                    is_inner=spec.is_inner,
+                    name=name,
+                    db_enc=db_enc,
+                    train_data=train_data,
+                    val_data=val_data,
+                    test_data=test_data,
+                    test_mask=test_mask,
+                )
     finally:
         if limix_client is not None:
             limix_client.close()

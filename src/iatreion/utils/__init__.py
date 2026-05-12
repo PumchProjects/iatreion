@@ -1,5 +1,14 @@
+from .config import apply_overrides
 from .file import chdir, get_config_path, load_dict, save_dict
-from .logging import add_file_handler, logger, progress, remove_file_handler, task
+from .logging import (
+    add_file_handler,
+    disable_progress,
+    logger,
+    progress,
+    remove_file_handler,
+    suppress_console_logs,
+    task,
+)
 from .seed import set_device, set_seed, set_seed_torch
 from .string import (
     decode_string,

@@ -41,25 +41,16 @@ class ModelConfig:
     'Maximum number of test samples used for permutation/SHAP importance. Disable with None.'
 
     study_name: Annotated[str | None, Parameter(alias='-sn')] = None
-    'Optuna study name. If not provided, use the default name defined in the TOML file.'
+    'Optuna study name. If not provided, use the TOML name or an auto-generated dataset/group/aggregate name.'
 
     tune_config: ExistingFile | None = None
-    'Path to the TOML file that defines the Optuna study and search space.'
-
-    delicate_config: ExistingFile | None = None
-    'Path to the TOML file that defines the delicate training procedure. Only used for RRL.'
+    'Path to the TOML file that defines nested/final Optuna tuning.'
 
     _log_handler: FileHandler | None = field(init=False, default=None, repr=False)
-
-    _delicate_flag: bool = False
 
     @property
     def tune(self) -> bool:
         return self.tune_config is not None
-
-    @property
-    def delicate(self) -> bool:
-        return self.delicate_config is not None
 
     def get_exp_root(self, model_name: str) -> Path:
         return (
@@ -88,7 +79,7 @@ class ModelConfig:
         folder_name: str | None = None,
         file_name: str = 'train.log',
     ) -> None:
-        if self.tune or self._delicate_flag:
+        if self.tune:
             return
         self.train._log_dir = self.get_exp_root(model_name)
         if folder_name is not None and not self.train.final:

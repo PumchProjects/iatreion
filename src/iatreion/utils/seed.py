@@ -1,11 +1,18 @@
 import os
 import random
+from collections.abc import Sequence
 
 import numpy as np
 
 
-def set_device(device_id: int) -> None:
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(device_id)
+def set_device(device_id: int | str | Sequence[int]) -> None:
+    if isinstance(device_id, str):
+        value = device_id
+    elif isinstance(device_id, Sequence):
+        value = ','.join(str(item) for item in device_id)
+    else:
+        value = str(device_id)
+    os.environ['CUDA_VISIBLE_DEVICES'] = value
 
 
 def set_seed(seed: int) -> None:

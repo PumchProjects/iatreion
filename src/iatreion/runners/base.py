@@ -9,5 +9,10 @@ class Runner(ABC):
         self.model_cls = model_cls
         self.base_config = config
 
+    @property
+    def model_name(self) -> str:
+        name = self.model_cls.__name__.removesuffix('Model')
+        return name[:1].lower() + name[1:]
+
     @abstractmethod
     def run(self) -> None: ...

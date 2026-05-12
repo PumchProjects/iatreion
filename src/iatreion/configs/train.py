@@ -107,8 +107,8 @@ and combine available modalities with equal-weight late fusion.
     ] = 0.9
     'Target recall for the pre-specified clinical threshold.'
 
-    device_id: Annotated[int, Parameter(alias='-i')] = 0
-    'Device ID for training. Default is 0.'
+    device_id: Annotated[str, Parameter(alias='-i')] = '0'
+    "CUDA device IDs for training, e.g. '0', '0,1', or '0-7'. Default is 0."
 
     final: Annotated[bool, Parameter(alias='-f')] = False
     'Whether to use the whole dataset for training or testing.'
@@ -266,11 +266,25 @@ For discrete RRL, validation set is used for optimization when val_size is set.
         return self.n_outer_folds
 
     @property
+    def device_ids(self) -> list[int]:
+        devices: list[int] = []
+        for item in self.device_id.split(','):
+            item = item.strip()
+            if not item:
+                continue
+            if '-' not in item:
+                devices.append(int(item))
+                continue
+            start, end = (int(edge) for edge in item.split('-', maxsplit=1))
+            devices.extend(range(start, end + 1))
+        return devices or [0]
+
+    @property
     def num_class(self) -> int:
         return len(self._groups)
 
     def __post_init__(self) -> None:
-        set_device(self.device_id)
+        set_device(self.device_ids)
         set_seed(self.seed)
         self.set_groups()
         if self.num_class > 2:

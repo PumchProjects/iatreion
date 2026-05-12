@@ -5,17 +5,20 @@ from dataclasses import dataclass, field
 from itertools import groupby
 
 from iatreion.configs import ModelConfig
-from iatreion.train_utils import TrainStepContext, get_data_names, get_train_iterator
+from iatreion.train_utils import (
+    FoldSpec,
+    TrainStepContext,
+    get_data_names,
+    get_train_iterator,
+)
 from iatreion.utils import logger, task
 
 from .recorder import Finish, Recorder, TrainerReturn
 from .utils import (
-    publish_final_available_fusion_artifact,
     record_average,
     record_calibrated_concat,
     record_calibrated_fusion,
     save_available_fusion_artifact,
-    validate_final_available_fusion_artifact,
 )
 
 
@@ -26,22 +29,23 @@ class TrainerSummary:
 
 
 class Trainer(ABC):
-    def __init__(self, config: ModelConfig) -> None:
+    def __init__(
+        self,
+        config: ModelConfig,
+        *,
+        fold_specs: list[FoldSpec] | None = None,
+        calc_ci: bool = True,
+    ) -> None:
         self.config = config
         self.dataset_config, self.train_config = config.dataset, config.train
         self.data_names = get_data_names(config.dataset, config.train)
+        self.fold_specs = fold_specs
+        self.calc_ci = calc_ci
         self.finishes: dict[str, Finish] = {}
         self.objectives: dict[str, float] = {}
 
     def _uses_available_fusion_artifact(self) -> bool:
         return self.train_config.num_class == 2
-
-    def _uses_final_rrl_available_fusion_artifact(self) -> bool:
-        return (
-            self.config.__class__.__name__ == 'RrlConfig'
-            and self.train_config.final
-            and self._uses_available_fusion_artifact()
-        )
 
     @abstractmethod
     def train_step(self, ctx: TrainStepContext) -> TrainerReturn: ...
@@ -50,7 +54,7 @@ class Trainer(ABC):
     def train_final(self, ctx: TrainStepContext) -> None: ...
 
     def _store_finish(self, name: str, recorder: Recorder) -> None:
-        finish = recorder.finish()
+        finish = recorder.finish(calc_ci=self.calc_ci)
         finish.log(name)
         self.finishes[name] = finish
         for metric, value in finish.final.metrics.items():
@@ -65,12 +69,9 @@ class Trainer(ABC):
             self.objectives[f'{name}/{metric}_ub'] = upper
 
     def train(self) -> TrainerSummary:
-        if self._uses_final_rrl_available_fusion_artifact():
-            validate_final_available_fusion_artifact(
-                self.dataset_config, self.train_config
-            )
-
-        iterator = get_train_iterator(self.dataset_config, self.train_config)
+        iterator = get_train_iterator(
+            self.dataset_config, self.train_config, self.fold_specs
+        )
 
         recorders = defaultdict(lambda: Recorder(self.train_config))
         outer_recorders = defaultdict(lambda: Recorder(self.train_config))
@@ -139,11 +140,6 @@ class Trainer(ABC):
                 for name, recorder in recorders.items():
                     self._store_finish(name, recorder)
                     aggregate_advance()
-        elif self._uses_final_rrl_available_fusion_artifact():
-            publish_final_available_fusion_artifact(
-                self.dataset_config, self.train_config
-            )
-
         return TrainerSummary(
             finishes=self.finishes,
             objectives=self.objectives,

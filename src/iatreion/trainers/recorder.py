@@ -188,6 +188,8 @@ class Finish:
                     for weight in self.final.weights:
                         logger.debug(f'{weight:.4f}')
                     logger.debug(f'{self.final.bias:.4f}')
+        if self.roc is not None:
+            plt.close(self.roc)
 
 
 class RecordROC:
@@ -198,17 +200,24 @@ class RecordROC:
         self.tprs: list[NDArray] = []
         self.aurocs: list[float] = []
         self.mean_fpr = np.linspace(0, 1, 100)
-        self.fig, self.ax = plt.subplots(figsize=(6, 6), layout='constrained')
+        self.fig: Figure | None = None
+        self.ax = None
+
+    def _get_axes(self):
+        if self.fig is None or self.ax is None:
+            self.fig, self.ax = plt.subplots(figsize=(6, 6), layout='constrained')
+        return self.fig, self.ax
 
     def record_fold(self, y: PredictionRecord) -> float:
         fold = len(self.aurocs) + 1
+        _, ax = self._get_axes()
         viz = RocCurveDisplay.from_predictions(
             y.true,
             y.pos_score,
             name=f'{"" if self.show_legends else "_"}ROC fold {fold}',
             alpha=0.1,
             lw=1,
-            ax=self.ax,
+            ax=ax,
             plot_chance_level=(fold == self.n_folds),
         )
         interp_tpr = np.interp(self.mean_fpr, viz.fpr, viz.tpr)
@@ -218,6 +227,7 @@ class RecordROC:
         return viz.roc_auc
 
     def record_final(self, y: PredictionRecord) -> float:
+        _, ax = self._get_axes()
         viz = RocCurveDisplay.from_predictions(
             y.true,
             y.pos_score,
@@ -225,16 +235,16 @@ class RecordROC:
             color='b',
             alpha=0.8,
             lw=2,
-            ax=self.ax,
+            ax=ax,
             plot_chance_level=True,
         )
 
-        self.ax.set(
+        ax.set(
             xlabel='False Positive Rate',
             ylabel='True Positive Rate',
             title='ROC curve',
         )
-        self.ax.legend(loc='lower right')
+        ax.legend(loc='lower right')
 
         self.aurocs.append(viz.roc_auc)
         return viz.roc_auc
@@ -247,13 +257,14 @@ class RecordROC:
         return self.record_fold(y)
 
     def finish(self) -> tuple[float, Figure]:
+        fig, ax = self._get_axes()
         if not self.tprs:
-            return np.nan, self.fig
+            return np.nan, fig
         mean_tpr = np.nanmean(self.tprs, axis=0)
         mean_tpr[-1] = 1.0
         mean_auroc = auc(self.mean_fpr, mean_tpr)
         std_auroc = np.nanstd(self.aurocs)
-        self.ax.plot(
+        ax.plot(
             self.mean_fpr,
             mean_tpr,
             color='b',
@@ -265,7 +276,7 @@ class RecordROC:
         std_tpr = np.nanstd(self.tprs, axis=0)
         tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
         tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
-        self.ax.fill_between(
+        ax.fill_between(
             self.mean_fpr,
             tprs_lower,
             tprs_upper,
@@ -274,14 +285,14 @@ class RecordROC:
             label=r'$\pm$ 1 std. dev.',
         )
 
-        self.ax.set(
+        ax.set(
             xlabel='False Positive Rate',
             ylabel='True Positive Rate',
             title='Mean ROC curve with cross validation',
         )
-        self.ax.legend(loc='lower right')
+        ax.legend(loc='lower right')
 
-        return mean_auroc, self.fig
+        return mean_auroc, fig
 
 
 class RecordFormatter:
