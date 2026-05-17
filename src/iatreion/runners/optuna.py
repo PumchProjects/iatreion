@@ -207,7 +207,7 @@ def sanitize_name(name: str) -> str:
 
 
 def default_study_name(config: ModelConfig) -> str:
-    return '_'.join(
+    return '__'.join(
         [
             config.dataset.name_str,
             config.train.group_name_str,

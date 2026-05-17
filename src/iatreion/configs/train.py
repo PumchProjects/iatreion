@@ -238,7 +238,7 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     @property
     def group_name_str(self) -> str:
-        return ', '.join(''.join(group) for group in self._groups)
+        return '_'.join(''.join(group) for group in self._groups)
 
     @property
     def ref_name_str(self) -> str:
@@ -246,11 +246,11 @@ For discrete RRL, validation set is used for optimization when val_size is set.
         descriptions = [self.aggregate]
         if self.label_name is not None:
             descriptions.append(f'on {self.label_name}')
-        return ', '.join(descriptions)
+        return '_'.join(descriptions)
 
     @property
     def eval_name_str(self) -> str:
-        return ', '.join(self.eval_names)
+        return '_'.join(self.eval_names)
 
     @property
     def n_outer_folds(self) -> int:

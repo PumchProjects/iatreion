@@ -77,7 +77,7 @@ For other models, features are concatenated.
 
     @property
     def name_str(self) -> str:
-        return ', '.join(self.names)
+        return '_'.join(self.names)
 
     def get_data(self, name: DataName) -> Path:
         return self.prefix / f'{name}.data'
