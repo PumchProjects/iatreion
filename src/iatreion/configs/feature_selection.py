@@ -5,7 +5,14 @@ from cyclopts import Parameter
 from cyclopts.types import PositiveFloat, PositiveInt
 from cyclopts.validators import Number
 
-type FeatureSelectionMethod = Literal['none', 'f_classif', 'mutual_info', 'l1_logistic']
+type FeatureSelectionMethod = Literal[
+    'none',
+    'f_classif',
+    'mutual_info',
+    'l1_logistic',
+    'auc',
+    'logistic_lrt',
+]
 type FeatureSelectionScoreAggregate = Literal['max', 'mean']
 
 
@@ -20,6 +27,8 @@ class FeatureSelectionConfig:
 'f_classif': ANOVA F-test, supports binary and multiclass labels.
 'mutual_info': mutual information classifier score, supports binary and multiclass labels.
 'l1_logistic': multinomial L1 logistic-regression embedded selection.
+'auc': binary-only univariate AUROC distance from chance.
+'logistic_lrt': binary-only univariate logistic likelihood-ratio score.
 """
 
     fraction: Annotated[

@@ -11,6 +11,7 @@ import pandas as pd
 from numpy.typing import NDArray
 from sklearn.feature_selection import f_classif, mutual_info_classif
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score
 
 from iatreion.utils import save_dict
 
@@ -85,8 +86,12 @@ class SupervisedFeatureSelector:
             return
 
         score_view, raw_features, discrete_features = self._make_score_view(frame)
-        scores = self._score(score_view, y, discrete_features)
-        feature_scores = self._aggregate_scores(raw_features, scores)
+        feature_scores = self._score_features(
+            score_view,
+            raw_features,
+            discrete_features,
+            y,
+        )
         ranked_features = self._rank_features(feature_scores)
         keep_count = self._keep_count(len(ranked_features))
         selected = set(ranked_features[:keep_count])
@@ -127,7 +132,20 @@ class SupervisedFeatureSelector:
             keep = min(keep, self.config.max_features)
         return min(keep, total)
 
-    def _score(
+    def _score_features(
+        self,
+        score_view: pd.DataFrame,
+        raw_features: list[str],
+        discrete_features: list[bool],
+        y: NDArray,
+    ) -> dict[str, float]:
+        if self.config.method == 'logistic_lrt':
+            return self._score_logistic_lrt(score_view, raw_features, y)
+
+        scores = self._score_columns(score_view, y, discrete_features)
+        return self._aggregate_scores(raw_features, scores)
+
+    def _score_columns(
         self, score_view: pd.DataFrame, y: NDArray, discrete_features: list[bool]
     ) -> NDArray:
         if score_view.shape[1] == 0:
@@ -135,6 +153,15 @@ class SupervisedFeatureSelector:
 
         X = score_view.to_numpy(dtype=float)
         match self.config.method:
+            case 'auc':
+                y_binary = self._binary_y(y)
+                scores = np.array(
+                    [
+                        abs(roc_auc_score(y_binary, X[:, index]) - 0.5)
+                        for index in range(X.shape[1])
+                    ],
+                    dtype=float,
+                )
             case 'f_classif':
                 with warnings.catch_warnings():
                     warnings.simplefilter('ignore')
@@ -167,6 +194,34 @@ class SupervisedFeatureSelector:
             neginf=0.0,
         )
 
+    def _score_logistic_lrt(
+        self,
+        score_view: pd.DataFrame,
+        raw_features: list[str],
+        y: NDArray,
+    ) -> dict[str, float]:
+        y_binary = self._binary_y(y)
+        ll_null = self._log_likelihood(
+            y_binary,
+            np.full_like(y_binary, y_binary.mean(), dtype=float),
+        )
+        scores = {name: 0.0 for name in self.feature_columns}
+        groups = self._score_column_groups(score_view, raw_features)
+        for name, columns in groups.items():
+            model = LogisticRegression(penalty=None, solver='lbfgs', max_iter=5000)
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                model.fit(score_view.loc[:, columns].to_numpy(dtype=float), y_binary)
+            positive_index = np.flatnonzero(model.classes_ == 1).item()
+            probability = model.predict_proba(
+                score_view.loc[:, columns].to_numpy(dtype=float)
+            )[:, positive_index]
+            scores[name] = max(
+                0.0,
+                2.0 * (self._log_likelihood(y_binary, probability) - ll_null),
+            )
+        return scores
+
     def _aggregate_scores(
         self, raw_features: list[str], scores: NDArray
     ) -> dict[str, float]:
@@ -191,6 +246,28 @@ class SupervisedFeatureSelector:
             self.feature_columns,
             key=lambda name: (-scores[name], order[name]),
         )
+
+    def _score_column_groups(
+        self, score_view: pd.DataFrame, raw_features: list[str]
+    ) -> dict[str, list[str]]:
+        groups = {name: [] for name in self.feature_columns}
+        for column, raw_feature in zip(score_view.columns, raw_features, strict=True):
+            groups[raw_feature].append(column)
+        return groups
+
+    @staticmethod
+    def _binary_y(y: NDArray) -> NDArray:
+        labels = np.unique(y)
+        if labels.shape[0] != 2:
+            raise ValueError(
+                'auc and logistic_lrt feature selection require 2 classes.'
+            )
+        return (y == labels[-1]).astype(float)
+
+    @staticmethod
+    def _log_likelihood(y: NDArray, probability: NDArray) -> float:
+        p = np.clip(probability.astype(float), 1e-9, 1.0 - 1e-9)
+        return float(np.sum(y * np.log(p) + (1.0 - y) * np.log(1.0 - p)))
 
     def _make_score_view(
         self, frame: pd.DataFrame
