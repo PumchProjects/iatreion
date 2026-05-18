@@ -27,8 +27,7 @@ from .sequential import SequentialPreprocessor
 
 
 def get_single_preprocessor(config: PreprocessorConfig, name: DataName) -> Preprocessor:
-    stem = config.get_stem(name)
-    match stem:
+    match name:
         case 'basic-noage':
             return BasicPreprocessor(config, name, age=False)
         case 'basic':

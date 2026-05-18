@@ -34,6 +34,11 @@ class RrlEvalConfig:
     data: Annotated[dict[str, str], Parameter(alias='-d')] = field(default_factory=dict)
     'Path to the data file.'
 
+    data_sheets: Annotated[dict[str, str], Parameter(alias='-ds')] = field(
+        default_factory=dict
+    )
+    'Excel sheet names or indices keyed by raw data name. If not set, use sheet 0.'
+
     vmri: Annotated[str, Parameter(alias='-v')] = ''
     'Path to the Vmri_mean_sd data file.'
 
@@ -94,16 +99,15 @@ class RrlEvalConfig:
             log_root=Path(self.thesaurus),
             _shuffle=False,
         )
-        # HACK: Empty input prefix
         process_config = PreprocessorConfig(
             dataset=dataset,
-            input_prefix=Path(),
+            data={name: Path(path) for name, path in self.data.items()},
+            data_sheets=self.data_sheets,
             index_name_=self.index_name or None,
             group_columns_=[self.label_name] if self.label_name else None,
-            _vmri_data_path=Path(self.vmri),
-            _vmri_change_path=Path(self.vmri_change),
-            _data_paths={name: Path(path) for name, path in self.data.items()},
-            _process_info_path=Path(self.process),
+            vmri=Path(self.vmri) if self.vmri else None,
+            vmri_change=Path(self.vmri_change) if self.vmri_change else None,
+            _process_info_path=Path(self.process) if self.process else None,
             _final=True,
             _keep=self.keep,
         )

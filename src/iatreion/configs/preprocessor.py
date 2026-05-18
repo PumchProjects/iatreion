@@ -1,32 +1,15 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal
 
 import pandas as pd
 from cyclopts import Parameter
-from cyclopts.types import ExistingDirectory
+from cyclopts.types import ExistingFile
 
 from iatreion.exceptions import IatreionException
 from iatreion.utils import load_dict, logger, save_dict
 
 from .dataset import DataName, DatasetConfig
-
-data_file_mapping: dict[str, str] = {
-    'history': '病史_20250924.xlsx',
-    'cdr': '认知_cdr.xlsx',
-    'screen': '认知筛查.xlsx',
-    'composite': '认知综合.xlsx',
-    'biomarker': '血液生物标记物_bio.xlsx',
-    'cbf': '核磁_cbf.xlsx',
-    'csvd': '核磁_csvd_20251008.xlsx',
-    'csvd-manual': '核磁_csvd_人工_给清华.xlsx',
-    'volume': '核磁_volume.xlsx',
-    'volume-new': '核磁_volume202510_历次.xlsx',
-    'volume-adni': '3TADNI2.xlsx',
-    'snp': '基因_snp.csv',
-    'test-screen': '认证报告_20251016.xlsx@sc',
-    'test-volume': '认证报告_20251016.xlsx@mri',
-}
 
 data_indices_mapping: dict[str, list[str]] = {
     'history': [],
@@ -41,8 +24,6 @@ data_indices_mapping: dict[str, list[str]] = {
     'volume-new': ['检查日期/Study date'],
     'volume-adni': ['检查日期/Study date'],
     'snp': [],
-    'test-screen': ['测试日期'],
-    'test-volume': ['MRI_time'],
 }
 
 data_stem_mapping: dict[str, str] = {
@@ -94,13 +75,6 @@ name_data_mapping: dict[DataName, str] = {
     'volume-adni-v': 'volume-adni',
     'volume-adni-pct': 'volume-adni',
     'snp': 'snp',
-    'test-mmse-sum': 'test-screen',
-    'test-moca-sum': 'test-screen',
-    'test-adl-sum': 'test-screen',
-    'test-had-sum': 'test-screen',
-    'test-s-screen-sum': 'test-screen',
-    'test-volume-z-pct': 'test-volume',
-    'test-s-all': 'test-s-all',
 }
 
 sequence_mapping: dict[DataName, list[DataName]] = {
@@ -122,14 +96,9 @@ sequence_mapping: dict[DataName, list[DataName]] = {
     ],
     's-screen-sum-pct': ['basic', 'mmse-sum-pct', 'moca-sum-pct', 'adl-sum', 'had-sum'],
     's-composite-aea': ['associative-learning', 'episodic-memory', 'avlt'],
-    'test-s-screen-sum': [
-        'test-mmse-sum',
-        'test-moca-sum',
-        'test-adl-sum',
-        'test-had-sum',
-    ],
-    'test-s-all': ['test-s-screen-sum', 'test-volume-z-pct'],
 }
+
+valid_data_names = set(data_indices_mapping)
 
 
 @Parameter(name='*')
@@ -137,8 +106,27 @@ sequence_mapping: dict[DataName, list[DataName]] = {
 class PreprocessorConfig:
     dataset: DatasetConfig
 
-    input_prefix: Annotated[ExistingDirectory, Parameter(name=['--input', '-i'])]
-    'Prefix of the input files.'
+    data: Annotated[dict[str, ExistingFile], Parameter(alias='-d')] = field(
+        default_factory=dict
+    )
+    'Input files keyed by raw data name.'
+
+    data_sheets: Annotated[dict[str, str], Parameter(alias='-ds')] = field(
+        default_factory=dict
+    )
+    'Excel sheet names or indices keyed by raw data name. If not set, use sheet 0.'
+
+    group_data: Annotated[ExistingFile | None, Parameter(alias='-gd')] = None
+    'Patient group mapping file.'
+
+    basic_data: Annotated[ExistingFile | None, Parameter(alias='-bd')] = None
+    'Basic patient information file.'
+
+    vmri: Annotated[ExistingFile | None, Parameter(alias='-v')] = None
+    'Path to the Vmri_mean_sd data file.'
+
+    vmri_change: Annotated[ExistingFile | None, Parameter(alias='-vc')] = None
+    'Path to the Vmri_mean_sd column name change file.'
 
     index_name_: Annotated[str | None, Parameter(alias='-in')] = None
     'Index column name in the data files. If not set, use default index name.'
@@ -153,12 +141,6 @@ class PreprocessorConfig:
 values in a column is less than or equal to this threshold, it will be considered as
 discrete. This is used for determining the encoding method for the column.
 """
-
-    _vmri_data_path: Path | None = None
-
-    _vmri_change_path: Path | None = None
-
-    _data_paths: dict[str, Path] | None = None
 
     _process_info_path: Path | None = None
 
@@ -176,6 +158,25 @@ discrete. This is used for determining the encoding method for the column.
 
     def __post_init__(self) -> None:
         self.dataset.prefix.mkdir(parents=True, exist_ok=True)
+        self.validate_input_paths()
+
+    @staticmethod
+    def format_names(names: set[str]) -> str:
+        return ', '.join(sorted(names))
+
+    def validate_input_paths(self) -> None:
+        unknown_data_names = set(self.data) - valid_data_names
+        if unknown_data_names:
+            raise IatreionException(
+                'Unknown data path key(s): $data_names',
+                data_names=self.format_names(unknown_data_names),
+            )
+        unknown_sheet_names = set(self.data_sheets) - valid_data_names
+        if unknown_sheet_names:
+            raise IatreionException(
+                'Unknown data sheet key(s): $data_names',
+                data_names=self.format_names(unknown_sheet_names),
+            )
 
     @property
     def index_name(self) -> str:
@@ -187,45 +188,48 @@ discrete. This is used for determining the encoding method for the column.
 
     @property
     def group_data_path(self) -> Path:
-        return self.input_prefix / '患者及分组加密对应表20251106.xlsx'
+        if self.group_data is None:
+            raise IatreionException('$group_data must be set', group_data='Group data')
+        return self.group_data
 
     @property
     def basic_data_path(self) -> Path:
-        return self.input_prefix / '基本信息202510.xlsx'
+        if self.basic_data is None:
+            raise IatreionException('$basic_data must be set', basic_data='Basic data')
+        return self.basic_data
 
     @property
     def vmri_data_path(self) -> Path:
-        if self._vmri_data_path is not None:
-            if not self._vmri_data_path.is_file():
-                raise IatreionException('$vmri file is not found', vmri='VMRI')
-            return self._vmri_data_path
-        return self.input_prefix / 'Vmri_mean_sd.xlsx'
+        if self.vmri is None:
+            raise IatreionException('$vmri must be set', vmri='VMRI')
+        return self.vmri
 
     @property
     def vmri_change_path(self) -> Path:
-        if self._vmri_change_path is not None:
-            if not self._vmri_change_path.is_file():
-                raise IatreionException(
-                    '$vmri_change file is not found', vmri_change='VMRI change'
-                )
-            return self._vmri_change_path
-        return self.input_prefix / '表头变化202510.xlsx'
+        if self.vmri_change is None:
+            raise IatreionException(
+                '$vmri_change must be set', vmri_change='VMRI change'
+            )
+        return self.vmri_change
 
     @staticmethod
     def get_data_name(name: DataName) -> str:
         return name_data_mapping[name]
 
     def get_data_path(self, data_name: str) -> tuple[Path, int | str]:
-        if self._data_paths is not None:
-            if data_name not in self._data_paths:
-                raise IatreionException(
-                    'Data name "$data_name" not found in data paths.',
-                    data_name=data_name,
-                )
-            return self._data_paths[data_name], 0
-        file_name = data_file_mapping[data_name].rsplit('@', maxsplit=1)
-        sheet_name = file_name[1] if len(file_name) == 2 else 0
-        return self.input_prefix / file_name[0], sheet_name
+        if data_name not in self.data:
+            raise IatreionException(
+                'Data name "$data_name" not found in data paths.',
+                data_name=data_name,
+            )
+        sheet_name = self.data_sheets.get(data_name)
+        if sheet_name is None:
+            sheet: int | str = 0
+        elif sheet_name.isdecimal():
+            sheet = int(sheet_name)
+        else:
+            sheet = sheet_name
+        return self.data[data_name], sheet
 
     @staticmethod
     def get_indices_names(data_name: str) -> list[str]:
@@ -253,16 +257,12 @@ discrete. This is used for determining the encoding method for the column.
     @property
     def process_info_path(self) -> Path:
         if self._process_info_path is not None:
-            if not self._process_info_path.is_file():
-                raise IatreionException(
-                    '$process_info file is not found', process_info='Processing info'
-                )
             return self._process_info_path
+        if self._final:
+            raise IatreionException(
+                '$process_info must be set', process_info='Processing info'
+            )
         return self.dataset.prefix / 'process_info.toml'
-
-    @staticmethod
-    def get_stem(name: DataName) -> DataName:
-        return cast(DataName, name.removeprefix('test-'))
 
     def children_names(self, name: DataName) -> list[DataName]:
         return sequence_mapping.get(name, [])
