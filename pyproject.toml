@@ -4,7 +4,7 @@ version = "0.1.0"
 description = 'An interpretable dementia diagnoser. From Ancient Greek ἰατρεῖον ("clinic").'
 requires-python = ">=3.12"
 dependencies = [
-    "cyclopts>=4.5.3",
+    "cyclopts>=4.14.0",
     "pandas[excel]>=2.2.3",
     "pandas-stubs>=2.2.3.250308",
     "scikit-learn>=1.6.1,<1.8.0",
