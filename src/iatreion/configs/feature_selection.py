@@ -16,12 +16,14 @@ type FeatureSelectionMethod = Literal[
 type FeatureSelectionScoreAggregate = Literal['max', 'mean']
 
 
-@Parameter(name='*')
+def name_transform(s: str) -> str:
+    return f'feature-selection-{s.replace("_", "-")}'
+
+
+@Parameter(name='*', name_transform=name_transform)
 @dataclass(kw_only=True)
 class FeatureSelectionConfig:
-    method: Annotated[
-        FeatureSelectionMethod, Parameter(name=['--feature-selection-method', '-fsm'])
-    ] = 'none'
+    method: FeatureSelectionMethod = 'none'
     """Supervised feature-selection method fitted inside each training fold.
 'none': keep all features.
 'f_classif': ANOVA F-test, supports binary and multiclass labels.
@@ -31,37 +33,22 @@ class FeatureSelectionConfig:
 'logistic_lrt': binary-only univariate logistic likelihood-ratio score.
 """
 
-    fraction: Annotated[
-        float,
-        Parameter(
-            name=['--feature-selection-fraction', '-fsf'], validator=Number(gt=0, lte=1)
-        ),
-    ] = 0.5
+    fraction: Annotated[float, Parameter(validator=Number(gt=0, lte=1))] = 0.5
     'Fraction of raw features to keep when supervised feature selection is enabled.'
 
-    top_k: Annotated[
-        PositiveInt | None, Parameter(name=['--feature-selection-top-k', '-fsk'])
-    ] = None
+    top_k: PositiveInt | None = None
     'Exact number of raw features to keep. Overrides fraction when set.'
 
-    min_features: Annotated[
-        PositiveInt, Parameter(name=['--feature-selection-min-features', '-fsmin'])
-    ] = 1
+    min_features: PositiveInt = 1
     'Minimum number of raw features to keep when supervised feature selection is enabled.'
 
-    max_features: Annotated[
-        PositiveInt | None,
-        Parameter(name=['--feature-selection-max-features', '-fsmax']),
-    ] = None
+    max_features: PositiveInt | None = None
     'Maximum number of raw features to keep when supervised feature selection is enabled.'
 
-    score_aggregate: Annotated[
-        FeatureSelectionScoreAggregate,
-        Parameter(name=['--feature-selection-score-aggregate', '-fsa']),
-    ] = 'max'
+    score_aggregate: FeatureSelectionScoreAggregate = 'max'
     'How to aggregate category-level scores back to one raw unordered feature score.'
 
-    c: Annotated[PositiveFloat, Parameter(name=['--feature-selection-c', '-fsc'])] = 1.0
+    c: PositiveFloat = 1.0
     'Inverse regularization strength for l1_logistic feature selection.'
 
     def validate(self) -> None:

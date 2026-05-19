@@ -9,11 +9,11 @@ from .show_result_base import ShowResultConfig
 @Parameter(name='*')
 @dataclass(kw_only=True)
 class ShowPerformanceConfig(ShowResultConfig):
-    reference: Annotated[str | None, Parameter(alias='-ref')] = None
+    reference: str | None = None
     'Reference label for comparison.'
 
-    metrics: Annotated[list[str], Parameter(alias='-met', consume_multiple=True)] = (
-        field(default_factory=lambda: ['AUROC', 'AUPRC', 'SEN', 'SPC'])
+    metrics: Annotated[list[str], Parameter(consume_multiple=True)] = field(
+        default_factory=lambda: ['AUROC', 'AUPRC', 'SEN', 'SPC']
     )
     'Metrics to include in the analysis.'
 

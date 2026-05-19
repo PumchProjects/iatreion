@@ -64,9 +64,7 @@ and combine available modalities with equal-weight late fusion.
     preprocess: Annotated[bool, Parameter(negative='--no-pp')] = True
     'Whether to preprocess the data (e.g., filling missing values, normalization).'
 
-    missing_value_strategy: Annotated[MissingValueStrategy, Parameter(alias='-mvs')] = (
-        'simple'
-    )
+    missing_value_strategy: MissingValueStrategy = 'simple'
     """Missing-value handling strategy.
 'simple': use mode for unordered, median for ordered/discrete, mean for continuous.
 'limix': use the LimiX reconstruction model and only fill missing entries.
@@ -78,9 +76,7 @@ and combine available modalities with equal-weight late fusion.
     ] = True
     'Whether to z-score normalize continuous features.'
 
-    discrete_processing: Annotated[
-        DiscreteProcessingStrategy, Parameter(alias='-dp')
-    ] = 'onehot'
+    discrete_processing: DiscreteProcessingStrategy = 'onehot'
     """Processing strategy for non-continuous features after optional under-sampling.
 'onehot': one-hot encode categorical features.
 'minmax': min-max scale categorical codes to [0, 1].
@@ -92,22 +88,22 @@ and combine available modalities with equal-weight late fusion.
     )
     'Supervised feature-selection settings.'
 
-    eval_names: Annotated[list[str], Parameter(alias='-en', consume_multiple=True)] = (
-        field(default_factory=list)
+    eval_names: Annotated[list[str], Parameter(consume_multiple=True)] = field(
+        default_factory=list
     )
     'Optional subset of modalities to evaluate/fuse while keeping splits based on all input modalities.'
 
-    n_outer_splits: Annotated[int, Parameter(alias='-nos')] = 5
+    n_outer_splits: int = 5
     'Number of splits for outer cross-validation.'
 
-    n_inner_splits: Annotated[int, Parameter(alias='-nis')] = 5
+    n_inner_splits: int = 5
     "Number of splits for inner cross-validation, used when aggregate='calibrated-fusion' or 'calibrated-concat'."
 
-    clinical_threshold_label: Annotated[str, Parameter(alias='-ctl')] = ''
+    clinical_threshold_label: str = ''
     'Class label whose recall is targeted by the pre-specified clinical threshold.'
 
     clinical_threshold_recall: Annotated[
-        float, Parameter(validator=Number(gt=0, lt=1), alias='-ctr')
+        float, Parameter(validator=Number(gt=0, lt=1))
     ] = 0.9
     'Target recall for the pre-specified clinical threshold.'
 
@@ -117,40 +113,38 @@ and combine available modalities with equal-weight late fusion.
     final: Annotated[bool, Parameter(alias='-f')] = False
     'Whether to use the whole dataset for training or testing.'
 
-    under_sampler: Annotated[UnderSamplerName | None, Parameter(alias='-us')] = None
+    under_sampler: UnderSamplerName | None = None
     'Under-sampling method to use.'
 
-    target_n_samples: Annotated[NonNegativeInt, Parameter(alias='-tns')] = 0
+    target_n_samples: NonNegativeInt = 0
     'Maximum number of samples to keep for each class after under-sampling. Use 0 to balance to the smallest class.'
 
-    limix_python_path: Annotated[ExistingFile | None, Parameter(alias='-lpp')] = None
+    limix_python_path: ExistingFile | None = None
     'Python interpreter used for LimiX-based missing-value imputation.'
 
-    limix_repo_path: Annotated[ExistingDirectory | None, Parameter(alias='-lrp')] = None
+    limix_repo_path: ExistingDirectory | None = None
     'Path to the LimiX repository used for missing-value imputation.'
 
-    limix_model_path: Annotated[ExistingFile | None, Parameter(alias='-lmp')] = None
+    limix_model_path: ExistingFile | None = None
     'Path to the pre-trained LimiX model file used for missing-value imputation.'
 
-    limix_inference_config_path: Annotated[
-        ExistingFile | None, Parameter(alias='-lic')
-    ] = None
+    limix_inference_config_path: ExistingFile | None = None
     'Optional override for the LimiX missing-value inference config file.'
 
-    limix_device: Annotated[str, Parameter(alias='-ld')] = 'cuda'
+    limix_device: str = 'cuda'
     'Device passed to the LimiX missing-value worker.'
 
-    val_size: Annotated[float | int | None, Parameter(alias='-vs')] = None
+    val_size: float | int | None = None
     """If float, should be between 0.0 and 1.0 and represent the proportion of the dataset to include in the validation split.
 If int, represents the absolute number of validation samples.
 If None (default), no validation set is used.
 For discrete RRL, validation set is used for optimization when val_size is set.
 """
 
-    suspected_case: Annotated[bool, Parameter(alias='-sc')] = False
+    suspected_case: bool = False
     'Whether to include suspected cases in training.'
 
-    label_name: Annotated[str | None, Parameter(alias='-ln')] = None
+    label_name: str | None = None
     'Label column name in the data files. If not set, determined automatically.'
 
     seed: int = 42
@@ -159,12 +153,10 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     plot_roc: Annotated[bool, Parameter(negative=None)] = True
     'Plot ROC curve.'
 
-    bootstrap_samples: Annotated[PositiveInt, Parameter(alias='-nbs')] = 1000
+    bootstrap_samples: PositiveInt = 1000
     'Number of bootstrap resamples used to estimate confidence intervals.'
 
-    ci_level: Annotated[
-        float, Parameter(validator=Number(gt=0, lt=1), alias='-cil')
-    ] = 0.95
+    ci_level: Annotated[float, Parameter(validator=Number(gt=0, lt=1))] = 0.95
     'Confidence level in (0, 1) for bootstrap confidence intervals.'
 
     log_root: Directory = Path('logs')

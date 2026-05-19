@@ -110,14 +110,14 @@ class TuningStudyConfig:
             name=data.get('name', ''),
             objective=data['objective'],
             direction=data.get('direction', 'maximize'),
-            n_trials=data.get('n_trials'),
-            timeout_sec=data.get('timeout_sec'),
+            n_trials=data.get('n-trials'),
+            timeout_sec=data.get('timeout-sec'),
             sampler=data.get('sampler', 'tpe'),
             seed=data.get('seed', 42),
-            n_startup_trials=data.get('n_startup_trials', 20),
+            n_startup_trials=data.get('n-startup-trials', 20),
             multivariate=data.get('multivariate', True),
             pruner=data.get('pruner', 'none'),
-            load_if_exists=data.get('load_if_exists', True),
+            load_if_exists=data.get('load-if-exists', True),
         )
 
 
@@ -130,9 +130,9 @@ class TuningExecutionConfig:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> 'TuningExecutionConfig':
         return cls(
-            trial_log_root=Path(data.get('trial_log_root', 'logs_optuna')),
-            fail_value=float(data.get('fail_value', 0.0)),
-            n_jobs=data.get('n_jobs'),
+            trial_log_root=Path(data.get('trial-log-root', 'logs_optuna')),
+            fail_value=float(data.get('fail-value', 0.0)),
+            n_jobs=data.get('n-jobs'),
         )
 
 
@@ -223,7 +223,7 @@ def flatten_search_space(
     for key, value in data.items():
         name = f'{prefix}.{key}' if prefix else key
         if isinstance(value, dict) and 'type' in value:
-            search[name] = SearchSpace.from_dict(value)
+            search[name.replace('-', '_')] = SearchSpace.from_dict(value)
             continue
         if not isinstance(value, dict):
             raise ValueError(f'Invalid search-space entry for {name!r}: {value!r}')

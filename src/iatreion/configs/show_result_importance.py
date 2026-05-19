@@ -13,7 +13,7 @@ from .train import TrainConfig
 @dataclass(kw_only=True)
 class ShowImportanceConfig(ShowInterpretabilityConfig):
     importance_methods: Annotated[
-        list[ImportanceMethod], Parameter(alias='-im', consume_multiple=True)
+        list[ImportanceMethod], Parameter(consume_multiple=True)
     ] = field(default_factory=lambda: ['permutation'])
     'Feature-importance methods to visualize.'
 

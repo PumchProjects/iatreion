@@ -184,9 +184,9 @@ cython_debug/
 
 # Custom scripts
 /dependencies*/
-/configs/
-/scripts/
+/configs*/
+/scripts*/
 /test.py
 
 # Figures and tables
-/figures/
+/figures*/

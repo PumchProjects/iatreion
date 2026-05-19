@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from cyclopts import Parameter
-from cyclopts.types import ExistingFile
+from cyclopts.types import ExistingTomlPath
 
 from iatreion.exceptions import IatreionException
 from iatreion.utils import add_file_handler, remove_file_handler
@@ -23,27 +23,27 @@ class ModelConfig:
     dataset: DatasetConfig
     train: TrainConfig
 
-    fold_scope: Annotated[FoldScope, Parameter(alias='-is')] = 'outer'
+    fold_scope: FoldScope = 'outer'
     """Fold scope for importance calculation.
 'outer': only calculate importance for outer folds.
 'all': also calculate importance for inner folds.
 """
 
     importance_methods: Annotated[
-        list[ImportanceMethod], Parameter(alias='-im', consume_multiple=True)
+        list[ImportanceMethod], Parameter(consume_multiple=True)
     ] = field(default_factory=list)
     'Feature-importance methods to export. Available: native, permutation, shap.'
 
-    importance_repeats: Annotated[int, Parameter(alias='-ir')] = 5
+    importance_repeats: int = 5
     'Number of repeats for permutation importance.'
 
-    importance_max_samples: Annotated[int | None, Parameter(alias='-ims')] = 256
+    importance_max_samples: int | None = 256
     'Maximum number of test samples used for permutation/SHAP importance. Disable with None.'
 
-    study_name: Annotated[str | None, Parameter(alias='-sn')] = None
+    study_name: str | None = None
     'Optuna study name. If not provided, use the TOML name or an auto-generated dataset/group/aggregate name.'
 
-    tune_config: ExistingFile | None = None
+    tune_config: ExistingTomlPath | None = None
     'Path to the TOML file that defines nested/final Optuna tuning.'
 
     _log_handler: FileHandler | None = field(init=False, default=None, repr=False)

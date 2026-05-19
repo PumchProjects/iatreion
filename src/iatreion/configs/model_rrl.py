@@ -18,40 +18,40 @@ class RrlConfig(ModelConfig):
     epoch: Annotated[int, Parameter(alias='-e')] = 41
     'Set the total epoch.'
 
-    batch_size: Annotated[int, Parameter(alias='-bs')] = 64
+    batch_size: int = 64
     'Set the batch size.'
 
-    learning_rate: Annotated[float, Parameter(alias='-lr')] = 0.01
+    learning_rate: float = 0.01
     'Set the initial learning rate.'
 
-    lr_decay_rate: Annotated[float, Parameter(alias='-lrdr')] = 0.75
+    lr_decay_rate: float = 0.75
     'Set the learning rate decay rate.'
 
-    lr_decay_epoch: Annotated[int, Parameter(alias='-lrde')] = 10
+    lr_decay_epoch: int = 10
     'Set the learning rate decay epoch.'
 
-    weight_decay: Annotated[float, Parameter(alias='-wd')] = 0.0
+    weight_decay: float = 0.0
     'Set the weight decay (L2 penalty).'
 
-    log_iter: Annotated[int, Parameter(alias='-li')] = 500
+    log_iter: int = 500
     'The number of iterations (batches) to log once.'
 
-    save_interval: Annotated[int, Parameter(alias='-si')] = 100
+    save_interval: int = 100
     'The number of epochs to save the model based on training loss (when val_size=None), or the number of iterations (batches) to save the model based on the validation metric (when val_size is set).'
 
-    validation_metric: Annotated[RrlValidationMetric, Parameter(alias='-vm')] = 'f1'
+    validation_metric: RrlValidationMetric = 'f1'
     'Validation metric used for checkpoint selection and early stopping when val_size is set.'
 
-    early_stop_patience: Annotated[int | None, Parameter(alias='-esp')] = None
+    early_stop_patience: int | None = None
     'Number of validation checks with no sufficient validation-metric improvement before early stopping. Disabled when None or <= 0.'
 
-    early_stop_min_delta: Annotated[float, Parameter(alias='-esd')] = 0.0
+    early_stop_min_delta: float = 0.0
     'Minimum required increase in the validation metric to reset early-stopping patience.'
 
-    label_smoothing: Annotated[float, Parameter(alias='-ls')] = 0.0
+    label_smoothing: float = 0.0
     'Label smoothing factor for cross-entropy loss.'
 
-    max_grad_norm: Annotated[float | None, Parameter(alias='-mgn')] = 5.0
+    max_grad_norm: float | None = 5.0
     'Max gradient norm for clipping. Disabled when None or <= 0.'
 
     nlaf: bool = True

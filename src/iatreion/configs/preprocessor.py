@@ -106,37 +106,31 @@ valid_data_names = set(data_indices_mapping)
 class PreprocessorConfig:
     dataset: DatasetConfig
 
-    data: Annotated[dict[str, ExistingFile], Parameter(alias='-d')] = field(
-        default_factory=dict
-    )
+    data: dict[str, ExistingFile] = field(default_factory=dict)
     'Input files keyed by raw data name.'
 
-    data_sheets: Annotated[dict[str, str], Parameter(alias='-ds')] = field(
-        default_factory=dict
-    )
+    data_sheets: dict[str, str] = field(default_factory=dict)
     'Excel sheet names or indices keyed by raw data name. If not set, use sheet 0.'
 
-    group_data: Annotated[ExistingFile | None, Parameter(alias='-gd')] = None
+    group_data: ExistingFile | None = None
     'Patient group mapping file.'
 
-    basic_data: Annotated[ExistingFile | None, Parameter(alias='-bd')] = None
+    basic_data: ExistingFile | None = None
     'Basic patient information file.'
 
     vmri: Annotated[ExistingFile | None, Parameter(alias='-v')] = None
     'Path to the Vmri_mean_sd data file.'
 
-    vmri_change: Annotated[ExistingFile | None, Parameter(alias='-vc')] = None
+    vmri_change: ExistingFile | None = None
     'Path to the Vmri_mean_sd column name change file.'
 
-    index_name_: Annotated[str | None, Parameter(alias='-in')] = None
+    index_name_: str | None = None
     'Index column name in the data files. If not set, use default index name.'
 
-    group_columns_: Annotated[
-        list[str] | None, Parameter(alias='-gc', consume_multiple=True)
-    ] = None
+    group_columns_: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None
     'Group columns in the data files. If not set, use default group columns.'
 
-    discrete_threshold: Annotated[int, Parameter(alias='-dt')] = 10
+    discrete_threshold: int = 10
     """Threshold for determining whether a column is discrete. If the number of unique
 values in a column is less than or equal to this threshold, it will be considered as
 discrete. This is used for determining the encoding method for the column.

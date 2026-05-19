@@ -14,7 +14,7 @@ class RrlEvalPlotConfig(RrlEvalConfig):
     mode: Literal['plot'] = field(init=False, default='plot')
     'Mode of RRL evaluation.'
 
-    title: Annotated[str, Parameter(alias='-pt')] = ''
+    title: str = ''
     'Optional title for the generated figure.'
 
     output: Annotated[str, Parameter(alias='-o')] = 'rrl_waterfall'
