@@ -184,7 +184,9 @@ cython_debug/
 
 # Custom scripts
 /dependencies*/
-/configs*/
+/configs*/*
+!/configs/config.toml
+!/configs/rrl_optuna.toml
 /scripts*/
 /test.py
 

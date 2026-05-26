@@ -1,0 +1,647 @@
+[process]
+names = [
+    "symptom",
+    "s-screen-sum",
+    "composite-bin",
+    "biomarker",
+    "cbf",
+    "csvd",
+    "volume-new-pct",
+]
+prefix = "<path-to-a-new-or-non-existent-folder>"
+group-data = "<path-to-the-patient-group-mapping-file>"
+basic-data = "<path-to-the-basic-patient-information-file>"
+vmri = "<path-to-the-mri-volume-mean-std-file>"
+vmri-change = "<path-to-the-mri-volume-column-change-file>"
+
+[process.data]
+history = "<path-to-the-history-spreadsheet>"
+screen = "<path-to-the-cognitive-screening-spreadsheet>"
+composite = "<path-to-the-cognitive-composite-spreadsheet>"
+biomarker = "<path-to-the-blood-biomarker-spreadsheet>"
+cbf = "<path-to-the-mri-cbf-spreadsheet>"
+csvd = "<path-to-the-mri-csvd-spreadsheet>"
+volume-new = "<path-to-the-mri-volume-spreadsheet>"
+
+[train.rrl]
+prefix = "<path-to-the-folder-storing-processed-data>"
+names = [
+    "symptom",
+    "csvd",
+]
+groups = [
+    "a",
+    "c",
+]
+n-outer-splits = 5
+n-inner-splits = 5
+clinical-threshold-label = "c"
+clinical-threshold-recall = 0.6
+aggregate = "calibrated-fusion"
+log-root = "logs"
+device-id = "0-7"
+val-size = 0.2
+epoch = 1201
+batch-size = 128
+save-interval = 100
+early-stop-patience = 10
+early-stop-min-delta = 0.001
+label-smoothing = 0.05
+max-grad-norm = 3.0
+nlaf = true
+alpha = 0.9
+beta = 3
+gamma = 3
+use-not = true
+skip = true
+weighted = true
+missing-aware-mode = "improved"
+missing-value-strategy = "none"
+tune-config = "configs/rrl_optuna.toml"
+
+[train.rrl-eval]
+prefix = "<path-to-the-folder-storing-processed-data>"
+names = [
+    "symptom",
+    "csvd",
+]
+groups = [
+    "a",
+    "c",
+]
+n-outer-splits = 5
+n-inner-splits = 5
+clinical-threshold-label = "c"
+clinical-threshold-recall = 0.6
+aggregate = "calibrated-fusion"
+preprocess = false
+log-root = "logs"
+device-id = "0-7"
+
+[train.xgboost]
+prefix = "<path-to-the-folder-storing-processed-data>"
+names = [
+    "symptom",
+    "csvd",
+]
+groups = [
+    "a",
+    "c",
+]
+n-outer-splits = 5
+n-inner-splits = 5
+clinical-threshold-label = "c"
+clinical-threshold-recall = 0.6
+aggregate = "calibrated-fusion"
+log-root = "logs"
+device-id = "0-7"
+device = "cuda"
+
+[train.random-forest]
+prefix = "<path-to-the-folder-storing-processed-data>"
+names = [
+    "symptom",
+    "csvd",
+]
+groups = [
+    "a",
+    "c",
+]
+n-outer-splits = 5
+n-inner-splits = 5
+clinical-threshold-label = "c"
+clinical-threshold-recall = 0.6
+aggregate = "calibrated-fusion"
+log-root = "logs"
+
+[show.table-1]
+names = [
+    "symptom",
+    "s-screen-sum",
+    "composite-bin",
+    "biomarker",
+    "cbf",
+    "csvd",
+    "volume-new-pct",
+]
+groups = [
+    "a",
+    "f",
+]
+output = "table_1"
+prefix = "<path-to-the-folder-storing-processed-data>"
+
+[show.violin-mmse]
+names = [
+    "symptom",
+    "s-screen-sum",
+    "composite-bin",
+    "biomarker",
+    "cbf",
+    "csvd",
+    "volume-new-pct",
+]
+groups = [
+    "a",
+    "c",
+    "gdn",
+    "o",
+    "l",
+    "f",
+]
+output = "violin_mmse"
+prefix = "<path-to-the-folder-storing-processed-data>"
+
+[show.violin-age]
+names = [
+    "symptom",
+    "s-screen-sum",
+    "composite-bin",
+    "biomarker",
+    "cbf",
+    "csvd",
+    "volume-new-pct",
+]
+groups = [
+    "a",
+    "c",
+    "gdn",
+    "o",
+    "l",
+    "f",
+]
+output = "violin_age"
+prefix = "<path-to-the-folder-storing-processed-data>"
+
+[show.bar-sex]
+names = [
+    "symptom",
+    "s-screen-sum",
+    "composite-bin",
+    "biomarker",
+    "cbf",
+    "csvd",
+    "volume-new-pct",
+]
+groups = [
+    "a",
+    "c",
+    "gdn",
+    "o",
+    "l",
+    "f",
+]
+output = "bar_sex"
+prefix = "<path-to-the-folder-storing-processed-data>"
+
+[show.radar-mmse]
+names = [
+    "symptom",
+    "s-screen-sum",
+    "composite-bin",
+    "biomarker",
+    "cbf",
+    "csvd",
+    "volume-new-pct",
+]
+groups = [
+    "a",
+    "c",
+    "gdn",
+    "o",
+    "l",
+    "f",
+]
+output = "radar_mmse"
+prefix = "<path-to-the-folder-storing-processed-data>"
+
+[show.latex-feature-diff]
+names = [
+    "volume-new-pct",
+]
+groups = [
+    "a",
+    "c",
+]
+output = "table_feature_diff"
+prefix = "<path-to-the-folder-storing-processed-data>"
+
+[show.latex-mean-std-wilcoxon]
+names = [
+    "composite-bin",
+    "volume-new-pct",
+]
+groups = [
+    "1",
+    "2",
+]
+models = [
+    "rrl",
+]
+aggregates = [
+    "average",
+]
+results = [
+    "composite-bin",
+    "volume-new-pct",
+    "all_simple_average",
+]
+labels = [
+    "RRL-Composite",
+    "RRL-Volume",
+    "RRL-Average",
+]
+reference = "RRL-Average"
+output = "table_mean_std_wilcoxon"
+
+[show.latex-ci-delong]
+names = [
+    "composite-bin",
+    "volume-new-pct",
+]
+groups = [
+    "1",
+    "2",
+]
+models = [
+    "rrl",
+]
+aggregates = [
+    "average",
+]
+results = [
+    "composite-bin",
+    "volume-new-pct",
+    "all_simple_average",
+]
+labels = [
+    "RRL-Composite",
+    "RRL-Volume",
+    "RRL-Average",
+]
+reference = "RRL-Average"
+output = "table_ci_delong"
+
+[show.heatmap-auroc-wilcoxon-pvalue]
+names = [
+    "composite-bin",
+    "volume-new-pct",
+]
+groups = [
+    "1",
+    "2",
+]
+models = [
+    "rrl",
+]
+aggregates = [
+    "average",
+]
+results = [
+    "composite-bin",
+    "volume-new-pct",
+    "all_simple_average",
+]
+labels = [
+    "RRL-Composite",
+    "RRL-Volume",
+    "RRL-Average",
+]
+title = "Wilcoxon Signed-Rank Test p-value Matrix"
+output = "heatmap_wilcoxon_pvalue"
+
+[show.heatmap-auroc-delong-pvalue]
+names = [
+    "composite-bin",
+    "volume-new-pct",
+]
+groups = [
+    "1",
+    "2",
+]
+models = [
+    "rrl",
+]
+aggregates = [
+    "average",
+]
+results = [
+    "composite-bin",
+    "volume-new-pct",
+    "all_simple_average",
+]
+labels = [
+    "RRL-Composite",
+    "RRL-Volume",
+    "RRL-Average",
+]
+title = "DeLong Test p-value Matrix"
+output = "heatmap_delong_pvalue"
+
+[show.roc-delong-comparison]
+names = [
+    "composite-bin",
+    "volume-new-pct",
+]
+groups = [
+    "1",
+    "2",
+]
+models = [
+    "rrl",
+]
+aggregates = [
+    "average",
+]
+results = [
+    "composite-bin",
+    "volume-new-pct",
+    "all_simple_average",
+]
+labels = [
+    "RRL-Composite",
+    "RRL-Volume",
+    "RRL-Average",
+]
+title = "ROC Comparison with DeLong p-value"
+output = "roc_delong_comparison"
+
+[show.bar-auroc-delong-ci]
+names = [
+    "composite-bin",
+    "volume-new-pct",
+]
+groups = [
+    "1",
+    "2",
+]
+models = [
+    "rrl",
+]
+aggregates = [
+    "average",
+]
+results = [
+    "composite-bin",
+    "volume-new-pct",
+    "all_simple_average",
+]
+labels = [
+    "RRL-Composite",
+    "RRL-Volume",
+    "RRL-Average",
+]
+reference = "RRL-Average"
+title = "AUC with 95% CI and DeLong Test"
+output = "bar_auc_delong_ci"
+
+[show.bar-acc-mcnemar-ci]
+names = [
+    "composite-bin",
+    "volume-new-pct",
+]
+groups = [
+    "1",
+    "2",
+]
+models = [
+    "rrl",
+]
+aggregates = [
+    "average",
+]
+results = [
+    "composite-bin",
+    "volume-new-pct",
+    "all_simple_average",
+]
+labels = [
+    "RRL-Composite",
+    "RRL-Volume",
+    "RRL-Average",
+]
+reference = "RRL-Average"
+title = "ACC with 95% CI and McNemar Test"
+output = "bar_acc_mcnemar_ci"
+
+[show.bar-auroc-wilcoxon-std]
+names = [
+    "composite-bin",
+    "volume-new-pct",
+]
+groups = [
+    "1",
+    "2",
+]
+models = [
+    "rrl",
+]
+aggregates = [
+    "average",
+]
+results = [
+    "composite-bin",
+    "volume-new-pct",
+    "all_simple_average",
+]
+labels = [
+    "RRL-Composite",
+    "RRL-Volume",
+    "RRL-Average",
+]
+reference = "RRL-Average"
+title = "AUC with Fold Std and Wilcoxon Test"
+output = "bar_auc_wilcoxon_std"
+
+[show.bar-acc-wilcoxon-std]
+names = [
+    "composite-bin",
+    "volume-new-pct",
+]
+groups = [
+    "1",
+    "2",
+]
+models = [
+    "rrl",
+]
+aggregates = [
+    "average",
+]
+results = [
+    "composite-bin",
+    "volume-new-pct",
+    "all_simple_average",
+]
+labels = [
+    "RRL-Composite",
+    "RRL-Volume",
+    "RRL-Average",
+]
+reference = "RRL-Average"
+title = "ACC with Fold Std and Wilcoxon Test"
+output = "bar_acc_wilcoxon_std"
+
+[show.bar-feature-importance]
+names = [
+    "composite-bin",
+    "volume-new-pct",
+]
+groups = [
+    "1",
+    "2",
+]
+models = [
+    "rrl",
+]
+aggregates = [
+    "average",
+]
+results = [
+    "composite-bin",
+    "volume-new-pct",
+]
+labels = [
+    "Composite",
+    "Volume",
+]
+importance-methods = [
+    "shap",
+]
+importance-abs = false
+title = "Feature Importance"
+output = "fi_bar_rrl"
+
+[show.heatmap-feature-importance]
+names = [
+    "composite-bin",
+    "volume-new-pct",
+]
+groups = [
+    "1",
+    "2",
+]
+models = [
+    "rrl",
+]
+aggregates = [
+    "average",
+]
+results = [
+    "composite-bin",
+    "volume-new-pct",
+]
+labels = [
+    "Composite",
+    "Volume",
+]
+importance-methods = [
+    "shap",
+]
+importance-abs = false
+title = "Feature Importance Heatmap"
+output = "fi_heatmap_rrl"
+
+[show.shap-summary]
+names = [
+    "composite-bin",
+    "volume-new-pct",
+]
+groups = [
+    "1",
+    "2",
+]
+models = [
+    "rrl",
+    "xgboost",
+    "random_forest",
+]
+aggregates = [
+    "average",
+    "calibrated-fusion",
+    "calibrated-fusion",
+]
+results = [
+    "volume-new-pct",
+]
+labels = [
+    "RRL",
+    "XGB",
+    "RF",
+]
+title = "SHAP Summary Plot"
+output = "shap_summary"
+
+[show.shap-waterfall]
+names = [
+    "composite-bin",
+    "volume-new-pct",
+]
+groups = [
+    "1",
+    "2",
+]
+models = [
+    "rrl",
+]
+aggregates = [
+    "average",
+]
+results = [
+    "volume-new-pct",
+]
+labels = [
+    "Volume",
+]
+shap-sample-index = 1
+title = "SHAP Waterfall Plot"
+output = "shap_waterfall_rrl"
+
+[show.shap-dependence]
+names = [
+    "composite-bin",
+    "volume-new-pct",
+]
+groups = [
+    "1",
+    "2",
+]
+models = [
+    "rrl",
+]
+aggregates = [
+    "average",
+]
+results = [
+    "volume-new-pct",
+]
+labels = [
+    "Volume",
+]
+shap-feature = "海马_平均"
+title = "SHAP Dependence Plot"
+output = "shap_dependence_rrl"
+
+[show.rrl-waterfall]
+names = [
+    "volume-new-pct",
+]
+groups = [
+    "a",
+    "c",
+]
+thesaurus = "logs"
+process = "<path-to-the-process-info-file>"
+vmri = "<path-to-the-mri-volume-mean-std-file>"
+vmri-change = "<path-to-the-mri-volume-column-change-file>"
+keep = "last"
+index-name = "ID"
+debug = true
+top-k = 20
+title = "RRL Waterfall Plot"
+output = "rrl_waterfall"
+
+[show.rrl-waterfall.data]
+history = "<path-to-the-history-spreadsheet>"
+csvd = "<path-to-the-mri-csvd-spreadsheet>"
+volume-new = "<path-to-the-mri-volume-spreadsheet>"
