@@ -427,6 +427,7 @@ Evaluation modes:
 | `single` | Show prediction and active supporting/opposing rules for one sample |
 | `batch` | Produce predictions for a batch without metrics |
 | `eval` | Compute metrics when external labels are available |
+| `rule-or` | Export per-rule unadjusted odds ratios against each rule's predicted label; set `-o/--output` to an `.xlsx` or `.tsv` path |
 | `show` | List exported model rules |
 
 For single-sample explanations, pass `--sample-id`.

@@ -10,6 +10,7 @@ from .preprocessor import PreprocessorConfig
 from .train import TrainConfig
 
 type ZeroMeanFallback = Literal['uniform', 'bias']
+type RrlEvalMode = Literal['single', 'batch', 'eval', 'show', 'rule-or']
 
 
 @Parameter(name='*')
@@ -43,10 +44,11 @@ class RrlEvalConfig:
     vmri_change: str = ''
     'Path to the Vmri_mean_sd column name change file.'
 
-    mode: Annotated[
-        Literal['single', 'batch', 'eval', 'show'], Parameter(alias='-m')
-    ] = 'single'
+    mode: Annotated[RrlEvalMode, Parameter(alias='-m')] = 'single'
     'Mode of RRL evaluation.'
+
+    output: Annotated[str, Parameter(alias='-o')] = ''
+    'Output path for exported rule-OR tables.'
 
     keep: Annotated[Literal['first', 'last'], Parameter(alias='-k')] = 'last'
     """Deduplication strategy for duplicated samples.

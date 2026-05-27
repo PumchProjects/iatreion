@@ -1,4 +1,5 @@
 from collections import defaultdict
+from pathlib import Path
 
 from rich import box
 from rich.table import Column, Table
@@ -9,6 +10,8 @@ from iatreion.api import (
     get_eval_result,
     get_result,
     get_rule_options,
+    get_rule_or_table,
+    save_rule_or_table,
 )
 from iatreion.configs import RrlEvalConfig
 from iatreion.utils import logger
@@ -107,6 +110,12 @@ def display_eval_result(config: RrlEvalConfig) -> None:
         fig.savefig(train.get_roc_file(dataset.name_str), dpi=300)
 
 
+def display_rule_or_result(config: RrlEvalConfig) -> None:
+    table = get_rule_or_table(config)
+    output = save_rule_or_table(table, Path(config.output or 'rrl_rule_or.tsv'))
+    console.print(f'Saved RRL rule OR table to {output}')
+
+
 def display_models(config: RrlEvalConfig) -> None:
     options_by_name: dict[str, list[RrlTermOption]] = defaultdict(list)
     for option in get_rule_options(config):
@@ -137,3 +146,5 @@ def rrl_eval(*, config: RrlEvalConfig | None = None) -> None:
             display_eval_result(config)
         case 'show':
             display_models(config)
+        case 'rule-or':
+            display_rule_or_result(config)

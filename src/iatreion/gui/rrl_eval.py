@@ -4,7 +4,7 @@ from dataclasses import asdict
 from pathlib import Path
 from tkinter import ttk
 from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
-from typing import Literal, cast
+from typing import cast
 
 from iatreion.api import (
     RrlTermOption,
@@ -12,9 +12,11 @@ from iatreion.api import (
     get_eval_result,
     get_result,
     get_rule_options,
+    get_rule_or_table,
     get_rule_waterfall_data,
+    save_rule_or_table,
 )
-from iatreion.configs import DataName, RrlEvalConfig, name_data_mapping
+from iatreion.configs import DataName, RrlEvalConfig, RrlEvalMode, name_data_mapping
 from iatreion.exceptions import IatreionException
 from iatreion.show_helpers import rrl_rule_waterfall_plot
 from iatreion.utils import get_config_path, load_dict, save_dict
@@ -66,6 +68,16 @@ def save_batched_result(config: RrlEvalConfig) -> None:
     )
     if path:
         result.to_excel(path, float_format='%.4f')
+
+
+def save_rule_or_result(config: RrlEvalConfig) -> None:
+    result = get_rule_or_table(config)
+    path = asksaveasfilename(
+        defaultextension='.xlsx',
+        filetypes=[('Excel 表格', '*.xlsx'), ('TSV 表格', '*.tsv')],
+    )
+    if path:
+        save_rule_or_table(result, path)
 
 
 def show_waterfall(master: tk.Tk, config: RrlEvalConfig) -> None:
@@ -516,6 +528,8 @@ def main() -> None:
                     save_config(config, config_path)
                 case 'show':
                     show_models(root, config)
+                case 'rule-or':
+                    save_rule_or_result(config)
         except IatreionException as e:
             e.update(
                 dataset=names_mapping.get(cast(DataName, e.mapping['dataset'])),
@@ -535,9 +549,7 @@ def main() -> None:
             if config.debug:
                 raise e
 
-    def set_mode(
-        mode: Literal['single', 'batch', 'eval', 'show'],
-    ) -> Callable[[], None]:
+    def set_mode(mode: RrlEvalMode) -> Callable[[], None]:
         def callback() -> None:
             bundle.set_mode(mode)
             run_inference()
@@ -558,5 +570,6 @@ def main() -> None:
     make_button(button_frm, '分析样本', set_mode('single'))
     make_button(button_frm, '批量预测', set_mode('eval'))
     make_button(button_frm, '批量导出', set_mode('batch'))
+    make_button(button_frm, '规则OR', set_mode('rule-or'))
 
     root.mainloop()

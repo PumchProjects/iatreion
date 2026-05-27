@@ -2,9 +2,9 @@ import os
 import tkinter as tk
 from collections import defaultdict
 from dataclasses import dataclass, field, fields
-from typing import Literal, Self
+from typing import Self
 
-from iatreion.configs import DataName, RrlEvalConfig
+from iatreion.configs import DataName, RrlEvalConfig, RrlEvalMode
 
 from .static import groups_mapping, keep_mapping, names_mapping
 
@@ -102,7 +102,7 @@ class ConfigBundle:
         self.config.vmri_change = path
         self.set_field('change')
 
-    def set_mode(self, mode: Literal['single', 'batch', 'eval', 'show']) -> None:
+    def set_mode(self, mode: RrlEvalMode) -> None:
         self.config.mode = mode
         self.set_field('mode')
 

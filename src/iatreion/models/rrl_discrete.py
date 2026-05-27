@@ -288,25 +288,21 @@ class Line:
             rule = self.callback(rule)
         return rule
 
+    def activation(self, data: pd.DataFrame) -> RuleEval:
+        if self.tau is None:
+            truth = self.rule.eval(data).fillna(False).astype(bool)
+            valid = pd.Series(True, index=data.index)
+            return RuleEval(truth=truth, valid=valid, coverage=valid.astype(float))
+        return self.rule.eval_with_coverage(data, tau=self.tau)
+
     def eval(
         self, data: pd.DataFrame, active_lines: list[Self] | None = None
     ) -> pd.DataFrame:
-        if self.tau is None:
-            result = self.rule.eval(data)
-            if active_lines is not None and not pd.isna(r := result.item()) and r:
-                active_lines.append(self)
-            active = result.fillna(False).astype(float)
-            table = {
-                label: active * weight
-                for label, weight in zip(self.labels, self.weights, strict=True)
-            }
-            return pd.DataFrame(table, dtype=float)
-
-        gated = self.rule.eval_with_coverage(data, tau=self.tau)
-        result = gated.truth & gated.valid
-        if active_lines is not None and result.item():
+        result = self.activation(data)
+        active = result.truth & result.valid
+        if active_lines is not None and active.item():
             active_lines.append(self)
-        active = result.astype(float)
+        active = active.astype(float)
         table = {
             label: active * weight
             for label, weight in zip(self.labels, self.weights, strict=True)

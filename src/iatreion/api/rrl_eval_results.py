@@ -1,7 +1,10 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
+import numpy as np
 import pandas as pd
+import scipy.stats as stats
 from matplotlib.figure import Figure
 
 from iatreion.configs import DataName, DiscreteRrlConfig, RrlEvalConfig
@@ -72,6 +75,120 @@ def get_rule_options(config: RrlEvalConfig) -> list[RrlTermOption]:
                 )
             )
     return options
+
+
+def _calc_odds_ratio(
+    active_positive: int,
+    active_negative: int,
+    inactive_positive: int,
+    inactive_negative: int,
+) -> tuple[float, float, float, float, bool]:
+    counts = np.array(
+        [active_positive, active_negative, inactive_positive, inactive_negative],
+        dtype=float,
+    )
+    if counts.sum() == 0:
+        return np.nan, np.nan, np.nan, np.nan, False
+
+    corrected = bool((counts == 0).any())
+    calc_counts = counts + 0.5 if corrected else counts
+    a, b, c, d = calc_counts
+    odds_ratio = (a * d) / (b * c)
+    log_or = np.log(odds_ratio)
+    se = np.sqrt(np.sum(1 / calc_counts))
+    ci_lower = np.exp(log_or - 1.96 * se)
+    ci_upper = np.exp(log_or + 1.96 * se)
+    _, pvalue = stats.fisher_exact(
+        [[active_positive, active_negative], [inactive_positive, inactive_negative]]
+    )
+    return float(odds_ratio), float(ci_lower), float(ci_upper), float(pvalue), corrected
+
+
+def _get_labeled_eval_target(
+    data: list[pd.DataFrame],
+    group_names: pd.DataFrame,
+    model,
+) -> pd.Series:
+    result = model.eval(data)
+    result = pd.concat([result, group_names], axis=1)
+    train_config = model.config.train
+    X_df, y_df = make_data_labels(result, train_config, group_names.columns.to_list())
+    available = ~X_df.isna().all(axis=1)
+    return y_df.loc[available]
+
+
+def _prepare_module_data(
+    frame: pd.DataFrame, index: pd.Index, rrl, *, keep: str
+) -> tuple[pd.DataFrame, pd.Series]:
+    frame = frame[~frame.index.duplicated(keep=keep)].reindex(index)
+    available = ~frame.isna().all(axis=1)
+    return rrl.impute(frame), available
+
+
+def get_rule_or_table(config: RrlEvalConfig) -> pd.DataFrame:
+    data, _, group_names, model = get_data_model(config)
+    assert group_names is not None
+
+    y_true = _get_labeled_eval_target(data, group_names, model)
+    names = model.config.dataset.names
+    models = model.get_models()
+    rows: list[dict[str, object]] = []
+    for name, frame, rrl in zip(names, data, models, strict=True):
+        module_data, available = _prepare_module_data(
+            frame, y_true.index, rrl, keep=config.keep
+        )
+        for rule_index, line in enumerate(rrl.lines):
+            outcome_label = get_max_label(line.weights, line.labels)
+            rule_eval = line.activation(module_data)
+            valid = rule_eval.valid & available
+            active = rule_eval.truth & valid
+            outcome = y_true == outcome_label
+
+            active_positive = int((active & outcome).sum())
+            active_negative = int((active & ~outcome).sum())
+            inactive_positive = int((valid & ~active & outcome).sum())
+            inactive_negative = int((valid & ~active & ~outcome).sum())
+            odds_ratio, ci_lower, ci_upper, pvalue, corrected = _calc_odds_ratio(
+                active_positive,
+                active_negative,
+                inactive_positive,
+                inactive_negative,
+            )
+            rows.append(
+                {
+                    'Module': name,
+                    'Rule Index': rule_index,
+                    'Rule Label': outcome_label,
+                    'Outcome Label': outcome_label,
+                    'Rule Score': calc_score(line.weights),
+                    'Training Support': line.support,
+                    'Mean Coverage': line.mean_coverage,
+                    'Rule': line.print_rule(),
+                    'N': int(y_true.shape[0]),
+                    'N Valid': int(valid.sum()),
+                    'N Active': int(active.sum()),
+                    'Active Outcome+': active_positive,
+                    'Active Outcome-': active_negative,
+                    'Inactive Outcome+': inactive_positive,
+                    'Inactive Outcome-': inactive_negative,
+                    'OR': odds_ratio,
+                    'OR 95% CI Lower': ci_lower,
+                    'OR 95% CI Upper': ci_upper,
+                    'Fisher p-value': pvalue,
+                    'Haldane Correction': corrected,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def save_rule_or_table(table: pd.DataFrame, path: str | Path) -> Path:
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if output.suffix.lower() in {'.xlsx', '.xls'}:
+        table.to_excel(output, index=False, float_format='%.6g')
+    else:
+        table.to_csv(output, sep='\t', index=False, float_format='%.6g')
+    return output
 
 
 def format_enabled_terms(config: RrlEvalConfig, names: list[DataName]) -> str:
