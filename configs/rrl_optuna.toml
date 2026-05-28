@@ -45,30 +45,6 @@ log = true
 type = "categorical"
 choices = ["5@256", "5@512", "10@256", "10@512", "10@768", "10@1024"]
 
-[search.train.feature-selection.method]
-type = "categorical"
-choices = ["none", "f_classif", "mutual_info", "l1_logistic", "auc", "logistic_lrt"]
-
-[search.train.feature-selection.fraction]
-type = "float"
-low = 0.2
-high = 1.0
-step = 0.1
-
-[search.train.feature-selection.min-features]
-type = "categorical"
-choices = [5, 10, 20]
-
-[search.train.feature-selection.score-aggregate]
-type = "categorical"
-choices = ["max", "mean"]
-
-[search.train.feature-selection.c]
-type = "float"
-low = 0.03
-high = 3.0
-log = true
-
 [search.coverage-tau]
 type = "float"
 low = 0.15
