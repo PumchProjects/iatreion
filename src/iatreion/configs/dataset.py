@@ -49,7 +49,6 @@ type DataName = Literal[
     'volume-new-pct',
     'volume-adni-v',
     'volume-adni-pct',
-    'snp',
 ]
 
 

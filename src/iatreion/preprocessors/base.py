@@ -6,7 +6,13 @@ from pandas.api.types import CategoricalDtype
 
 from iatreion.configs import DataName, PreprocessorConfig
 from iatreion.exceptions import IatreionException
-from iatreion.utils import encode_string, logger, name_to_stem, stem_to_name
+from iatreion.utils import (
+    encode_string,
+    logger,
+    name_to_stem,
+    read_spreadsheet,
+    stem_to_name,
+)
 
 from .process_info import ProcessInfo
 
@@ -48,7 +54,7 @@ class Preprocessor(ABC):
                 str
             )
         if 'group_names' not in self.config._data:
-            data = pd.read_excel(
+            data = read_spreadsheet(
                 self.config.group_data_path,
                 index_col='serial_num',
                 dtype_backend='numpy_nullable',
@@ -69,7 +75,7 @@ class Preprocessor(ABC):
 
     def get_basic_data(self) -> pd.DataFrame:
         if 'basic_data' not in self.config._data:
-            data = pd.read_excel(
+            data = read_spreadsheet(
                 self.config.basic_data_path,
                 index_col='serial_num',
                 dtype_backend='numpy_nullable',
@@ -154,7 +160,7 @@ class Preprocessor(ABC):
     def read_data(self) -> pd.DataFrame:
         if self.data_name not in self.config._data:
             data_path, sheet_name = self.config.get_data_path(self.data_name)
-            data = pd.read_excel(
+            data = read_spreadsheet(
                 data_path,
                 sheet_name=sheet_name,
                 # HACK: serial_num is needed for merging birth dates

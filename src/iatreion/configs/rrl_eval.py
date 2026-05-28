@@ -48,7 +48,7 @@ class RrlEvalConfig:
     'Mode of RRL evaluation.'
 
     output: Annotated[str, Parameter(alias='-o')] = ''
-    'Output path for exported rule-OR tables.'
+    'Output path for exported batch results or rule-OR tables.'
 
     keep: Annotated[Literal['first', 'last'], Parameter(alias='-k')] = 'last'
     """Deduplication strategy for duplicated samples.

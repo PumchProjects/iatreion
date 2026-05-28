@@ -14,6 +14,7 @@ from iatreion.api import (
     get_rule_options,
     get_rule_or_table,
     get_rule_waterfall_data,
+    save_batched_result_table,
     save_rule_or_table,
 )
 from iatreion.configs import DataName, RrlEvalConfig, RrlEvalMode, name_data_mapping
@@ -42,6 +43,12 @@ from .utils import (
     show_error_message,
 )
 
+SPREADSHEET_FILETYPES = [
+    ('Excel 表格', '*.xlsx'),
+    ('CSV 表格', '*.csv'),
+    ('TSV 表格', '*.tsv'),
+]
+
 
 def load_config(path: Path) -> tuple[RrlEvalConfig, ConfigBundle]:
     config_dict = load_dict(path)
@@ -64,17 +71,18 @@ def save_batched_result(config: RrlEvalConfig) -> None:
     result.index.rename('ID', inplace=True)
     result.loc[:, 'Label'] = result['Label'].map(groups_mapping)
     path = asksaveasfilename(
-        defaultextension='.xlsx', filetypes=[('Excel 表格', '*.xlsx')]
+        defaultextension='.xlsx',
+        filetypes=SPREADSHEET_FILETYPES,
     )
     if path:
-        result.to_excel(path, float_format='%.4f')
+        save_batched_result_table(result, path)
 
 
 def save_rule_or_result(config: RrlEvalConfig) -> None:
     result = get_rule_or_table(config)
     path = asksaveasfilename(
         defaultextension='.xlsx',
-        filetypes=[('Excel 表格', '*.xlsx'), ('TSV 表格', '*.tsv')],
+        filetypes=SPREADSHEET_FILETYPES,
     )
     if path:
         save_rule_or_table(result, path)
@@ -428,7 +436,7 @@ def main() -> None:
         def set_data_path_inner() -> None:
             path = askopenfilename(
                 defaultextension='.xlsx',
-                filetypes=[('Excel 表格', '*.xlsx')],
+                filetypes=SPREADSHEET_FILETYPES,
                 initialfile=config.data.get(data_name),
             )
             if path:
@@ -497,7 +505,7 @@ def main() -> None:
     def set_change_path() -> None:
         path = askopenfilename(
             defaultextension='.xlsx',
-            filetypes=[('Excel 表格', '*.xlsx')],
+            filetypes=SPREADSHEET_FILETYPES,
             initialfile=config.vmri_change,
         )
         if path:

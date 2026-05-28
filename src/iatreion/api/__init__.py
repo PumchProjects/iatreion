@@ -8,6 +8,7 @@ from .rrl_eval_results import (
     get_result,
     get_rule_options,
     get_rule_or_table,
+    save_batched_result_table,
     save_rule_or_table,
 )
 from .rrl_eval_types import (

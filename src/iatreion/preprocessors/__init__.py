@@ -14,7 +14,6 @@ from .cog_mmse import MmsePreprocessor
 from .cog_mmse_sum import MmseSumPreprocessor
 from .cog_moca import MocaPreprocessor
 from .cog_moca_sum import MocaSumPreprocessor
-from .gene_snp import SnpPreprocessor
 from .history import HistoryPreprocessor
 from .mri_cbf import CbfPreprocessor
 from .mri_csvd import CsvdPreprocessor
@@ -78,8 +77,6 @@ def get_single_preprocessor(config: PreprocessorConfig, name: DataName) -> Prepr
             return VolumeAverageNewPreprocessor(config, name)
         case 'volume-new-v' | 'volume-new-pct' | 'volume-adni-v' | 'volume-adni-pct':
             return VolumeAverageNewPreprocessor(config, name, new=True)
-        case 'snp':
-            return SnpPreprocessor(config, name)
         case _:
             children: list[Preprocessor] = []
             for child_name in config.children_names(name):

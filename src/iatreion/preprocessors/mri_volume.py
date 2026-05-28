@@ -3,6 +3,7 @@ from typing import Literal, override
 import pandas as pd
 
 from iatreion.configs import DataName, PreprocessorConfig
+from iatreion.utils import read_spreadsheet
 
 from .base import Preprocessor
 
@@ -109,7 +110,7 @@ class VolumeAverageNewPreprocessor(Preprocessor):
         return data
 
     def rename_vmri(self, vmri: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
-        change = pd.read_excel(self.config.vmri_change_path, index_col='原表头名称')
+        change = read_spreadsheet(self.config.vmri_change_path, index_col='原表头名称')
         change_dict = change['新表头名称'].dropna().to_dict()
         for key in vmri:
             vmri[key].rename(columns=change_dict, inplace=True)

@@ -82,7 +82,7 @@ Processed datasets are selected with `-n/--names` or the relevant `names` entry 
 
 Several dataset names are composites. For example, `s-screen-sum` is built from `basic`, `mmse-sum`, `moca-sum`, `adl-sum`, and `had-sum`.
 
-Raw source paths are provided at preprocessing time with `--data.<raw-data-name>` or `[process.data]` entries in `configs/config.toml`, where raw data names include `history`, `screen`, `composite`, `biomarker`, `cbf`, `csvd`, and `volume-new`. The input data are not distributed with this repository. Default date/index column rules are defined in `src/iatreion/configs/preprocessor.py`.
+Raw source paths are provided at preprocessing time with `--data.<raw-data-name>` or `[process.data]` entries in `configs/config.toml`, where raw data names include `history`, `screen`, `composite`, `biomarker`, `cbf`, `csvd`, and `volume-new`; raw source spreadsheets may be Excel, CSV, or TSV. The fixed MRI volume mean/std file used by `-v/--vmri` remains an Excel workbook with `mean` and `sd` sheets. The input data are not distributed with this repository. Default date/index column rules are defined in `src/iatreion/configs/preprocessor.py`.
 
 ## Labels and Groups
 
@@ -140,7 +140,7 @@ This creates, for each selected dataset:
 
 Important raw preprocessing behavior:
 
-- If a raw Excel workbook needs a non-default sheet, pass `--data-sheets.<raw-data-name> <sheet-name-or-index>`.
+- If a raw Excel workbook needs a non-default sheet, pass `--data-sheets.<raw-data-name> <sheet-name-or-index>`; CSV and TSV inputs are single-table files.
 - Discrete variables are stored as category codes with category metadata in `.info` and `process_info.toml`.
 - Raw preprocessing does not perform missingness-based sample filtering, manuscript-grade feature selection, imputation, normalization, under-sampling, or final model encoding; those steps are fitted later inside each training fold.
 
@@ -378,10 +378,11 @@ Use `uv run iatreion rrl-eval` to apply final RRL rule files to external data. T
 
 - `-t/--thesaurus`: root directory containing final RRL logs.
 - `-p/--process`: internal `process_info.toml`, needed to reproduce feature encodings and category orders.
-- `--data.<raw-data-name>`: external spreadsheet for each requested raw data source.
+- `--data.<raw-data-name>`: external Excel, CSV, or TSV spreadsheet for each requested raw data source.
 - `--data-sheets.<raw-data-name>`: optional Excel sheet name or index for a raw data source.
 - `--index-name`: external sample ID column.
 - `--label-name`: external label column, required for `-m eval`.
+- `-o/--output`: exported spreadsheet path for `batch` and `rule-or` modes; supported suffixes are `.xlsx`, `.csv`, and `.tsv`.
 
 Example for symptom plus CSVD:
 
@@ -411,7 +412,7 @@ uv run iatreion rrl-eval \
   --data.history "<path-to-the-spreadsheet-for-symptom-data>" \
   --data.csvd "<path-to-the-spreadsheet-for-csvd-data>" \
   --data.volume-new "<path-to-the-spreadsheet-for-mri-volume-data>" \
-  -v "<path-to-the-file-storing-mean-and-std-for-mri-volume-data>" \
+  -v "<path-to-the-excel-file-storing-mean-and-std-for-mri-volume-data>" \
   --vmri-change "<path-to-the-file-storing-column-name-changes-for-mri-volume-data>" \
   -m eval \
   -k last \
@@ -425,12 +426,14 @@ Evaluation modes:
 | Mode | Meaning |
 | --- | --- |
 | `single` | Show prediction and active supporting/opposing rules for one sample |
-| `batch` | Produce predictions for a batch without metrics |
+| `batch` | Export predictions for a batch without metrics; set `-o/--output` to an `.xlsx`, `.csv`, or `.tsv` path |
 | `eval` | Compute metrics when external labels are available |
-| `rule-or` | Export per-rule unadjusted odds ratios against each rule's predicted label; set `-o/--output` to an `.xlsx` or `.tsv` path |
+| `rule-or` | Export per-rule unadjusted odds ratios against each rule's predicted label; set `-o/--output` to an `.xlsx`, `.csv`, or `.tsv` path |
 | `show` | List exported model rules |
 
 For single-sample explanations, pass `--sample-id`.
+
+When `-o/--output` is omitted, `batch` writes `rrl_batch_result.xlsx` and `rule-or` writes `rrl_rule_or.tsv`.
 
 ## GUI
 
@@ -440,7 +443,7 @@ After final model fitting, launch:
 uv run iatreion-gui
 ```
 
-The GUI wraps the same parser API used by `iatreion rrl-eval`. It can load final RRL models, select input files, run batch predictions, view active rules, and evaluate labeled external data.
+The GUI wraps the same parser API used by `iatreion rrl-eval`. It can load final RRL models, select Excel/CSV/TSV input files, export batch predictions and rule-OR tables, view active rules, and evaluate labeled external data.
 
 ## XGBoost and Random Forest Baselines
 
@@ -588,7 +591,7 @@ Check that `-p`, `-n`, `-g`, `-a`, `--log-root`, and `--eval-names` match the pr
 
 ### External validation cannot find a column
 
-Confirm the external index column with `--index-name`, label column with `--label-name`, and raw data mapping such as `--data.history ...`, `--data.csvd ...`, or `--data.volume-new ...`. MRI volume validation also needs `-v` and `--vmri-change`.
+Confirm the external index column with `--index-name`, label column with `--label-name`, and raw data mapping such as `--data.history ...`, `--data.csvd ...`, or `--data.volume-new ...`. MRI volume validation also needs the fixed Excel mean/std workbook via `-v` and a column-change spreadsheet via `--vmri-change`.
 
 ### Parser metrics use fewer samples than expected
 

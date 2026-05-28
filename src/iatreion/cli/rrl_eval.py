@@ -11,6 +11,7 @@ from iatreion.api import (
     get_result,
     get_rule_options,
     get_rule_or_table,
+    save_batched_result_table,
     save_rule_or_table,
 )
 from iatreion.configs import RrlEvalConfig
@@ -91,14 +92,11 @@ def display_result(config: RrlEvalConfig) -> None:
 
 def display_batched_result(config: RrlEvalConfig) -> None:
     result = get_batched_result(config)
-    result_table = get_table('Result', 'ID', *result.columns)
-    for row in result.itertuples():
-        result_table.add_row(
-            str(row.Index),
-            *[str(value) for value in row[1:-1]],
-            f'{row.Probability:.2%}',
-        )
-    console.print(result_table)
+    result.index.rename('ID', inplace=True)
+    output = save_batched_result_table(
+        result, Path(config.output or 'rrl_batch_result.xlsx')
+    )
+    console.print(f'Saved batch result to {output}')
 
 
 def display_eval_result(config: RrlEvalConfig) -> None:

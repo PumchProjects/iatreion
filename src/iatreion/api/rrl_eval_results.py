@@ -10,6 +10,7 @@ from matplotlib.figure import Figure
 from iatreion.configs import DataName, DiscreteRrlConfig, RrlEvalConfig
 from iatreion.train_utils import make_data_labels
 from iatreion.trainers import Recorder, TrainerReturn
+from iatreion.utils import write_spreadsheet
 
 from .rrl_eval_common import calc_score, get_max_label
 from .rrl_eval_data import build_model, get_data_model
@@ -181,14 +182,12 @@ def get_rule_or_table(config: RrlEvalConfig) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def save_batched_result_table(table: pd.DataFrame, path: str | Path) -> Path:
+    return write_spreadsheet(path, table, float_format='%.4f')
+
+
 def save_rule_or_table(table: pd.DataFrame, path: str | Path) -> Path:
-    output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    if output.suffix.lower() in {'.xlsx', '.xls'}:
-        table.to_excel(output, index=False, float_format='%.6g')
-    else:
-        table.to_csv(output, sep='\t', index=False, float_format='%.6g')
-    return output
+    return write_spreadsheet(path, table, index=False, float_format='%.6g')
 
 
 def format_enabled_terms(config: RrlEvalConfig, names: list[DataName]) -> str:
