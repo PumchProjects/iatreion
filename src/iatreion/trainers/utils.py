@@ -10,7 +10,7 @@ from iatreion.exceptions import IatreionException
 from iatreion.train_utils.fusion import (
     FUSION_ARTIFACT_FILE,
     AvailableFusionArtifact,
-    get_clinical_recall_threshold,
+    get_operating_thresholds,
 )
 from iatreion.utils import logger
 
@@ -80,10 +80,17 @@ def log_available_fusion_artifact(
                 f'intercept={calibrator.intercept:.4f})'
             )
         logger.info('Missing modalities are omitted and weights are renormalized.')
+        if config.use_clinical_threshold:
+            logger.info(
+                f'Clinical recall threshold: '
+                f'{artifact.thresholds["clinical_recall"]:.4f} '
+                f'for recall({config.clinical_threshold_label}) '
+                f'>= {config.clinical_threshold_recall:.4f}.'
+            )
+        logger.info(f'Youden threshold: {artifact.thresholds["youden"]:.4f}.')
         logger.info(
-            f'Clinical threshold: {artifact.clinical_threshold:.4f} '
-            f'for recall({artifact.clinical_threshold_label}) '
-            f'>= {artifact.clinical_threshold_recall:.4f}.'
+            f'Default threshold: {artifact.default_threshold_name} '
+            f'({artifact.default_threshold:.4f}).'
         )
 
 
@@ -144,14 +151,7 @@ def get_thresholds(
         observed = ~y_mask.astype(bool)
         y_true = y_true[observed]
         y_pos_score = y_pos_score[observed]
-    return {
-        'clinical_recall': get_clinical_recall_threshold(
-            y_true,
-            y_pos_score,
-            target_label=config.clinical_threshold_index,
-            target_recall=config.clinical_threshold_recall,
-        )
-    }
+    return get_operating_thresholds(config, y_true, y_pos_score)
 
 
 def get_all_missing_mask(y_mask_list: list[NDArray]) -> NDArray:

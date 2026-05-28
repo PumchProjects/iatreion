@@ -29,7 +29,7 @@ class ShowResultConfig(ShowConfig):
 'average': simple average predictions of different modalities.
 'concat': concatenate features of different modalities.
 'calibrated-concat': concatenate features into one RRL, calibrate its logit,
-and tune the clinical threshold.
+and tune operating thresholds.
 'calibrated-fusion': train one RRL per modality, calibrate each modality logit,
 and combine available modalities with equal-weight late fusion.
 """

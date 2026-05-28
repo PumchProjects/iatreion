@@ -168,7 +168,7 @@ def get_sample_explanation(config: RrlEvalConfig) -> SampleExplanation:
         final_label,
         model.artifact.labels,
         model.artifact.positive_label,
-        model.artifact.clinical_threshold,
+        model.artifact.default_threshold,
         names,
         models,
         scores,

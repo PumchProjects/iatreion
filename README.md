@@ -152,14 +152,14 @@ Important raw preprocessing behavior:
 | --- | --- | --- |
 | `concat` | Merge all selected modality features into one table and train one model | Hyperparameter tuning without fusion bootstrapping |
 | `average` | Train/evaluate one model per modality and average available probabilities | Simple baseline |
-| `calibrated-concat` | Merge all selected modality features into one model, then calibrate its logit and tune the clinical threshold | Concatenated-feature model with calibrated operating point |
+| `calibrated-concat` | Merge all selected modality features into one model, then calibrate its logit and tune operating thresholds | Concatenated-feature model with calibrated operating points |
 | `calibrated-fusion` | Train one model per modality, calibrate each modality logit, then combine available modalities with equal weights | Main multimodal workflow |
 
 `calibrated-fusion` first trains one model per modality. For each modality, the positive-class probability is transformed to a logit and calibrated by a one-dimensional logistic regression on inner-fold predictions. At inference time, available calibrated modality logits are combined with equal modality weights; missing modalities are omitted and the remaining weights are renormalized.
 
-`calibrated-concat` first concatenates features from all selected modalities into one model, then applies the same one-dimensional logit calibration and clinical-threshold selection to that single concatenated model. It is useful when the desired comparison is a single early-fusion model rather than per-modality late fusion.
+`calibrated-concat` first concatenates features from all selected modalities into one model, then applies the same one-dimensional logit calibration and operating-threshold selection to that single concatenated model. It is useful when the desired comparison is a single early-fusion model rather than per-modality late fusion.
 
-For binary tasks, `calibrated-concat` and `calibrated-fusion` both store a clinical threshold in `available_fusion.toml`. The threshold is chosen to satisfy a target recall for a specified class, controlled by `--clinical-threshold-label` and `--clinical-threshold-recall`.
+For binary tasks, `calibrated-concat` and `calibrated-fusion` store operating thresholds in `available_fusion.toml`: a Youden-index threshold is always fitted, and a clinical recall threshold is fitted by default to satisfy a target recall for a specified class, controlled by `--clinical-threshold-label` and `--clinical-threshold-recall`. Pass `--no-clinical-threshold` to skip the clinical label/recall threshold; final parser evaluation and single-sample prediction then use the Youden threshold as the default operating point.
 
 ## Fold-fitted Training Preprocessing
 
@@ -277,6 +277,7 @@ For `calibrated-fusion`, aggregate result names are:
 ```text
 all_calibrated_fusion_original
 all_calibrated_fusion_clinical_recall
+all_calibrated_fusion_youden
 ```
 
 For `calibrated-concat`, aggregate result names are:
@@ -284,7 +285,10 @@ For `calibrated-concat`, aggregate result names are:
 ```text
 all_calibrated_concat_original
 all_calibrated_concat_clinical_recall
+all_calibrated_concat_youden
 ```
+
+When `--no-clinical-threshold` is set, the `*_clinical_recall` result is omitted.
 
 ## Parser Re-evaluation
 
@@ -447,7 +451,7 @@ The GUI wraps the same parser API used by `iatreion rrl-eval`. It can load final
 
 ## XGBoost and Random Forest Baselines
 
-XGBoost and Random Forest can be trained with the same processed `.data` and `.info` files as RRL. Their defaults can live in `[train.xgboost]` and `[train.random-forest]` in `configs/config.toml`; common fields such as `prefix`, `names`, `groups`, `aggregate`, `clinical-threshold-label`, `clinical-threshold-recall`, and `log-root` follow the same config/CLI override rules described above.
+XGBoost and Random Forest can be trained with the same processed `.data` and `.info` files as RRL. Their defaults can live in `[train.xgboost]` and `[train.random-forest]` in `configs/config.toml`; common fields such as `prefix`, `names`, `groups`, `aggregate`, `use-clinical-threshold`, `clinical-threshold-label`, `clinical-threshold-recall`, and `log-root` follow the same config/CLI override rules described above.
 
 With the config file, run:
 

@@ -308,7 +308,7 @@ def get_eval_result(
     y_score = X_df.to_numpy()
     recorder = Recorder(train_config)
     eval_result = recorder.record(
-        TrainerReturn(0.0, y_true, y_score, threshold=model.artifact.clinical_threshold)
+        TrainerReturn(0.0, y_true, y_score, threshold=model.artifact.default_threshold)
     )
     fig = recorder.roc.fig if train_config.plot_roc else None
     summary = format_enabled_terms(config, model.config.dataset.names)

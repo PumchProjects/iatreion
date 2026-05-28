@@ -26,14 +26,8 @@ def sigmoid(logits: NDArray) -> NDArray:
     return 1 / (1 + np.exp(-logits))
 
 
-def get_clinical_recall_threshold(
-    y_true: NDArray,
-    y_pos_score: NDArray,
-    *,
-    target_label: int,
-    target_recall: float,
-) -> float:
-    thresholds = np.unique(
+def get_threshold_candidates(y_pos_score: NDArray) -> NDArray:
+    return np.unique(
         np.concatenate(
             [
                 np.array([0.0, 1.0]),
@@ -43,6 +37,15 @@ def get_clinical_recall_threshold(
         )
     )
 
+
+def get_clinical_recall_threshold(
+    y_true: NDArray,
+    y_pos_score: NDArray,
+    *,
+    target_label: int,
+    target_recall: float,
+) -> float:
+    thresholds = get_threshold_candidates(y_pos_score)
     target_mask = y_true == target_label
     feasible = []
     for threshold in thresholds:
@@ -56,6 +59,42 @@ def get_clinical_recall_threshold(
     if target_label == 1:
         return max(feasible).item()
     return min(feasible).item()
+
+
+def get_youden_threshold(y_true: NDArray, y_pos_score: NDArray) -> float:
+    thresholds = get_threshold_candidates(y_pos_score)
+    positive_mask = y_true == 1
+    negative_mask = y_true == 0
+    best_threshold = 0.5
+    best_youden = -np.inf
+    for threshold in thresholds:
+        y_pred = y_pos_score >= threshold
+        sensitivity = np.mean(y_pred[positive_mask])
+        specificity = np.mean(~y_pred[negative_mask])
+        youden = sensitivity + specificity - 1
+        if youden > best_youden:
+            best_threshold = threshold
+            best_youden = youden
+    return best_threshold.item()
+
+
+def get_default_threshold_name(config: TrainConfig) -> str:
+    return 'clinical_recall' if config.use_clinical_threshold else 'youden'
+
+
+def get_operating_thresholds(
+    config: TrainConfig, y_true: NDArray, y_pos_score: NDArray
+) -> dict[str, float]:
+    thresholds = {}
+    if config.use_clinical_threshold:
+        thresholds['clinical_recall'] = get_clinical_recall_threshold(
+            y_true,
+            y_pos_score,
+            target_label=config.clinical_threshold_index,
+            target_recall=config.clinical_threshold_recall,
+        )
+    thresholds['youden'] = get_youden_threshold(y_true, y_pos_score)
+    return thresholds
 
 
 @dataclass(frozen=True)
@@ -77,9 +116,8 @@ class AvailableFusionArtifact:
     positive_label: str
     weights: dict[str, float]
     calibrators: dict[str, ModalityCalibrator]
-    clinical_threshold_label: str
-    clinical_threshold_recall: float
-    clinical_threshold: float
+    thresholds: dict[str, float]
+    default_threshold_name: str
 
     @classmethod
     def fit(
@@ -122,17 +160,15 @@ class AvailableFusionArtifact:
             positive_label=labels[1],
             weights=weights,
             calibrators=calibrators,
-            clinical_threshold_label=config.clinical_threshold_label,
-            clinical_threshold_recall=config.clinical_threshold_recall,
-            clinical_threshold=0.5,
+            thresholds={},
+            default_threshold_name=get_default_threshold_name(config),
         )
         y_pos_score = artifact.predict_pos_score(names, y_pos_score_list, y_mask_list)
         available_any = ~np.column_stack(y_mask_list).astype(bool).all(axis=1)
-        threshold = get_clinical_recall_threshold(
+        thresholds = get_operating_thresholds(
+            config,
             y_true[available_any],
             y_pos_score[available_any],
-            target_label=config.clinical_threshold_index,
-            target_recall=config.clinical_threshold_recall,
         )
         return cls(
             names=artifact.names,
@@ -140,9 +176,8 @@ class AvailableFusionArtifact:
             positive_label=artifact.positive_label,
             weights=artifact.weights,
             calibrators=artifact.calibrators,
-            clinical_threshold_label=artifact.clinical_threshold_label,
-            clinical_threshold_recall=artifact.clinical_threshold_recall,
-            clinical_threshold=threshold,
+            thresholds=thresholds,
+            default_threshold_name=artifact.default_threshold_name,
         )
 
     @classmethod
@@ -208,9 +243,18 @@ class AvailableFusionArtifact:
             return dict.fromkeys(names, 0.0)
         return {name: self.weights[name] / total for name in names}
 
-    def predict_indices(self, y_pos_score: NDArray) -> NDArray:
-        return (y_pos_score >= self.clinical_threshold).astype(int)
+    @property
+    def default_threshold(self) -> float:
+        return self.thresholds[self.default_threshold_name]
 
-    def predict_labels(self, y_pos_score: NDArray) -> NDArray:
+    def predict_indices(
+        self, y_pos_score: NDArray, *, threshold: float | None = None
+    ) -> NDArray:
+        threshold = self.default_threshold if threshold is None else threshold
+        return (y_pos_score >= threshold).astype(int)
+
+    def predict_labels(
+        self, y_pos_score: NDArray, *, threshold: float | None = None
+    ) -> NDArray:
         labels = np.asarray(self.labels)
-        return labels[self.predict_indices(y_pos_score)]
+        return labels[self.predict_indices(y_pos_score, threshold=threshold)]

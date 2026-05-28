@@ -56,7 +56,7 @@ class TrainConfig:
 'average': simple average predictions of different modalities.
 'concat': concatenate features of different modalities.
 'calibrated-concat': concatenate features into one RRL, calibrate its logit,
-and tune the clinical threshold.
+and tune operating thresholds.
 'calibrated-fusion': train one RRL per modality, calibrate each modality logit,
 and combine available modalities with equal-weight late fusion.
 """
@@ -99,13 +99,18 @@ and combine available modalities with equal-weight late fusion.
     n_inner_splits: int = 5
     "Number of splits for inner cross-validation, used when aggregate='calibrated-fusion' or 'calibrated-concat'."
 
+    use_clinical_threshold: Annotated[
+        bool, Parameter(negative='--no-clinical-threshold')
+    ] = True
+    'Whether to calculate and record the clinical recall threshold.'
+
     clinical_threshold_label: str = ''
-    'Class label whose recall is targeted by the pre-specified clinical threshold.'
+    'Class label whose recall is targeted by the clinical threshold.'
 
     clinical_threshold_recall: Annotated[
         float, Parameter(validator=Number(gt=0, lt=1))
     ] = 0.9
-    'Target recall for the pre-specified clinical threshold.'
+    'Target recall for the clinical threshold.'
 
     device_id: Annotated[str, Parameter(alias='-i')] = '0'
     "CUDA device IDs for training, e.g. '0', '0,1', or '0-7'. Default is 0."
@@ -286,13 +291,14 @@ For discrete RRL, validation set is used for optimization when val_size is set.
         if self.num_class > 2:
             # HACK: Disable ROC plot for multiclass classification
             self.plot_roc = False
-        if not self.clinical_threshold_label:
-            self.clinical_threshold_label = self._sorted_group_names[0]
-        if self.clinical_threshold_label not in self.get_group_index_mapping():
-            raise ValueError(
-                'clinical_threshold_label must be one of '
-                f'{", ".join(self._sorted_group_names)}.'
-            )
+        if self.use_clinical_threshold:
+            if not self.clinical_threshold_label:
+                self.clinical_threshold_label = self._sorted_group_names[0]
+            if self.clinical_threshold_label not in self.get_group_index_mapping():
+                raise ValueError(
+                    'clinical_threshold_label must be one of '
+                    f'{", ".join(self._sorted_group_names)}.'
+                )
         self.validate_feature_selection()
         self.validate_preprocessing()
 
