@@ -13,6 +13,7 @@ from iatreion.train_utils import (
 )
 from iatreion.utils import logger, task
 
+from .manifest import now_utc, write_manifest
 from .recorder import Finish, Recorder, TrainerReturn
 from .utils import (
     record_average,
@@ -43,6 +44,7 @@ class Trainer(ABC):
         self.calc_ci = calc_ci
         self.finishes: dict[str, Finish] = {}
         self.objectives: dict[str, float] = {}
+        self.splits: list[dict[str, object]] = []
 
     def _uses_available_fusion_artifact(self) -> bool:
         return self.train_config.num_class == 2
@@ -52,6 +54,29 @@ class Trainer(ABC):
 
     @abstractmethod
     def train_final(self, ctx: TrainStepContext) -> None: ...
+
+    @staticmethod
+    def _ids(index) -> list[str]:
+        return [str(item) for item in index]
+
+    def _record_split(self, ctx: TrainStepContext) -> None:
+        if self.train_config.final:
+            kind = 'final'
+        elif ctx.is_inner:
+            kind = 'inner'
+        else:
+            kind = 'outer'
+        self.splits.append(
+            {
+                'name': ctx.name,
+                'kind': kind,
+                'outer_fold': ctx.outer_fold,
+                'inner_fold': ctx.inner_fold,
+                'train_ids': self._ids(ctx.train_index),
+                'val_ids': [] if ctx.val_index is None else self._ids(ctx.val_index),
+                'test_ids': self._ids(ctx.test_index),
+            }
+        )
 
     def _store_finish(self, name: str, recorder: Recorder) -> None:
         finish = recorder.finish(calc_ci=self.calc_ci)
@@ -69,6 +94,7 @@ class Trainer(ABC):
             self.objectives[f'{name}/{metric}_ub'] = upper
 
     def train(self) -> TrainerSummary:
+        started_at = now_utc()
         iterator = get_train_iterator(
             self.dataset_config, self.train_config, self.fold_specs
         )
@@ -90,6 +116,7 @@ class Trainer(ABC):
                 for _, inner_group in groupby(outer_group, lambda ctx: ctx.inner_fold):
                     with task('Data:', len(self.data_names)) as data_advance:
                         for ctx in inner_group:
+                            self._record_split(ctx)
                             if self.train_config.final:
                                 self.train_final(ctx)
                                 data_advance()
@@ -140,7 +167,15 @@ class Trainer(ABC):
                 for name, recorder in recorders.items():
                     self._store_finish(name, recorder)
                     aggregate_advance()
-        return TrainerSummary(
+        summary = TrainerSummary(
             finishes=self.finishes,
             objectives=self.objectives,
         )
+        write_manifest(
+            self.config,
+            started_at=started_at,
+            splits=self.splits,
+            objectives=self.objectives,
+            parameter_map=getattr(self, 'parameter_map', {}),
+        )
+        return summary

@@ -104,6 +104,9 @@ class TrainStepContext:
     inner_fold: int
     is_inner: bool
     name: str
+    train_index: pd.Index
+    val_index: pd.Index | None
+    test_index: pd.Index
 
     db_enc: DBEncoder
     train_data: tuple[NDArray, NDArray]
@@ -288,6 +291,9 @@ def get_train_iterator(
                     inner_fold=spec.inner_fold,
                     is_inner=spec.is_inner,
                     name=name,
+                    train_index=train_final,
+                    val_index=val_final,
+                    test_index=spec.test_index,
                     db_enc=db_enc,
                     train_data=train_data,
                     val_data=val_data,

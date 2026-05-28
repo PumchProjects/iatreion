@@ -246,6 +246,8 @@ uv run iatreion train rrl \
 
 The training output root is `logs` in this example; set it with `--log-root` or `train.rrl.log-root` in `configs/config.toml`. The Optuna artifact root shown below defaults to `logs_optuna_rrl`, controlled by `execution.trial-log-root` in `configs/rrl_optuna.toml`.
 
+Every training run writes a compact `manifest.toml` in its output directory. The manifest records the command line, git commit and dirty files, `uv.lock` version/revision/hash, Python/uv/PyTorch/CUDA/GPU environment, processed data hashes, resolved hyperparameters plus selected Optuna parameters, actual train/validation/test IDs, final objective metrics, and artifact paths with hashes; larger logs, predictions, rules, and plots remain in their normal files and are referenced from the manifest.
+
 Optuna artifacts are organized by stage, outer fold, and tuning target:
 
 ```text
@@ -264,6 +266,7 @@ The important exported files include:
 
 | File pattern | Meaning |
 | --- | --- |
+| `manifest.toml` | Compact provenance manifest for reproducing and auditing the run |
 | `train.log` | Training log |
 | `rrl_<name>_<outer>_<inner>.tsv` | Exported RRL rule table for one modality/fold |
 | `rrl_<name>_<outer>_<inner>.feature-selection.toml` | Fold-fitted supervised feature-selection artifact when feature selection is enabled |
@@ -575,7 +578,7 @@ src/iatreion/
   configs/                         # CLI dataclasses and config semantics
   preprocessors/                   # Raw-to-processed feature extraction
   train_utils/                     # Splitting, feature selection, encoding, fusion, imputation artifacts
-  trainers/                        # Training loop, metric recording, final artifacts
+  trainers/                        # Training loop, metric recording, provenance manifests, final artifacts
   models/rrl.py                    # Live RRL training wrapper
   models/rrl_discrete.py           # Parser/evaluator for exported RRL rules
   rrl/                             # RRL network and rule export implementation
