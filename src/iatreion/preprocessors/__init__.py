@@ -14,6 +14,13 @@ from .cog_mmse import MmsePreprocessor
 from .cog_mmse_sum import MmseSumPreprocessor
 from .cog_moca import MocaPreprocessor
 from .cog_moca_sum import MocaSumPreprocessor
+from .harmonized import (
+    HarmonizedApoePreprocessor,
+    HarmonizedDemoPreprocessor,
+    HarmonizedHistoryPreprocessor,
+    HarmonizedMriPreprocessor,
+    PrefixPreprocessor,
+)
 from .history import HistoryPreprocessor
 from .mri_cbf import CbfPreprocessor
 from .mri_csvd import CsvdPreprocessor
@@ -77,6 +84,24 @@ def get_single_preprocessor(config: PreprocessorConfig, name: DataName) -> Prepr
             return VolumeAverageNewPreprocessor(config, name)
         case 'volume-new-v' | 'volume-new-pct' | 'volume-adni-v' | 'volume-adni-pct':
             return VolumeAverageNewPreprocessor(config, name, new=True)
+        case 'h-demo':
+            return HarmonizedDemoPreprocessor(config, name)
+        case 'h-apoe':
+            return HarmonizedApoePreprocessor(config, name)
+        case 'h-mmse':
+            return PrefixPreprocessor(config, name, prefix='MMSE_')
+        case 'h-moca':
+            return PrefixPreprocessor(config, name, prefix='MOCA_')
+        case 'h-mri':
+            return HarmonizedMriPreprocessor(config, name, roi=False)
+        case 'h-mri-roi':
+            return HarmonizedMriPreprocessor(config, name, roi=True)
+        case 'h-plasma':
+            return PrefixPreprocessor(config, name, prefix='Plasma_')
+        case 'h-labdata':
+            return PrefixPreprocessor(config, name, prefix='LABDATA_')
+        case 'h-history':
+            return HarmonizedHistoryPreprocessor(config, name)
         case _:
             children: list[Preprocessor] = []
             for child_name in config.children_names(name):

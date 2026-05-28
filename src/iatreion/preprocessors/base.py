@@ -178,7 +178,7 @@ class Preprocessor(ABC):
     def discretize_data(self, data: pd.DataFrame) -> pd.DataFrame:
         discrete_features = self.process_info(list[str], 'discrete_features')
         if not self.config._final:
-            for name in data.columns[: -len(self.config.group_columns)]:
+            for name in data.columns:
                 if (
                     not hasattr(data[name], 'cat')
                     and data[name].nunique() <= self.config.discrete_threshold
@@ -225,6 +225,10 @@ class Preprocessor(ABC):
             return stem_to_name(self.stem_pattern, mapping)
         return None
 
+    def drop_empty_samples(self, data: pd.DataFrame) -> pd.DataFrame:
+        subset = [col for col in data.columns if col not in self.config.group_columns]
+        return data.dropna(subset=subset, how='all')
+
     def save_info(self, data: pd.DataFrame) -> pd.DataFrame:
         augmented_vector_name = [(self.config.index_name, 'index', '')]
         for name in data.columns[: -len(self.config.group_columns)]:
@@ -257,6 +261,7 @@ class Preprocessor(ABC):
         )
         data = self.get_data_outer()
         data = self.merge_group_names(data)
+        data = self.drop_empty_samples(data)
         logger.info('Saving data...')
         data = self.save_info(data)
         self.save_data(data)

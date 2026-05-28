@@ -23,6 +23,7 @@ data_indices_mapping: dict[str, list[str]] = {
     'volume': ['MRI_time'],
     'volume-new': ['检查日期/Study date'],
     'volume-adni': ['检查日期/Study date'],
+    'harmonized': [],
 }
 
 data_stem_mapping: dict[str, str] = {
@@ -73,6 +74,15 @@ name_data_mapping: dict[DataName, str] = {
     'volume-new-pct': 'volume-new',
     'volume-adni-v': 'volume-adni',
     'volume-adni-pct': 'volume-adni',
+    'h-demo': 'harmonized',
+    'h-apoe': 'harmonized',
+    'h-mmse': 'harmonized',
+    'h-moca': 'harmonized',
+    'h-mri': 'harmonized',
+    'h-mri-roi': 'harmonized',
+    'h-plasma': 'harmonized',
+    'h-labdata': 'harmonized',
+    'h-history': 'harmonized',
 }
 
 sequence_mapping: dict[DataName, list[DataName]] = {

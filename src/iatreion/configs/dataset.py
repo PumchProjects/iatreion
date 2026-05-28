@@ -49,6 +49,15 @@ type DataName = Literal[
     'volume-new-pct',
     'volume-adni-v',
     'volume-adni-pct',
+    'h-demo',
+    'h-apoe',
+    'h-mmse',
+    'h-moca',
+    'h-mri',
+    'h-mri-roi',
+    'h-plasma',
+    'h-labdata',
+    'h-history',
 ]
 
 

@@ -521,7 +521,7 @@ class OptunaRunner(Runner):
         study = self._create_study(root, sanitize_name(candidate))
         label = study_label(root, candidate)
         objective_name = self._objective_key(candidate)
-        message = f'Optuna study {label} started: objective={objective_name}'
+        message = f'Optuna study "{label}" started: objective="{objective_name}"'
         logger.info(message)
         append_study_log(root, f'{message} root={root}')
         self._mark_unfinished_trials_failed(study)
