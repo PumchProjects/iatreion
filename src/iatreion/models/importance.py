@@ -166,7 +166,7 @@ def _get_feature_names(train: TrainConfig, feature_names: list[str]) -> list[str
 
 def _get_output_names(train: TrainConfig, values: NDArray) -> list[str]:
     n_outputs = 1 if values.ndim == 2 else values.shape[-1]
-    group_names = train._sorted_group_names
+    group_names = train.group_labels
     if n_outputs == len(group_names):
         return group_names
     if n_outputs == 1 and len(group_names) == 2:
@@ -219,7 +219,7 @@ def calc_shap_importance(
             X_sample,
             algorithm='permutation',
             feature_names=feature_names,
-            output_names=config.train._sorted_group_names,
+            output_names=config.train.group_labels,
             seed=config.train.seed,
         )
     elif model is not None:

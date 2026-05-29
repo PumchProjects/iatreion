@@ -52,7 +52,7 @@ def _load_data_with_features(
     f_df = f_df.copy()
     f_df['name'] = f_df['name'].replace(column_name_mapping)
     data = pd.concat([X_df, y_df.to_frame('Label')], axis=1).convert_dtypes()
-    groups = [group_mapping[group] for group in train._group_names]
+    groups = [group_mapping[group] for group in train.group_labels]
     return data, groups, f_df
 
 

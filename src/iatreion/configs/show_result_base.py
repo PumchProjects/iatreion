@@ -71,7 +71,10 @@ and combine available modalities with equal-weight late fusion.
         # HACK: Empty prefix
         dataset_config = DatasetConfig(prefix=Path(), names=self.names)
         train_config = TrainConfig(
-            group_names=self.groups, log_root=self.log_root, _shuffle=False
+            group_names=self.groups,
+            positive_label=self.positive_label,
+            log_root=self.log_root,
+            _shuffle=False,
         )
         config = ModelConfig(dataset=dataset_config, train=train_config)
         pad_len = self._pad_lists()

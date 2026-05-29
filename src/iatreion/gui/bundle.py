@@ -21,6 +21,7 @@ class ConfigBundle:
     config: RrlEvalConfig
     names: tk.StringVar = field(default_factory=tk.StringVar)
     groups: tk.StringVar = field(default_factory=tk.StringVar)
+    positive_label: tk.StringVar = field(default_factory=tk.StringVar)
     thesaurus: tk.StringVar = field(default_factory=tk.StringVar)
     process: tk.StringVar = field(default_factory=tk.StringVar)
     data: defaultdict[str, tk.StringVar] = field(
@@ -45,6 +46,13 @@ class ConfigBundle:
             case 'groups':
                 self.groups.set(
                     ' : '.join(groups_mapping[group] for group in self.config.groups)
+                )
+            case 'positive_label':
+                self.positive_label.set(
+                    groups_mapping.get(
+                        self.config.positive_label,
+                        self.config.positive_label,
+                    )
                 )
             case 'thesaurus':
                 self.thesaurus.set(os.path.basename(self.config.thesaurus))
@@ -80,7 +88,25 @@ class ConfigBundle:
 
     def set_groups(self, groups: list[str]) -> None:
         self.config.groups = groups
+        self.sync_positive_label()
         self.set_field('groups')
+
+    def sync_positive_label(self) -> None:
+        if len(self.config.groups) != 2:
+            self.config.positive_label = ''
+        elif self.config.positive_label not in self.config.groups:
+            self.config.positive_label = self.config.groups[-1]
+        self.set_field('positive_label')
+
+    def set_positive_label(self, value: str | None = None) -> None:
+        value = self.positive_label.get() if value is None else value
+        if not value:
+            self.config.positive_label = ''
+        elif value in groups_mapping.values():
+            self.config.positive_label = get_key(groups_mapping, value)
+        else:
+            self.config.positive_label = value
+        self.set_field('positive_label')
 
     def set_thesaurus(self, path: str) -> None:
         self.config.thesaurus = path

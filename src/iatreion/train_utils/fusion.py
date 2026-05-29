@@ -128,12 +128,7 @@ class AvailableFusionArtifact:
         y_pos_score_list: list[NDArray],
         y_mask_list: list[NDArray],
     ) -> 'AvailableFusionArtifact':
-        labels = [
-            label
-            for label, _ in sorted(
-                config.get_group_index_mapping().items(), key=lambda item: item[1]
-            )
-        ]
+        labels = config.group_labels
         if len(labels) != 2:
             raise IatreionException(
                 'Available-modality fusion currently requires binary labels.'
@@ -157,7 +152,7 @@ class AvailableFusionArtifact:
         artifact = cls(
             names=names,
             labels=labels,
-            positive_label=labels[1],
+            positive_label=config.positive_label,
             weights=weights,
             calibrators=calibrators,
             thresholds={},

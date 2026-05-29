@@ -45,6 +45,9 @@ class TrainConfig:
     ]
     'Group names of the data.'
 
+    positive_label: str = ''
+    'Positive class label for binary tasks. Required when exactly two groups are selected.'
+
     keep: Annotated[Literal['first', 'last'], Parameter(alias='-k')] = 'last'
     """Deduplication strategy for duplicated samples.
 'first': keep the first sample of each patient.
@@ -176,9 +179,7 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     _groups: list[list[str]] = field(default_factory=list[list[str]])
 
-    _group_names: list[str] = field(default_factory=list[str])
-
-    _sorted_group_names: list[str] = field(default_factory=list[str])
+    _ordered_group_names: list[str] = field(default_factory=list[str])
 
     _shuffle: bool = True
 
@@ -208,12 +209,31 @@ For discrete RRL, validation set is used for optimization when val_size is set.
                     names.append(group[i])
                     i += 1
             groups.append(sorted(names))
-        self._group_names = [''.join(group) for group in groups]
-        self._groups = sorted(groups, key=lambda x: x[0])
-        self._sorted_group_names = [''.join(group) for group in self._groups]
         if self.label_name is not None:
             self._base_pos = ''
             self._label_pos = self.label_name
+        groups = sorted(groups, key=lambda x: x[0])
+        group_names = [''.join(group) for group in groups]
+        match len(groups):
+            case 2:
+                if not self.positive_label:
+                    raise ValueError(
+                        'positive_label is required for binary classification.'
+                    )
+                if self.positive_label not in group_names:
+                    raise ValueError(
+                        f'positive_label must be one of {", ".join(group_names)}.'
+                    )
+                groups = sorted(
+                    groups, key=lambda group: ''.join(group) == self.positive_label
+                )
+            case _:
+                if self.positive_label:
+                    raise ValueError(
+                        'positive_label is only supported for binary classification.'
+                    )
+        self._groups = groups
+        self._ordered_group_names = [''.join(group) for group in groups]
 
     def get_name_group_mapping(self) -> Callable[[str], str | None]:
         group_sets = [(''.join(group), set(group)) for group in self._groups]
@@ -228,6 +248,16 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     def get_group_index_mapping(self) -> dict[str, int]:
         return {''.join(group): i for i, group in enumerate(self._groups)}
+
+    @property
+    def group_labels(self) -> list[str]:
+        return list(self._ordered_group_names)
+
+    @property
+    def positive_index(self) -> int:
+        if self.num_class != 2:
+            raise ValueError('positive_index is only defined for binary tasks.')
+        return 1
 
     @property
     def clinical_threshold_index(self) -> int:
@@ -293,11 +323,15 @@ For discrete RRL, validation set is used for optimization when val_size is set.
             self.plot_roc = False
         if self.use_clinical_threshold:
             if not self.clinical_threshold_label:
-                self.clinical_threshold_label = self._sorted_group_names[0]
+                self.clinical_threshold_label = (
+                    self.positive_label
+                    if self.num_class == 2
+                    else self._ordered_group_names[0]
+                )
             if self.clinical_threshold_label not in self.get_group_index_mapping():
                 raise ValueError(
                     'clinical_threshold_label must be one of '
-                    f'{", ".join(self._sorted_group_names)}.'
+                    f'{", ".join(self._ordered_group_names)}.'
                 )
         self.validate_feature_selection()
         self.validate_preprocessing()

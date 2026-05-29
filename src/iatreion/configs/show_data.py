@@ -17,5 +17,9 @@ class ShowDataConfig(ShowConfig):
 
     def make_configs(self) -> tuple[DatasetConfig, TrainConfig]:
         dataset_config = DatasetConfig(prefix=self.prefix, names=self.names)
-        train_config = TrainConfig(group_names=self.groups, _shuffle=False)
+        train_config = TrainConfig(
+            group_names=self.groups,
+            positive_label=self.positive_label,
+            _shuffle=False,
+        )
         return dataset_config, train_config

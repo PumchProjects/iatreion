@@ -17,6 +17,9 @@ class ShowConfig:
     groups: Annotated[list[str], Parameter(alias='-g', consume_multiple=True)]
     'Group names of the data.'
 
+    positive_label: str = ''
+    'Positive class label for binary tasks.'
+
     title: Annotated[str, Parameter(alias='-t')] = ''
     'Title for the figure or table to show.'
 

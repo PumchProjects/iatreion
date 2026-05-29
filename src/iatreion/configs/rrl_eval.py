@@ -26,6 +26,9 @@ class RrlEvalConfig:
     )
     'Group names of the data.'
 
+    positive_label: str = ''
+    'Positive class label for binary tasks.'
+
     thesaurus: Annotated[str, Parameter(alias='-t')] = ''
     'Root directory for trained RRL models.'
 
@@ -92,6 +95,7 @@ class RrlEvalConfig:
             final=True,
             suspected_case=self.suspected_case,
             label_name=self.label_name or None,
+            positive_label=self.positive_label,
             log_root=Path(self.thesaurus),
             _shuffle=False,
         )

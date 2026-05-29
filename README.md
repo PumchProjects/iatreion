@@ -86,7 +86,7 @@ Raw source paths are provided at preprocessing time with `--data.<raw-data-name>
 
 ## Labels and Groups
 
-Groups are selected with `-g/--groups`. Each `-g` argument is one class. A group string can merge several encrypted subgroups; for example `-g ac f` means `AD + AD-mix` versus healthy controls.
+Groups are selected with `-g/--groups`. Each `-g` argument is one class. A group string can merge several encrypted subgroups; for example `-g ac f` means `AD + AD-mix` versus healthy controls. Binary tasks must also set `--positive-label`; the selected positive label is encoded internally as class index `1`, so AUROC, AUPRC, ROC plots, calibrated fusion logits, SHAP's default binary output, and operating thresholds all refer to that label.
 
 Common display mappings used by plotting helpers include:
 
@@ -159,7 +159,7 @@ Important raw preprocessing behavior:
 
 `calibrated-concat` first concatenates features from all selected modalities into one model, then applies the same one-dimensional logit calibration and operating-threshold selection to that single concatenated model. It is useful when the desired comparison is a single early-fusion model rather than per-modality late fusion.
 
-For binary tasks, `calibrated-concat` and `calibrated-fusion` store operating thresholds in `available_fusion.toml`: a Youden-index threshold is always fitted, and a clinical recall threshold is fitted by default to satisfy a target recall for a specified class, controlled by `--clinical-threshold-label` and `--clinical-threshold-recall`. Pass `--no-clinical-threshold` to skip the clinical label/recall threshold; final parser evaluation and single-sample prediction then use the Youden threshold as the default operating point.
+For binary tasks, `calibrated-concat` and `calibrated-fusion` store operating thresholds in `available_fusion.toml`: a Youden-index threshold is always fitted, and a clinical recall threshold is fitted by default to satisfy a target recall for a specified class, controlled by `--clinical-threshold-label` and `--clinical-threshold-recall`; if no clinical threshold label is provided, it defaults to `--positive-label`. Pass `--no-clinical-threshold` to skip the clinical label/recall threshold; final parser evaluation and single-sample prediction then use the Youden threshold as the default operating point.
 
 ## Fold-fitted Training Preprocessing
 
@@ -231,6 +231,7 @@ uv run iatreion train rrl \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
   -g a c \
+  --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
   --log-root logs \
@@ -302,6 +303,7 @@ uv run iatreion train rrl-eval \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
   -g a c \
+  --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
   --no-pp \
@@ -326,6 +328,7 @@ uv run iatreion train rrl-eval \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
   --eval-names symptom csvd \
   -g a c \
+  --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
   --no-pp \
@@ -343,6 +346,7 @@ uv run iatreion train rrl \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
   -g a c \
+  --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
   --log-root logs \
@@ -397,6 +401,7 @@ Example for symptom plus CSVD:
 uv run iatreion rrl-eval \
   -n symptom csvd \
   -g a c \
+  --positive-label c \
   -t logs \
   -p "<path-to-the-process-info-file>" \
   --data.history "<path-to-the-spreadsheet-for-symptom-data>" \
@@ -414,6 +419,7 @@ Example including MRI volume features:
 uv run iatreion rrl-eval \
   -n symptom csvd volume-new-pct \
   -g a c \
+  --positive-label c \
   -t logs \
   -p "<path-to-the-process-info-file>" \
   --data.history "<path-to-the-spreadsheet-for-symptom-data>" \
@@ -450,11 +456,11 @@ After final model fitting, launch:
 uv run iatreion-gui
 ```
 
-The GUI wraps the same parser API used by `iatreion rrl-eval`. It can load final RRL models, select Excel/CSV/TSV input files, export batch predictions and rule-OR tables, view active rules, and evaluate labeled external data.
+The GUI wraps the same parser API used by `iatreion rrl-eval`. It can load final RRL models, select input files, export batch predictions and rule-OR tables, view active rules, and evaluate labeled external data.
 
 ## XGBoost and Random Forest Baselines
 
-XGBoost and Random Forest can be trained with the same processed `.data` and `.info` files as RRL. Their defaults can live in `[train.xgboost]` and `[train.random-forest]` in `configs/config.toml`; common fields such as `prefix`, `names`, `groups`, `aggregate`, `use-clinical-threshold`, `clinical-threshold-label`, `clinical-threshold-recall`, and `log-root` follow the same config/CLI override rules described above.
+XGBoost and Random Forest can be trained with the same processed `.data` and `.info` files as RRL. Their defaults can live in `[train.xgboost]` and `[train.random-forest]` in `configs/config.toml`; common fields such as `prefix`, `names`, `groups`, `positive-label`, `aggregate`, `use-clinical-threshold`, `clinical-threshold-label`, `clinical-threshold-recall`, and `log-root` follow the same config/CLI override rules described above.
 
 With the config file, run:
 
@@ -477,6 +483,7 @@ uv run iatreion train xgboost \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom csvd \
   -g a c \
+  --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
   --log-root logs \
@@ -487,6 +494,7 @@ uv run iatreion train random-forest \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom csvd \
   -g a c \
+  --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
   --log-root logs
@@ -505,6 +513,7 @@ uv run iatreion show table-1 \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
   -g a c \
+  --positive-label c \
   -o table_1
 ```
 
@@ -512,6 +521,7 @@ uv run iatreion show table-1 \
 uv run iatreion show latex-ci-delong \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
   -g a c \
+  --positive-label c \
   -m rrl \
   -a calibrated-fusion \
   -r all_calibrated_fusion_clinical_recall \
@@ -523,6 +533,7 @@ uv run iatreion show latex-ci-delong \
 uv run iatreion show rrl-waterfall \
   -n symptom csvd \
   -g a c \
+  --positive-label c \
   -t logs \
   -p "<path-to-the-process-info-file>" \
   --data.history "<path-to-the-spreadsheet-for-symptom-data>" \
@@ -565,7 +576,7 @@ Plot/table helpers include:
 - DeLong tests over full out-of-fold AUROCs.
 - McNemar tests for paired accuracy comparisons.
 
-For binary labels, confirm which class is treated as the positive class in each analysis. Internally, class order follows the sorted selected group labels; AUROC and AUPRC use the second sorted class as the positive class, and AUPRC is reported as sklearn average precision rather than interpolated trapezoidal PR-AUC.
+For binary labels, set `--positive-label` in each analysis. Internally, the configured positive label is encoded as class index `1`; AUROC and AUPRC use that positive-class score, and AUPRC is reported as sklearn average precision rather than interpolated trapezoidal PR-AUC.
 
 ## Repository Layout
 
@@ -594,7 +605,7 @@ Run final training with `uv run iatreion train rrl ... --tune-config configs/rrl
 
 ### No experiment root found
 
-Check that `-p`, `-n`, `-g`, `-a`, `--log-root`, and `--eval-names` match the previous training command.
+Check that `-p`, `-n`, `-g`, `--positive-label`, `-a`, `--log-root`, and `--eval-names` match the previous training command.
 
 ### External validation cannot find a column
 

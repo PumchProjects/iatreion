@@ -445,7 +445,7 @@ def main() -> None:
         return set_data_path_inner
 
     def make_data_rows() -> None:
-        start = 6
+        start = 7
         for widget in frm.grid_slaves():
             if int(widget.grid_info()['row']) >= start:
                 widget.destroy()
@@ -479,6 +479,31 @@ def main() -> None:
             item_name_mapping=groups_mapping,
         )
         bundle.set_groups(selected_groups)
+        make_positive_label_menu()
+
+    positive_label_menu: ttk.OptionMenu | None = None
+
+    def positive_label_options() -> list[str]:
+        if len(config.groups) != 2:
+            return ['']
+        return [groups_mapping.get(group, group) for group in config.groups]
+
+    def make_positive_label_menu() -> None:
+        nonlocal positive_label_menu
+        if positive_label_menu is not None:
+            positive_label_menu.destroy()
+        bundle.sync_positive_label()
+        options = positive_label_options()
+        positive_label_menu = ttk.OptionMenu(
+            frm,
+            bundle.positive_label,
+            bundle.positive_label.get(),
+            *options,
+            command=bundle.set_positive_label,
+        )
+        if len(config.groups) != 2:
+            positive_label_menu.config(state='disabled')
+        positive_label_menu.grid(row=2, column=1, sticky=tk.EW)
 
     def set_thesaurus_path() -> None:
         if path := askdirectory(initialdir=config.thesaurus):
@@ -513,10 +538,12 @@ def main() -> None:
 
     make_row(frm, 0, '模块:', bundle.names, '选择模块', set_names)
     make_row(frm, 1, '分组:', bundle.groups, '选择分组', set_groups)
-    make_row(frm, 2, '模型:', bundle.thesaurus, '选择文件夹', set_thesaurus_path)
-    make_row(frm, 3, '预处理信息:', bundle.process, '选择文件', set_process_path)
-    make_row(frm, 4, '核磁体积均值标准差:', bundle.vmri, '选择文件', set_vmri_path)
-    make_row(frm, 5, '核磁体积表头变化:', bundle.change, '选择文件', set_change_path)
+    ttk.Label(frm, text='阳性分组:').grid(row=2, column=0, sticky=tk.EW)
+    make_positive_label_menu()
+    make_row(frm, 3, '模型:', bundle.thesaurus, '选择文件夹', set_thesaurus_path)
+    make_row(frm, 4, '预处理信息:', bundle.process, '选择文件', set_process_path)
+    make_row(frm, 5, '核磁体积均值标准差:', bundle.vmri, '选择文件', set_vmri_path)
+    make_row(frm, 6, '核磁体积表头变化:', bundle.change, '选择文件', set_change_path)
     make_data_rows()
 
     def run_inference() -> None:
@@ -524,6 +551,7 @@ def main() -> None:
             bundle.set_index()
             bundle.set_label()
             bundle.set_sample_id()
+            bundle.set_positive_label()
             save_config(config, config_path)
             set_font()
             match config.mode:

@@ -4,7 +4,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
-from sklearn import preprocessing
 
 from iatreion.configs import TrainConfig
 
@@ -39,7 +38,6 @@ class DBEncoder:
         self.cat_sep = cat_sep
         self.limix_client = limix_client
 
-        self.label_enc = preprocessing.LabelEncoder()
         self.X_compl_fname: dict[int, str] = {}
         self.X_fname: list[str] = []
         self.y_fname: list[str] = []
@@ -75,10 +73,10 @@ class DBEncoder:
         X_test: pd.DataFrame | None = None,
         y_test: pd.Series | None = None,
     ) -> tuple[EncodedData, OptionalEncodedData, OptionalEncodedData]:
-        y_train_encoded = self.label_enc.fit_transform(y_train)
-        self.y_fname = list(map(str, self.label_enc.classes_))
-        y_val_encoded = None if y_val is None else self.label_enc.transform(y_val)
-        y_test_encoded = None if y_test is None else self.label_enc.transform(y_test)
+        self.y_fname = self.train.group_labels
+        y_train_encoded = self._encode_labels(y_train)
+        y_val_encoded = None if y_val is None else self._encode_labels(y_val)
+        y_test_encoded = None if y_test is None else self._encode_labels(y_test)
 
         test_frame = X_train.iloc[:0].copy() if X_test is None else X_test
 
@@ -116,6 +114,9 @@ class DBEncoder:
             self._pack_optional_output_array(val_output, y_val_encoded),
             self._pack_optional_output_array(test_output, y_test_encoded),
         )
+
+    def _encode_labels(self, y: pd.Series) -> NDArray:
+        return y.map(self.train.get_group_index_mapping()).to_numpy(dtype=int)
 
     def _get_columns(self, *types: str) -> list[str]:
         return self.f_df.loc[self.f_df['type'].isin(types), 'name'].tolist()
