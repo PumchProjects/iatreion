@@ -18,8 +18,11 @@ from .harmonized import (
     HarmonizedApoePreprocessor,
     HarmonizedDemoPreprocessor,
     HarmonizedHistoryPreprocessor,
+    HarmonizedLabdataPreprocessor,
+    HarmonizedMmsePreprocessor,
+    HarmonizedMocaPreprocessor,
     HarmonizedMriPreprocessor,
-    PrefixPreprocessor,
+    HarmonizedPlasmaPreprocessor,
 )
 from .history import HistoryPreprocessor
 from .mri_cbf import CbfPreprocessor
@@ -89,17 +92,17 @@ def get_single_preprocessor(config: PreprocessorConfig, name: DataName) -> Prepr
         case 'h-apoe':
             return HarmonizedApoePreprocessor(config, name)
         case 'h-mmse':
-            return PrefixPreprocessor(config, name, prefix='MMSE_')
+            return HarmonizedMmsePreprocessor(config, name)
         case 'h-moca':
-            return PrefixPreprocessor(config, name, prefix='MOCA_')
+            return HarmonizedMocaPreprocessor(config, name)
         case 'h-mri':
             return HarmonizedMriPreprocessor(config, name, roi=False)
         case 'h-mri-roi':
             return HarmonizedMriPreprocessor(config, name, roi=True)
         case 'h-plasma':
-            return PrefixPreprocessor(config, name, prefix='Plasma_')
+            return HarmonizedPlasmaPreprocessor(config, name)
         case 'h-labdata':
-            return PrefixPreprocessor(config, name, prefix='LABDATA_')
+            return HarmonizedLabdataPreprocessor(config, name)
         case 'h-history':
             return HarmonizedHistoryPreprocessor(config, name)
         case _:

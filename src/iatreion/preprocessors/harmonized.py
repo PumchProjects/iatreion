@@ -21,14 +21,22 @@ class CategoricalPreprocessor(Preprocessor):
 
 class PrefixPreprocessor(Preprocessor):
     def __init__(
-        self, config: PreprocessorConfig, name: DataName, *, prefix: str
+        self,
+        config: PreprocessorConfig,
+        name: DataName,
+        *,
+        prefix: str,
+        exceptions: list[str] | None = None,
     ) -> None:
         super().__init__(config, name)
         self.prefix = prefix
+        self.exceptions = exceptions
 
     @override
     def get_data(self) -> pd.DataFrame:
         data = self.read_data()
+        if self.exceptions is not None:
+            data = self.drop_columns(data, self.exceptions)
         selected = [col for col in data.columns if col.startswith(self.prefix)]
         return data[selected]
 
@@ -47,6 +55,21 @@ class HarmonizedApoePreprocessor(Preprocessor):
     def get_data(self) -> pd.DataFrame:
         data = self.read_data()
         return data[['apoe4']]
+
+
+class HarmonizedMmsePreprocessor(PrefixPreprocessor):
+    def __init__(self, config: PreprocessorConfig, name: DataName) -> None:
+        super().__init__(
+            config,
+            name,
+            prefix='MMSE_',
+            exceptions=['MMSE_slope_change_per_year', 'MMSE_progression_group'],
+        )
+
+
+class HarmonizedMocaPreprocessor(PrefixPreprocessor):
+    def __init__(self, config: PreprocessorConfig, name: DataName) -> None:
+        super().__init__(config, name, prefix='MOCA_')
 
 
 class HarmonizedMriPreprocessor(Preprocessor):
@@ -69,6 +92,16 @@ class HarmonizedMriPreprocessor(Preprocessor):
         else:
             selected = [col for col in selected if not col.startswith('ROI_')]
         return data[selected]
+
+
+class HarmonizedPlasmaPreprocessor(PrefixPreprocessor):
+    def __init__(self, config: PreprocessorConfig, name: DataName) -> None:
+        super().__init__(config, name, prefix='Plasma_')
+
+
+class HarmonizedLabdataPreprocessor(PrefixPreprocessor):
+    def __init__(self, config: PreprocessorConfig, name: DataName) -> None:
+        super().__init__(config, name, prefix='LABDATA_', exceptions=['LABDATA_DATE'])
 
 
 class HarmonizedHistoryPreprocessor(CategoricalPreprocessor):
