@@ -1,12 +1,18 @@
-from dataclasses import dataclass
+import logging
+import os
+import warnings
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass, replace
 from datetime import datetime
+from importlib import import_module
 from math import isfinite
+from multiprocessing import get_context
 from pathlib import Path
 from shutil import copyfile
-from threading import Lock
 from typing import Any, Literal, override
 
 import optuna
+from optuna.exceptions import ExperimentalWarning
 from optuna.pruners import BasePruner, NopPruner
 from optuna.samplers import BaseSampler, TPESampler
 from optuna.storages import RDBStorage
@@ -33,6 +39,7 @@ from iatreion.utils import (
     progress,
     save_dict,
     suppress_console_logs,
+    task,
 )
 
 from .base import Runner
@@ -126,6 +133,7 @@ class TuningExecutionConfig:
     trial_log_root: Path = Path('logs_optuna')
     fail_value: float = 0.0
     n_jobs: int | None = None
+    study_workers: int | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> 'TuningExecutionConfig':
@@ -133,6 +141,7 @@ class TuningExecutionConfig:
             trial_log_root=Path(data.get('trial-log-root', 'logs_optuna')),
             fail_value=float(data.get('fail-value', 0.0)),
             n_jobs=data.get('n-jobs'),
+            study_workers=data.get('study-workers'),
         )
 
 
@@ -177,28 +186,19 @@ class TuningSpec:
         return self.execution.trial_log_root / self.study.name
 
 
-class DevicePool:
-    def __init__(self, n_devices: int) -> None:
-        self.logical_devices = list(range(max(n_devices, 1)))
-        self.index = 0
-        self.lock = Lock()
+@dataclass(frozen=True)
+class StudyJob:
+    candidate: str
+    fold_specs: list[FoldSpec]
+    root: Path
+    overrides: dict[str, Any]
+    device_id: int | None = None
 
-    def assign(self) -> int | None:
-        if not self.logical_devices:
-            return None
-        with self.lock:
-            device = self.logical_devices[self.index % len(self.logical_devices)]
-            self.index += 1
 
-        try:
-            import torch
-
-            if torch.cuda.is_available():
-                torch.cuda.set_device(device)
-                return device
-        except Exception:
-            return None
-        return None
+@dataclass(frozen=True)
+class StudyResult:
+    candidate: str
+    params: dict[str, Any]
 
 
 def sanitize_name(name: str) -> str:
@@ -271,21 +271,61 @@ def study_label(root: Path, candidate: str) -> str:
     return candidate
 
 
+def class_path(cls: type) -> str:
+    return f'{cls.__module__}:{cls.__qualname__}'
+
+
+def import_class(path: str) -> type[Model]:
+    module_name, _, qualname = path.partition(':')
+    cls: Any = import_module(module_name)
+    for name in qualname.split('.'):
+        cls = getattr(cls, name)
+    return cls
+
+
+def init_study_worker(device_id: int | None) -> None:
+    if device_id is not None:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(device_id)
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+
+def run_study_worker(
+    model_cls_path: str,
+    config: ModelConfig,
+    job: StudyJob,
+) -> StudyResult:
+    if job.device_id is not None:
+        config.train.device_id = str(job.device_id)
+    model_cls = import_class(model_cls_path)
+    runner = OptunaRunner(model_cls, config)
+    with suppress_console_logs(logging.CRITICAL + 1), disable_progress():
+        params = runner._run_study(
+            candidate=job.candidate,
+            fold_specs=job.fold_specs,
+            root=job.root,
+            overrides=job.overrides,
+            show_progress=False,
+        )
+    config.close_log_handler()
+    return StudyResult(candidate=job.candidate, params=params)
+
+
 class OptunaRunner(Runner):
     def __init__(self, model_cls: type[Model], config: ModelConfig) -> None:
         super().__init__(model_cls, config)
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         self.spec = TuningSpec.load(config)
-        self.device_pool = DevicePool(len(config.train.device_ids))
 
     def _get_sampler(self) -> BaseSampler:
         match self.spec.study.sampler:
             case 'tpe':
-                return TPESampler(
-                    seed=self.spec.study.seed,
-                    n_startup_trials=self.spec.study.n_startup_trials,
-                    multivariate=self.spec.study.multivariate,
-                )
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', category=ExperimentalWarning)
+                    return TPESampler(
+                        seed=self.spec.study.seed,
+                        n_startup_trials=self.spec.study.n_startup_trials,
+                        multivariate=self.spec.study.multivariate,
+                    )
             case sampler:
                 raise ValueError(f'Unknown Optuna sampler: {sampler}!')
 
@@ -376,6 +416,85 @@ class OptunaRunner(Runner):
             )
         return n_jobs
 
+    def _study_worker_count(self, n_studies: int) -> int:
+        study_workers = self.spec.execution.study_workers
+        if study_workers is not None:
+            if study_workers < 1:
+                raise ValueError('execution.study_workers must be >= 1.')
+            return min(study_workers, n_studies)
+        return min(max(len(self.base_config.train.device_ids), 1), n_studies)
+
+    def _study_worker_devices(self, workers: int) -> list[int | None]:
+        devices = self.base_config.train.device_ids
+        if not devices:
+            return [None] * workers
+        return [devices[index % len(devices)] for index in range(workers)]
+
+    def _run_study_jobs(self, jobs: list[StudyJob]) -> dict[str, dict[str, Any]]:
+        if not jobs:
+            return {}
+
+        workers = self._study_worker_count(len(jobs))
+        if workers == 1:
+            return {
+                job.candidate: self._run_study(
+                    candidate=job.candidate,
+                    fold_specs=job.fold_specs,
+                    root=job.root,
+                    overrides=job.overrides,
+                )
+                for job in jobs
+            }
+
+        devices = self._study_worker_devices(workers)
+        device_label = ', '.join(
+            'CPU' if device is None else str(device) for device in devices
+        )
+        logger.info(
+            f'Running {len(jobs)} Optuna studies with {workers} workers '
+            f'on devices: {device_label}'
+        )
+        context = get_context('spawn')
+        model_cls_path = class_path(self.model_cls)
+        executors = [
+            ProcessPoolExecutor(
+                max_workers=1,
+                max_tasks_per_child=1,
+                mp_context=context,
+                initializer=init_study_worker,
+                initargs=(device,),
+            )
+            for device in devices
+        ]
+        futures = {}
+        try:
+            for index, job in enumerate(jobs):
+                slot = index % workers
+                assigned = replace(job, device_id=devices[slot])
+                futures[
+                    executors[slot].submit(
+                        run_study_worker,
+                        model_cls_path,
+                        self.base_config,
+                        assigned,
+                    )
+                ] = assigned
+
+            results: dict[str, dict[str, Any]] = {}
+            with task('Study:', len(futures)) as study_advance:
+                for future in as_completed(futures):
+                    job = futures[future]
+                    result = future.result()
+                    results[result.candidate] = result.params
+                    label = study_label(job.root, job.candidate)
+                    logger.info(f'Optuna study "{label}" finished')
+                    study_advance()
+        finally:
+            for executor in executors:
+                executor.shutdown(cancel_futures=True)
+
+        return {job.candidate: results[job.candidate] for job in jobs}
+
     @staticmethod
     def _mark_unfinished_trials_failed(study: Study) -> None:
         unfinished = study.get_trials(
@@ -458,7 +577,6 @@ class OptunaRunner(Runner):
         )
 
         model: Model | None = None
-        self.device_pool.assign()
         try:
             with suppress_console_logs(), disable_progress():
                 model = self.model_cls(config)
@@ -517,6 +635,7 @@ class OptunaRunner(Runner):
         fold_specs: list[FoldSpec],
         root: Path,
         overrides: dict[str, Any],
+        show_progress: bool = True,
     ) -> dict[str, Any]:
         study = self._create_study(root, sanitize_name(candidate))
         label = study_label(root, candidate)
@@ -527,10 +646,14 @@ class OptunaRunner(Runner):
         self._mark_unfinished_trials_failed(study)
         remaining_trials = self._remaining_trials(study)
         if remaining_trials != 0:
-            task_id = progress.add_task(
-                f'{label}: best=NA',
-                total=self.spec.study.n_trials,
-                completed=self._complete_trials(study),
+            task_id = (
+                progress.add_task(
+                    f'{label}: best=NA',
+                    total=self.spec.study.n_trials,
+                    completed=self._complete_trials(study),
+                )
+                if show_progress
+                else None
             )
             try:
                 study.optimize(
@@ -553,7 +676,8 @@ class OptunaRunner(Runner):
                     ],
                 )
             finally:
-                progress.remove_task(task_id)
+                if task_id is not None:
+                    progress.remove_task(task_id)
         else:
             message = f'Optuna study {label} already has enough complete trials'
             logger.info(message)
@@ -590,21 +714,21 @@ class OptunaRunner(Runner):
                 ref_y,
                 pool_index=train_outer,
             )
-            selected[outer_fold] = {}
-            for candidate in candidates:
-                root = (
-                    self.spec.study_root
-                    / 'nested'
-                    / f'outer_{outer_fold}'
-                    / sanitize_name(candidate)
-                )
-                overrides = self._candidate_tuning_overrides(candidate, fold_specs)
-                selected[outer_fold][candidate] = self._run_study(
+            jobs = [
+                StudyJob(
                     candidate=candidate,
                     fold_specs=fold_specs,
-                    root=root,
-                    overrides=overrides,
+                    root=(
+                        self.spec.study_root
+                        / 'nested'
+                        / f'outer_{outer_fold}'
+                        / sanitize_name(candidate)
+                    ),
+                    overrides=self._candidate_tuning_overrides(candidate, fold_specs),
                 )
+                for candidate in candidates
+            ]
+            selected[outer_fold] = self._run_study_jobs(jobs)
 
         save_dict(
             {f'outer_{outer}': params for outer, params in selected.items()},
@@ -628,16 +752,16 @@ class OptunaRunner(Runner):
         train = self.base_config.train
         _, _, ref_y, _ = read_data(self.base_config.dataset, train)
         fold_specs = get_cv_fold_specs(train.n_inner_splits, ref_y)
-        selected: dict[str, dict[str, Any]] = {}
-        for candidate in self._candidate_names():
-            root = self.spec.study_root / 'final' / sanitize_name(candidate)
-            overrides = self._candidate_tuning_overrides(candidate, fold_specs)
-            selected[candidate] = self._run_study(
+        jobs = [
+            StudyJob(
                 candidate=candidate,
                 fold_specs=fold_specs,
-                root=root,
-                overrides=overrides,
+                root=self.spec.study_root / 'final' / sanitize_name(candidate),
+                overrides=self._candidate_tuning_overrides(candidate, fold_specs),
             )
+            for candidate in self._candidate_names()
+        ]
+        selected = self._run_study_jobs(jobs)
         save_dict(selected, self.spec.study_root / 'final' / 'selected_params.toml')
         return selected
 
