@@ -1,5 +1,6 @@
 from typing import override
 
+import numpy as np
 import pandas as pd
 
 from iatreion.configs import DataName, PreprocessorConfig
@@ -128,6 +129,7 @@ class HarmonizedHistoryPreprocessor(CategoricalPreprocessor):
     @override
     def get_data(self) -> pd.DataFrame:
         data = self.read_data()
+        data.replace('Unknown', np.nan, inplace=True)
         selected = ['baseline_insomnia', 'hypertension_history']
         selected += [col for col in data.columns if col.startswith('mh_')]
         data = self.make_categorical(data, selected)
