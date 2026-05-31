@@ -73,25 +73,45 @@ class HarmonizedMocaPreprocessor(PrefixPreprocessor):
 
 
 class HarmonizedMriPreprocessor(Preprocessor):
-    def __init__(
-        self, config: PreprocessorConfig, name: DataName, *, roi: bool
-    ) -> None:
-        super().__init__(config, name)
-        self.roi = roi
+    def get_columns(self, data: pd.DataFrame) -> tuple[list[str], ...]:
+        columns = [col for col in data.columns if col.endswith('_v_w')]
+        c_columns = [
+            col
+            for col in columns
+            if not col.endswith('_L_v_w') and not col.endswith('_R_v_w')
+        ]
+        lr_columns = [
+            col.removesuffix('_L_v_w') for col in columns if col.endswith('_L_v_w')
+        ]
+        return c_columns, lr_columns
+
+    def calc_average_scores(
+        self, data: pd.DataFrame, lr_columns: list[str]
+    ) -> list[str]:
+        a_columns = []
+        for col in lr_columns:
+            a_col = f'{col}_A_v_w'
+            data[a_col] = (data[f'{col}_L_v_w'] + data[f'{col}_R_v_w']) * 0.5
+            a_columns.append(a_col)
+        return a_columns
 
     @override
     def get_data(self) -> pd.DataFrame:
         data = self.read_data()
+        c_columns, lr_columns = self.get_columns(data)
+        a_columns = self.calc_average_scores(data, lr_columns)
+        ai_columns = [col for col in data.columns if col.endswith('_asymmetry_index')]
         selected = [
             col
-            for col in data.columns
-            if col.endswith('_v_w') or col.endswith('_asymmetry_index')
+            for col in c_columns + a_columns + ai_columns
+            if not col.startswith('ROI_')
         ]
-        if self.roi:
-            selected = [col for col in selected if col.startswith('ROI_')]
-        else:
-            selected = [col for col in selected if not col.startswith('ROI_')]
         return data[selected]
+
+
+class HarmonizedMriRoiPreprocessor(PrefixPreprocessor):
+    def __init__(self, config: PreprocessorConfig, name: DataName) -> None:
+        super().__init__(config, name, prefix='ROI_')
 
 
 class HarmonizedPlasmaPreprocessor(PrefixPreprocessor):

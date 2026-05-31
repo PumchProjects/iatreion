@@ -22,6 +22,7 @@ from .harmonized import (
     HarmonizedMmsePreprocessor,
     HarmonizedMocaPreprocessor,
     HarmonizedMriPreprocessor,
+    HarmonizedMriRoiPreprocessor,
     HarmonizedPlasmaPreprocessor,
 )
 from .history import HistoryPreprocessor
@@ -96,9 +97,9 @@ def get_single_preprocessor(config: PreprocessorConfig, name: DataName) -> Prepr
         case 'h-moca':
             return HarmonizedMocaPreprocessor(config, name)
         case 'h-mri':
-            return HarmonizedMriPreprocessor(config, name, roi=False)
+            return HarmonizedMriPreprocessor(config, name)
         case 'h-mri-roi':
-            return HarmonizedMriPreprocessor(config, name, roi=True)
+            return HarmonizedMriRoiPreprocessor(config, name)
         case 'h-plasma':
             return HarmonizedPlasmaPreprocessor(config, name)
         case 'h-labdata':
