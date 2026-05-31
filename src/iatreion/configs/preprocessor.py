@@ -83,6 +83,7 @@ name_data_mapping: dict[DataName, str] = {
     'h-plasma': 'harmonized',
     'h-labdata': 'harmonized',
     'h-history': 'harmonized',
+    'sh-apoe-labdata': 'harmonized',
 }
 
 sequence_mapping: dict[DataName, list[DataName]] = {
@@ -104,6 +105,7 @@ sequence_mapping: dict[DataName, list[DataName]] = {
     ],
     's-screen-sum-pct': ['basic', 'mmse-sum-pct', 'moca-sum-pct', 'adl-sum', 'had-sum'],
     's-composite-aea': ['associative-learning', 'episodic-memory', 'avlt'],
+    'sh-apoe-labdata': ['h-apoe', 'h-labdata'],
 }
 
 valid_data_names = set(data_indices_mapping)

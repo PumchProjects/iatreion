@@ -58,6 +58,7 @@ type DataName = Literal[
     'h-plasma',
     'h-labdata',
     'h-history',
+    'sh-apoe-labdata',
 ]
 
 
