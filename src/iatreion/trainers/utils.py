@@ -72,6 +72,11 @@ def log_available_fusion_artifact(
     width = max(len(name) for name in artifact.names)
     with config.logging(log_name):
         logger.info('Calibrated available-modality fusion')
+        logger.info(
+            f'Fusion policy: {artifact.fusion_policy} '
+            f'(objective: {artifact.weight_objective}, '
+            f'schema: {artifact.fusion_schema_version})'
+        )
         for name in artifact.names:
             calibrator = artifact.calibrators[name]
             logger.info(

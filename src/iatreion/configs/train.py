@@ -61,7 +61,7 @@ class TrainConfig:
 'calibrated-concat': concatenate features into one RRL, calibrate its logit,
 and tune operating thresholds.
 'calibrated-fusion': train one RRL per modality, calibrate each modality logit,
-and combine available modalities with equal-weight late fusion.
+and combine available modalities with learned non-negative late-fusion weights.
 """
 
     preprocess: Annotated[bool, Parameter(negative='--no-pp')] = True

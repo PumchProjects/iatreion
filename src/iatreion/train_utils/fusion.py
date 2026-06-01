@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
+from scipy.optimize import minimize
 from sklearn.linear_model import LogisticRegression
 
 from iatreion.configs import TrainConfig
@@ -11,6 +12,9 @@ from iatreion.utils import load_dict, save_dict
 
 FUSION_ARTIFACT_FILE = 'available_fusion.toml'
 _PROB_EPS = 1e-6
+_FUSION_SCHEMA_VERSION = 2
+_FUSION_POLICY = 'learned_global_weights'
+_WEIGHT_OBJECTIVE = 'log_loss'
 
 
 def clip_probability(y_pos_score: NDArray) -> NDArray:
@@ -24,6 +28,11 @@ def logit(y_pos_score: NDArray) -> NDArray:
 
 def sigmoid(logits: NDArray) -> NDArray:
     return 1 / (1 + np.exp(-logits))
+
+
+def binary_log_loss_from_logits(y_true: NDArray, logits: NDArray) -> float:
+    y = y_true.astype(float)
+    return np.mean(np.logaddexp(0.0, logits) - y * logits).item()
 
 
 def get_threshold_candidates(y_pos_score: NDArray) -> NDArray:
@@ -111,6 +120,9 @@ class ModalityCalibrator:
 
 @dataclass(frozen=True)
 class AvailableFusionArtifact:
+    fusion_schema_version: int
+    fusion_policy: str
+    weight_objective: str
     names: list[str]
     labels: list[str]
     positive_label: str
@@ -134,6 +146,51 @@ class AvailableFusionArtifact:
                 'Available-modality fusion currently requires binary labels.'
             )
 
+        missing = np.column_stack(y_mask_list).astype(bool)
+        calibrators = cls.fit_calibrators(names, y_true, y_pos_score_list, y_mask_list)
+        calibrated_logits = cls.get_calibrated_logits(
+            names, y_pos_score_list, missing, calibrators
+        )
+        weights = cls.fit_weights(names, y_true, calibrated_logits, missing)
+        artifact = cls(
+            fusion_schema_version=_FUSION_SCHEMA_VERSION,
+            fusion_policy=_FUSION_POLICY,
+            weight_objective=_WEIGHT_OBJECTIVE,
+            names=names,
+            labels=labels,
+            positive_label=config.positive_label,
+            weights=weights,
+            calibrators=calibrators,
+            thresholds={},
+            default_threshold_name=get_default_threshold_name(config),
+        )
+        y_pos_score = artifact.predict_pos_score(names, y_pos_score_list, y_mask_list)
+        available_any = ~missing.all(axis=1)
+        thresholds = get_operating_thresholds(
+            config,
+            y_true[available_any],
+            y_pos_score[available_any],
+        )
+        return cls(
+            fusion_schema_version=artifact.fusion_schema_version,
+            fusion_policy=artifact.fusion_policy,
+            weight_objective=artifact.weight_objective,
+            names=artifact.names,
+            labels=artifact.labels,
+            positive_label=artifact.positive_label,
+            weights=artifact.weights,
+            calibrators=artifact.calibrators,
+            thresholds=thresholds,
+            default_threshold_name=artifact.default_threshold_name,
+        )
+
+    @staticmethod
+    def fit_calibrators(
+        names: list[str],
+        y_true: NDArray,
+        y_pos_score_list: list[NDArray],
+        y_mask_list: list[NDArray],
+    ) -> dict[str, ModalityCalibrator]:
         calibrators: dict[str, ModalityCalibrator] = {}
         for name, y_pos_score, y_mask in zip(
             names, y_pos_score_list, y_mask_list, strict=True
@@ -147,32 +204,88 @@ class AvailableFusionArtifact:
                 slope=calibrator.coef_[0, 0].item(),
                 intercept=calibrator.intercept_[0].item(),
             )
+        return calibrators
 
-        weights = dict.fromkeys(names, 1 / len(names))
-        artifact = cls(
-            names=names,
-            labels=labels,
-            positive_label=config.positive_label,
-            weights=weights,
-            calibrators=calibrators,
-            thresholds={},
-            default_threshold_name=get_default_threshold_name(config),
+    @staticmethod
+    def get_calibrated_logits(
+        names: list[str],
+        y_pos_score_list: list[NDArray],
+        missing: NDArray,
+        calibrators: dict[str, ModalityCalibrator],
+    ) -> NDArray:
+        return np.column_stack(
+            [
+                calibrators[name].calibrated_logit(np.where(y_mask, 0.5, y_pos_score))
+                for name, y_pos_score, y_mask in zip(
+                    names, y_pos_score_list, missing.T, strict=True
+                )
+            ]
         )
-        y_pos_score = artifact.predict_pos_score(names, y_pos_score_list, y_mask_list)
-        available_any = ~np.column_stack(y_mask_list).astype(bool).all(axis=1)
-        thresholds = get_operating_thresholds(
-            config,
-            y_true[available_any],
-            y_pos_score[available_any],
+
+    @classmethod
+    def fit_weights(
+        cls,
+        names: list[str],
+        y_true: NDArray,
+        calibrated_logits: NDArray,
+        missing: NDArray,
+    ) -> dict[str, float]:
+        if len(names) == 1:
+            return {names[0]: 1.0}
+
+        available_any = ~missing.all(axis=1)
+        logits = calibrated_logits[available_any]
+        masks = missing[available_any]
+        target = y_true[available_any]
+        initial = np.full(len(names), 1.0 / len(names))
+
+        def objective(weights: NDArray) -> float:
+            fused_logits = cls.fuse_logits(logits, masks, weights)
+            return binary_log_loss_from_logits(target, fused_logits)
+
+        result = minimize(
+            objective,
+            initial,
+            method='SLSQP',
+            bounds=[(0.0, 1.0)] * len(names),
+            constraints={'type': 'eq', 'fun': lambda weights: weights.sum() - 1.0},
+            options={'ftol': 1e-9, 'maxiter': 1000},
         )
-        return cls(
-            names=artifact.names,
-            labels=artifact.labels,
-            positive_label=artifact.positive_label,
-            weights=artifact.weights,
-            calibrators=artifact.calibrators,
-            thresholds=thresholds,
-            default_threshold_name=artifact.default_threshold_name,
+        if not result.success:
+            raise IatreionException(
+                'Failed to fit calibrated-fusion weights: $message',
+                message=result.message,
+            )
+        weights = np.clip(result.x, 0.0, 1.0)
+        weights /= weights.sum()
+        return {
+            name: weight.item() for name, weight in zip(names, weights, strict=True)
+        }
+
+    @staticmethod
+    def fuse_logits(
+        calibrated_logits: NDArray,
+        missing: NDArray,
+        weights: NDArray,
+    ) -> NDArray:
+        available = ~missing
+        effective_weights = np.where(available, weights, 0.0)
+        denominator = effective_weights.sum(axis=1)
+        numerator = (calibrated_logits * effective_weights).sum(axis=1)
+
+        fallback_denominator = available.sum(axis=1)
+        fallback_numerator = (calibrated_logits * available).sum(axis=1)
+        fallback = np.divide(
+            fallback_numerator,
+            fallback_denominator,
+            out=np.zeros_like(fallback_numerator),
+            where=fallback_denominator > 0,
+        )
+        return np.divide(
+            numerator,
+            denominator,
+            out=fallback,
+            where=denominator > 0,
         )
 
     @classmethod
@@ -212,15 +325,7 @@ class AvailableFusionArtifact:
             ]
         )
         weights = np.array([self.weights[name] for name in names], dtype=float)
-        effective_weights = np.where(missing, 0.0, weights)
-        denominator = effective_weights.sum(axis=1)
-        numerator = (calibrated_logits * effective_weights).sum(axis=1)
-        fused_logit = np.divide(
-            numerator,
-            denominator,
-            out=np.zeros_like(numerator),
-            where=denominator > 0,
-        )
+        fused_logit = self.fuse_logits(calibrated_logits, missing, weights)
         return sigmoid(fused_logit)
 
     def predict_scores(
@@ -235,7 +340,7 @@ class AvailableFusionArtifact:
     def normalized_weights(self, names: list[str]) -> dict[str, float]:
         total = sum(self.weights[name] for name in names)
         if total == 0:
-            return dict.fromkeys(names, 0.0)
+            return dict.fromkeys(names, 1 / len(names))
         return {name: self.weights[name] / total for name in names}
 
     @property

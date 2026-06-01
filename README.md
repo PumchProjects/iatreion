@@ -153,9 +153,9 @@ Important raw preprocessing behavior:
 | `concat` | Merge all selected modality features into one table and train one model | Hyperparameter tuning without fusion bootstrapping |
 | `average` | Train/evaluate one model per modality and average available probabilities | Simple baseline |
 | `calibrated-concat` | Merge all selected modality features into one model, then calibrate its logit and tune operating thresholds | Concatenated-feature model with calibrated operating points |
-| `calibrated-fusion` | Train one model per modality, calibrate each modality logit, then combine available modalities with equal weights | Main multimodal workflow |
+| `calibrated-fusion` | Train one model per modality, calibrate each modality logit, then combine available modalities with learned non-negative weights | Main multimodal workflow |
 
-`calibrated-fusion` first trains one model per modality. For each modality, the positive-class probability is transformed to a logit and calibrated by a one-dimensional logistic regression on inner-fold predictions. At inference time, available calibrated modality logits are combined with equal modality weights; missing modalities are omitted and the remaining weights are renormalized.
+`calibrated-fusion` first trains one model per modality. For each modality, the positive-class probability is transformed to a logit and calibrated by a one-dimensional logistic regression on inner-fold predictions. The calibrated inner-fold logits then fit one global set of non-negative modality weights by minimizing binary log loss on the simplex. At inference time, missing modalities are omitted and the remaining learned weights are renormalized; availability masks are not used as prediction features. If all learned weights for the available modalities are zero, the available calibrated logits are averaged as a fallback.
 
 `calibrated-concat` first concatenates features from all selected modalities into one model, then applies the same one-dimensional logit calibration and operating-threshold selection to that single concatenated model. It is useful when the desired comparison is a single early-fusion model rather than per-modality late fusion.
 
