@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field, fields
 from typing import Self
 
-from iatreion.configs import DataName, RrlEvalConfig, RrlEvalMode
+from iatreion.configs import DataName, RrlEvalConfig, RrlEvalMode, TrainConfig
 
 from .static import groups_mapping, keep_mapping, names_mapping
 
@@ -92,10 +92,18 @@ class ConfigBundle:
         self.set_field('groups')
 
     def sync_positive_label(self) -> None:
+        group_labels = [
+            TrainConfig.canonicalize_group_label(group) for group in self.config.groups
+        ]
+        positive_label = TrainConfig.canonicalize_group_label(
+            self.config.positive_label
+        )
         if len(self.config.groups) != 2:
             self.config.positive_label = ''
-        elif self.config.positive_label not in self.config.groups:
-            self.config.positive_label = self.config.groups[-1]
+        elif positive_label not in group_labels:
+            self.config.positive_label = group_labels[-1]
+        else:
+            self.config.positive_label = positive_label
         self.set_field('positive_label')
 
     def set_positive_label(self, value: str | None = None) -> None:
@@ -103,9 +111,11 @@ class ConfigBundle:
         if not value:
             self.config.positive_label = ''
         elif value in groups_mapping.values():
-            self.config.positive_label = get_key(groups_mapping, value)
+            self.config.positive_label = TrainConfig.canonicalize_group_label(
+                get_key(groups_mapping, value)
+            )
         else:
-            self.config.positive_label = value
+            self.config.positive_label = TrainConfig.canonicalize_group_label(value)
         self.set_field('positive_label')
 
     def set_thesaurus(self, path: str) -> None:

@@ -35,6 +35,13 @@ INNER_SPLIT_AGGREGATES: tuple[AggregationMethod, ...] = (
     'calibrated-concat',
     'calibrated-fusion',
 )
+UNUSED_LABEL_NAME = '__iatreion_unused_label__'
+
+
+@dataclass(frozen=True)
+class GroupSpec:
+    label: str
+    members: frozenset[str]
 
 
 @Parameter(name='*')
@@ -44,6 +51,9 @@ class TrainConfig:
         list[str], Parameter(name=['--groups', '-g'], consume_multiple=True)
     ]
     'Group names of the data.'
+
+    label_name: str
+    'Label column name in the data files.'
 
     positive_label: str = ''
     'Positive class label for binary tasks. Required when exactly two groups are selected.'
@@ -152,9 +162,6 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     suspected_case: bool = False
     'Whether to include suspected cases in training.'
 
-    label_name: str | None = None
-    'Label column name in the data files. If not set, determined automatically.'
-
     seed: int = 42
     'Random seed for reproducibility.'
 
@@ -173,47 +180,58 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     # TODO: why cannot use field(init=False) here?
     _log_dir: Directory = Path('logs')
 
-    _base_pos: str = ''
+    _groups: list[GroupSpec] = field(default_factory=list)
 
-    _label_pos: str = 'group_encrypted'
-
-    _groups: list[list[str]] = field(default_factory=list[list[str]])
-
-    _ordered_group_names: list[str] = field(default_factory=list[str])
+    _ordered_group_names: list[str] = field(default_factory=list)
 
     _shuffle: bool = True
 
     _encode: bool = False
 
+    @staticmethod
+    def parse_group(group: str) -> GroupSpec:
+        if not group:
+            raise ValueError('Group names must not be empty.')
+        if not group.startswith('@'):
+            return GroupSpec(label=group, members=frozenset({group}))
+        members = frozenset(expand_range(group[1:]))
+        if not members:
+            raise ValueError('Encrypted group names must not be empty.')
+        label = ''.join(sorted(members))
+        return GroupSpec(label=label, members=members)
+
+    @classmethod
+    def canonicalize_group_label(cls, label: str) -> str:
+        if not label:
+            return label
+        if not label.startswith('@'):
+            return label
+        return cls.parse_group(label).label
+
+    @staticmethod
+    def validate_disjoint_groups(groups: list[GroupSpec]) -> None:
+        seen: dict[str, str] = {}
+        for group in groups:
+            for member in group.members:
+                if member in seen:
+                    raise ValueError(
+                        f'Group "{group.label}" overlaps with group "{seen[member]}".'
+                    )
+                seen[member] = group.label
+
     def set_groups(self) -> None:
         if not self.group_names:
             raise ValueError('No valid groups found.')
-        groups: list[list[str]] = []
-        for group in self.group_names:
-            group = expand_range(group)
-            names: list[str] = []
-            i = 0
-            while i < len(group):
-                if group[i].isupper() and i + 1 < len(group):
-                    if group[i + 1] in ['<', '>']:
-                        self._base_pos = 'AC 60'
-                        names.append(group[i : i + 4])
-                        i += 4
-                    else:
-                        self._base_pos = 'AC to 3'
-                        names.append(group[i : i + 2])
-                        i += 2
-                else:
-                    if group[i] in '12':
-                        self._label_pos = 'group_Ab'
-                    names.append(group[i])
-                    i += 1
-            groups.append(sorted(names))
-        if self.label_name is not None:
-            self._base_pos = ''
-            self._label_pos = self.label_name
-        groups = sorted(groups, key=lambda x: x[0])
-        group_names = [''.join(group) for group in groups]
+        groups = sorted(
+            (self.parse_group(group) for group in self.group_names),
+            key=lambda group: group.label,
+        )
+        self.validate_disjoint_groups(groups)
+        self.positive_label = self.canonicalize_group_label(self.positive_label)
+        self.clinical_threshold_label = self.canonicalize_group_label(
+            self.clinical_threshold_label
+        )
+        group_names = [group.label for group in groups]
         match len(groups):
             case 2:
                 if not self.positive_label:
@@ -225,7 +243,7 @@ For discrete RRL, validation set is used for optimization when val_size is set.
                         f'positive_label must be one of {", ".join(group_names)}.'
                     )
                 groups = sorted(
-                    groups, key=lambda group: ''.join(group) == self.positive_label
+                    groups, key=lambda group: group.label == self.positive_label
                 )
             case _:
                 if self.positive_label:
@@ -233,21 +251,23 @@ For discrete RRL, validation set is used for optimization when val_size is set.
                         'positive_label is only supported for binary classification.'
                     )
         self._groups = groups
-        self._ordered_group_names = [''.join(group) for group in groups]
+        self._ordered_group_names = [group.label for group in groups]
 
     def get_name_group_mapping(self) -> Callable[[str], str | None]:
-        group_sets = [(''.join(group), set(group)) for group in self._groups]
+        groups = list(self._groups)
 
         def get_group(name: str) -> str | None:
             if self.suspected_case:
                 name = name.removesuffix('?')
             name_set = set(name.split('/'))
-            return next((g for g, s in group_sets if name_set <= s), None)
+            return next(
+                (group.label for group in groups if name_set <= group.members), None
+            )
 
         return get_group
 
     def get_group_index_mapping(self) -> dict[str, int]:
-        return {''.join(group): i for i, group in enumerate(self._groups)}
+        return {group.label: i for i, group in enumerate(self._groups)}
 
     @property
     def group_labels(self) -> list[str]:
@@ -265,15 +285,12 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     @property
     def group_name_str(self) -> str:
-        return '_'.join(''.join(group) for group in self._groups)
+        return '_'.join(group.label for group in self._groups)
 
     @property
     def ref_name_str(self) -> str:
         # HACK: Don't include `preprocess` here since RRL needs preprocessed data while discrete RRL doesn't
-        descriptions = [self.aggregate]
-        if self.label_name is not None:
-            descriptions.append(f'on {self.label_name}')
-        return '_'.join(descriptions)
+        return self.aggregate
 
     @property
     def eval_name_str(self) -> str:

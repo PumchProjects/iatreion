@@ -86,7 +86,7 @@ Raw source paths are provided at preprocessing time with `--data.<raw-data-name>
 
 ## Labels and Groups
 
-Groups are selected with `-g/--groups`. Each `-g` argument is one class. A group string can merge several encrypted subgroups; for example `-g ac f` means `AD + AD-mix` versus healthy controls. Binary tasks must also set `--positive-label`; the selected positive label is encoded internally as class index `1`, so AUROC, AUPRC, ROC plots, calibrated fusion logits, SHAP's default binary output, and operating thresholds all refer to that label.
+Groups are selected with `-g/--groups`. Each `-g` argument is one class. Bare group names match labels exactly, while a leading `@` merges encrypted subgroups; for example `-g @ac f` means `AD + AD-mix` versus healthy controls. Ranges are supported inside encrypted groups, so `@a-c` is equivalent to `@abc`. Binary tasks must also set `--positive-label`; the selected positive label is encoded internally as class index `1`, so AUROC, AUPRC, ROC plots, calibrated fusion logits, SHAP's default binary output, and operating thresholds all refer to that label.
 
 Common display mappings used by plotting helpers include:
 
@@ -101,7 +101,7 @@ Common display mappings used by plotting helpers include:
 | `1` | Aβ+ |
 | `2` | Aβ- |
 
-The default label column in processed internal data is `group_encrypted`. For external validation, use `--label-name` to set the label column.
+Preprocessing must set `--group-columns` to mark all label columns saved in processed data, and training commands that read processed data must set `--label-name` to choose one of those label columns.
 
 ## Preprocessing
 
@@ -112,6 +112,7 @@ uv run iatreion process \
   -p "<path-to-a-new-or-non-existent-folder>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
   --group-data "<path-to-the-patient-group-mapping-file>" \
+  --group-columns group_encrypted group_Ab "AC to 3" "AC 60" \
   --basic-data "<path-to-the-basic-patient-information-file>" \
   --data.history "<path-to-the-history-spreadsheet>" \
   --data.screen "<path-to-the-cognitive-screening-spreadsheet>" \
@@ -231,6 +232,7 @@ uv run iatreion train rrl \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
   -g a c \
+  --label-name group_encrypted \
   --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
@@ -303,6 +305,7 @@ uv run iatreion train rrl-eval \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
   -g a c \
+  --label-name group_encrypted \
   --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
@@ -328,6 +331,7 @@ uv run iatreion train rrl-eval \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
   --eval-names symptom csvd \
   -g a c \
+  --label-name group_encrypted \
   --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
@@ -346,6 +350,7 @@ uv run iatreion train rrl \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
   -g a c \
+  --label-name group_encrypted \
   --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
@@ -392,7 +397,7 @@ Use `uv run iatreion rrl-eval` to apply final RRL rule files to external data. T
 - `--data.<raw-data-name>`: external Excel, CSV, or TSV spreadsheet for each requested raw data source.
 - `--data-sheets.<raw-data-name>`: optional Excel sheet name or index for a raw data source.
 - `--index-name`: external sample ID column.
-- `--label-name`: external label column, required for `-m eval`.
+- `--label-name`: external label column, required for `-m eval` and `-m rule-or`; in other modes it is optional and only used to exclude a label column from features.
 - `-o/--output`: exported spreadsheet path for `batch` and `rule-or` modes; supported suffixes are `.xlsx`, `.csv`, and `.tsv`.
 
 Example for symptom plus CSVD:
@@ -460,7 +465,7 @@ The GUI wraps the same parser API used by `iatreion rrl-eval`. It can load final
 
 ## XGBoost and Random Forest Baselines
 
-XGBoost and Random Forest can be trained with the same processed `.data` and `.info` files as RRL. Their defaults can live in `[train.xgboost]` and `[train.random-forest]` in `configs/config.toml`; common fields such as `prefix`, `names`, `groups`, `positive-label`, `aggregate`, `use-clinical-threshold`, `clinical-threshold-label`, `clinical-threshold-recall`, and `log-root` follow the same config/CLI override rules described above.
+XGBoost and Random Forest can be trained with the same processed `.data` and `.info` files as RRL. Their defaults can live in `[train.xgboost]` and `[train.random-forest]` in `configs/config.toml`; common fields such as `prefix`, `names`, `groups`, `label-name`, `positive-label`, `aggregate`, `use-clinical-threshold`, `clinical-threshold-label`, `clinical-threshold-recall`, and `log-root` follow the same config/CLI override rules described above.
 
 With the config file, run:
 
@@ -483,6 +488,7 @@ uv run iatreion train xgboost \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom csvd \
   -g a c \
+  --label-name group_encrypted \
   --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
@@ -494,6 +500,7 @@ uv run iatreion train random-forest \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom csvd \
   -g a c \
+  --label-name group_encrypted \
   --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
@@ -513,6 +520,7 @@ uv run iatreion show table-1 \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
   -g a c \
+  --label-name group_encrypted \
   --positive-label c \
   -o table_1
 ```

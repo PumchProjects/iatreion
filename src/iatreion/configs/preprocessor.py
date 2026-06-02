@@ -137,8 +137,8 @@ class PreprocessorConfig:
     index_name_: str | None = None
     'Index column name in the data files. If not set, use default index name.'
 
-    group_columns_: Annotated[list[str] | None, Parameter(consume_multiple=True)] = None
-    'Group columns in the data files. If not set, use default group columns.'
+    group_columns: Annotated[list[str], Parameter(consume_multiple=True)]
+    'Label columns in the data files or patient group mapping file.'
 
     discrete_threshold: int = 10
     """Threshold for determining whether a column is discrete. If the number of unique
@@ -163,6 +163,7 @@ discrete. This is used for determining the encoding method for the column.
     def __post_init__(self) -> None:
         self.dataset.prefix.mkdir(parents=True, exist_ok=True)
         self.validate_input_paths()
+        self.validate_group_columns()
 
     @staticmethod
     def format_names(names: set[str]) -> str:
@@ -180,6 +181,12 @@ discrete. This is used for determining the encoding method for the column.
             raise IatreionException(
                 'Unknown data sheet key(s): $data_names',
                 data_names=self.format_names(unknown_sheet_names),
+            )
+
+    def validate_group_columns(self) -> None:
+        if not self._final and not self.group_columns:
+            raise IatreionException(
+                '$group_columns must be set', group_columns='Group columns'
             )
 
     @property
@@ -240,19 +247,8 @@ discrete. This is used for determining the encoding method for the column.
         return data_indices_mapping[data_name]
 
     @property
-    def contains_group_columns(self) -> bool:
-        contains = self.group_columns_ is not None
-        if self._final and not contains:
-            raise IatreionException(
-                '$label_name must be set in eval mode', label_name='Label name'
-            )
-        return contains
-
-    @property
-    def group_columns(self) -> list[str]:
-        if self.group_columns_ is not None:
-            return self.group_columns_
-        return ['group_encrypted', 'group_Ab', 'AC to 3', 'AC 60']
+    def has_inline_group_columns(self) -> bool:
+        return self.group_data is None
 
     @staticmethod
     def get_stem_pattern(data_name: str) -> str | None:

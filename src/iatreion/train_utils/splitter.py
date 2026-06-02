@@ -8,7 +8,8 @@ from numpy.typing import NDArray
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
 from iatreion.configs import DataName, DatasetConfig, ImportanceMethod, TrainConfig
-from iatreion.configs.train import INNER_SPLIT_AGGREGATES
+from iatreion.configs.train import INNER_SPLIT_AGGREGATES, UNUSED_LABEL_NAME
+from iatreion.exceptions import IatreionException
 from iatreion.utils import encode_string
 
 from .limix import LimiXWorkerClient, LimiXWorkerConfig
@@ -20,18 +21,26 @@ pd.set_option('future.no_silent_downcasting', True)
 def make_data_labels(
     D: pd.DataFrame, train: TrainConfig, group_columns: list[str]
 ) -> tuple[pd.DataFrame, pd.Series]:
-    base_pos = train._base_pos
-    label_pos = train._label_pos
-
+    label_name = train.label_name
+    if label_name == UNUSED_LABEL_NAME:
+        raise IatreionException('$label_name must be set', label_name='Label name')
+    if label_name not in group_columns:
+        raise IatreionException(
+            'Label column "$label_name" is not marked as a label column.',
+            label_name=label_name,
+        )
+    if label_name not in D.columns:
+        raise IatreionException(
+            'Label column "$label_name" not found in the data.',
+            label_name=label_name,
+        )
     D = D[~D.index.duplicated(keep=train.keep)]
     if train._shuffle:
         D = D.sample(frac=1, random_state=0)
     group_mapping = train.get_name_group_mapping()
-    if base_pos:
-        D.loc[:, label_pos] = D[base_pos].fillna(D[label_pos])
-    D.loc[:, label_pos] = D[label_pos].map(group_mapping, na_action='ignore')
-    D = D[~D[label_pos].isna()]
-    y_df = D[label_pos]
+    y_df = D[label_name].map(group_mapping, na_action='ignore')
+    D = D.loc[~y_df.isna()]
+    y_df = y_df.loc[D.index]
     X_df = D.drop(columns=group_columns)
     return X_df, y_df
 
@@ -48,7 +57,7 @@ def read_csv(
     dtype = {col: str for col in group_columns}
     D = pd.read_csv(data_path, index_col=0, dtype=dtype)
     X_df, y_df = make_data_labels(D, train, group_columns)
-    f_df = f_df.iloc[1 : -len(group_columns)]
+    f_df = f_df.loc[f_df['type'] != 'label'].iloc[1:]
 
     if train._encode:
         X_df.rename(columns=encode_string, inplace=True)

@@ -9,7 +9,7 @@ from cyclopts.types import Directory
 from .dataset import DatasetConfig
 from .model_base import ModelConfig
 from .show_base import ShowConfig
-from .train import AggregationMethod, TrainConfig
+from .train import UNUSED_LABEL_NAME, AggregationMethod, TrainConfig
 
 
 @Parameter(name='*')
@@ -72,6 +72,7 @@ and combine available modalities with learned non-negative late-fusion weights.
         dataset_config = DatasetConfig(prefix=Path(), names=self.names)
         train_config = TrainConfig(
             group_names=self.groups,
+            label_name=UNUSED_LABEL_NAME,
             positive_label=self.positive_label,
             log_root=self.log_root,
             _shuffle=False,

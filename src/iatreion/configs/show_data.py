@@ -15,10 +15,14 @@ class ShowDataConfig(ShowConfig):
     prefix: Annotated[Directory, Parameter(alias='-p')]
     'Prefix of the data files.'
 
+    label_name: str
+    'Label column name in the data files.'
+
     def make_configs(self) -> tuple[DatasetConfig, TrainConfig]:
         dataset_config = DatasetConfig(prefix=self.prefix, names=self.names)
         train_config = TrainConfig(
             group_names=self.groups,
+            label_name=self.label_name,
             positive_label=self.positive_label,
             _shuffle=False,
         )

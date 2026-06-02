@@ -31,21 +31,26 @@ names_list: list[list[str]] = [
 ]
 
 groups_list: list[list[str]] = [
-    ['a', 'c', 'ac', 'abc', 'l', 'dgn', 'o', 'deghijklmnop', 'defghijklmnopq'],
+    ['a', 'c', '@ac', '@abc', 'l', '@dgn', 'o', '@deghijklmnop', '@defghijklmnopq'],
     ['1', '2', 'f'],
     ['A<60', 'A<60C<60', 'F<60', 'A>60', 'A>60C>60', 'F>60'],
 ]
 
 groups_mapping = {
+    '@abc': 'AD + AD-mix + AD-like',
     'abc': 'AD + AD-mix + AD-like',
     'a': 'AD',
     'b': 'AD-like (A+ T-)',
     'c': 'AD-mix',
+    '@ac': 'AD + AD-mix',
     'ac': 'AD + AD-mix',
+    '@deghijklmnop': 'AD 外的其它痴呆',
     'deghijklmnop': 'AD 外的其它痴呆',
+    '@defghijklmnopq': '其它',
     'defghijklmnopq': '其它',
     'l': 'Clin-AD & bio-nonAD',
     'f': 'HC',
+    '@dgn': 'FTLD',
     'dgn': 'FTLD',
     'o': 'VAD',
     'A<60': 'EOAD (<60)',

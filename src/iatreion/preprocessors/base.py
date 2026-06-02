@@ -48,7 +48,7 @@ class Preprocessor(ABC):
             self.config.process_info_dict[self.name] = info
 
     def get_group_names(self) -> pd.DataFrame:
-        if self.config.contains_group_columns:
+        if self.config.has_inline_group_columns:
             # HACK: Add astype() to convert 1 & 2 to string during external validation
             return self.config._data[self.data_name][self.config.group_columns].astype(
                 str
@@ -65,7 +65,8 @@ class Preprocessor(ABC):
 
     def merge_group_names(self, data: pd.DataFrame) -> pd.DataFrame:
         group_names = self.get_group_names()
-        if self.config.contains_group_columns:
+        if self.config.has_inline_group_columns:
+            data = data.drop(columns=self.config.group_columns, errors='ignore')
             data = pd.concat([data, group_names], axis=1)
         else:
             data = data.merge(

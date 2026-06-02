@@ -7,7 +7,7 @@ from cyclopts import Parameter
 from .dataset import DataName, DatasetConfig
 from .model_rrl_discrete import DiscreteRrlConfig
 from .preprocessor import PreprocessorConfig
-from .train import TrainConfig
+from .train import UNUSED_LABEL_NAME, TrainConfig
 
 type ZeroMeanFallback = Literal['uniform', 'bias']
 type RrlEvalMode = Literal['single', 'batch', 'eval', 'show', 'rule-or']
@@ -66,7 +66,7 @@ class RrlEvalConfig:
     'Index column name in the data files. If not set, use default index name.'
 
     label_name: str = ''
-    'Label column name in the data files. If not set, determined automatically.'
+    'Label column name in the data files. Required for eval and rule-or modes.'
 
     enabled_biases: dict[str, bool] = field(default_factory=dict)
     'Per-module switches for RRL bias terms. Unspecified modules keep the bias enabled.'
@@ -88,13 +88,17 @@ class RrlEvalConfig:
 
     def make_configs(self) -> tuple[PreprocessorConfig, DiscreteRrlConfig]:
         # HACK: Empty prefix
+        if self.mode in {'eval', 'rule-or'} and not self.label_name:
+            raise ValueError('label_name is required for eval and rule-or modes.')
+        label_name = self.label_name or UNUSED_LABEL_NAME
+        group_columns = [self.label_name] if self.label_name else []
         dataset = DatasetConfig(prefix=Path(), names=self.names)
         train = TrainConfig(
             group_names=self.groups,
             keep=self.keep,
             final=True,
             suspected_case=self.suspected_case,
-            label_name=self.label_name or None,
+            label_name=label_name,
             positive_label=self.positive_label,
             log_root=Path(self.thesaurus),
             _shuffle=False,
@@ -104,7 +108,7 @@ class RrlEvalConfig:
             data={name: Path(path) for name, path in self.data.items()},
             data_sheets=self.data_sheets,
             index_name_=self.index_name or None,
-            group_columns_=[self.label_name] if self.label_name else None,
+            group_columns=group_columns,
             vmri=Path(self.vmri) if self.vmri else None,
             vmri_change=Path(self.vmri_change) if self.vmri_change else None,
             _process_info_path=Path(self.process) if self.process else None,
