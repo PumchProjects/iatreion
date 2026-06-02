@@ -134,8 +134,8 @@ class PreprocessorConfig:
     vmri_change: ExistingFile | None = None
     'Path to the Vmri_mean_sd column name change file.'
 
-    index_name_: str | None = None
-    'Index column name in the data files. If not set, use default index name.'
+    index_name: str
+    'Index column name in the data files.'
 
     group_columns: Annotated[list[str], Parameter(consume_multiple=True)]
     'Label columns in the data files or patient group mapping file.'
@@ -188,14 +188,6 @@ discrete. This is used for determining the encoding method for the column.
             raise IatreionException(
                 '$group_columns must be set', group_columns='Group columns'
             )
-
-    @property
-    def index_name(self) -> str:
-        if self.index_name_ is not None:
-            return self.index_name_
-        if self._final:
-            raise IatreionException('$index_name must be set', index_name='Index name')
-        return 'serial_num'
 
     @property
     def group_data_path(self) -> Path:

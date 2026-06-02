@@ -63,7 +63,7 @@ class RrlEvalConfig:
     'Whether to include suspected cases in evaluation.'
 
     index_name: str = ''
-    'Index column name in the data files. If not set, use default index name.'
+    'Index column name in the data files. Required for modes that read external data.'
 
     label_name: str = ''
     'Label column name in the data files. Required for eval and rule-or modes.'
@@ -88,6 +88,10 @@ class RrlEvalConfig:
 
     def make_configs(self) -> tuple[PreprocessorConfig, DiscreteRrlConfig]:
         # HACK: Empty prefix
+        if self.mode != 'show' and not self.index_name:
+            raise ValueError(
+                'index_name is required for modes that read external data.'
+            )
         if self.mode in {'eval', 'rule-or'} and not self.label_name:
             raise ValueError('label_name is required for eval and rule-or modes.')
         label_name = self.label_name or UNUSED_LABEL_NAME
@@ -107,7 +111,7 @@ class RrlEvalConfig:
             dataset=dataset,
             data={name: Path(path) for name, path in self.data.items()},
             data_sheets=self.data_sheets,
-            index_name_=self.index_name or None,
+            index_name=self.index_name,
             group_columns=group_columns,
             vmri=Path(self.vmri) if self.vmri else None,
             vmri_change=Path(self.vmri_change) if self.vmri_change else None,

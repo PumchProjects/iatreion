@@ -82,7 +82,7 @@ Processed datasets are selected with `-n/--names` or the relevant `names` entry 
 
 Several dataset names are composites. For example, `s-screen-sum` is built from `basic`, `mmse-sum`, `moca-sum`, `adl-sum`, and `had-sum`.
 
-Raw source paths are provided at preprocessing time with `--data.<raw-data-name>` or `[process.data]` entries in `configs/config.toml`, where raw data names include `history`, `screen`, `composite`, `biomarker`, `cbf`, `csvd`, and `volume-new`; raw source spreadsheets may be Excel, CSV, or TSV. The fixed MRI volume mean/std file used by `-v/--vmri` remains an Excel workbook with `mean` and `sd` sheets. The input data are not distributed with this repository. Default date/index column rules are defined in `src/iatreion/configs/preprocessor.py`.
+Raw source paths are provided at preprocessing time with `--data.<raw-data-name>` or `[process.data]` entries in `configs/config.toml`, where raw data names include `history`, `screen`, `composite`, `biomarker`, `cbf`, `csvd`, and `volume-new`; raw source spreadsheets may be Excel, CSV, or TSV. The fixed MRI volume mean/std file used by `-v/--vmri` remains an Excel workbook with `mean` and `sd` sheets. The input data are not distributed with this repository. Date column rules are defined in `src/iatreion/configs/preprocessor.py`, and preprocessing receives the sample ID column from `--index-name`.
 
 ## Labels and Groups
 
@@ -101,7 +101,7 @@ Common display mappings used by plotting helpers include:
 | `1` | Aβ+ |
 | `2` | Aβ- |
 
-Preprocessing must set `--group-columns` to mark all label columns saved in processed data, and training commands that read processed data must set `--label-name` to choose one of those label columns.
+Preprocessing must set `--index-name` for the sample ID column and `--group-columns` to mark all label columns saved in processed data, and training commands that read processed data must set `--label-name` to choose one of those label columns.
 
 ## Preprocessing
 
@@ -111,6 +111,7 @@ Run preprocessing once for the internal hospital data:
 uv run iatreion process \
   -p "<path-to-a-new-or-non-existent-folder>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
+  --index-name "<sample-id-column>" \
   --group-data "<path-to-the-patient-group-mapping-file>" \
   --group-columns group_encrypted group_Ab "AC to 3" "AC 60" \
   --basic-data "<path-to-the-basic-patient-information-file>" \
@@ -231,8 +232,8 @@ Run the full multimodal nested evaluation directly; there is no manual parameter
 uv run iatreion train rrl \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
-  -g a c \
   --label-name group_encrypted \
+  -g a c \
   --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
@@ -304,8 +305,8 @@ Downstream tools use the RRL parser rather than the live PyTorch model. Parser-b
 uv run iatreion train rrl-eval \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
-  -g a c \
   --label-name group_encrypted \
+  -g a c \
   --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
@@ -330,8 +331,8 @@ uv run iatreion train rrl-eval \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
   --eval-names symptom csvd \
-  -g a c \
   --label-name group_encrypted \
+  -g a c \
   --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
@@ -349,8 +350,8 @@ For external validation, run final tuning and final fitting on all internal data
 uv run iatreion train rrl \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
-  -g a c \
   --label-name group_encrypted \
+  -g a c \
   --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
@@ -396,7 +397,7 @@ Use `uv run iatreion rrl-eval` to apply final RRL rule files to external data. T
 - `-p/--process`: internal `process_info.toml`, needed to reproduce feature encodings and category orders.
 - `--data.<raw-data-name>`: external Excel, CSV, or TSV spreadsheet for each requested raw data source.
 - `--data-sheets.<raw-data-name>`: optional Excel sheet name or index for a raw data source.
-- `--index-name`: external sample ID column.
+- `--index-name`: external sample ID column, required for modes that read external data.
 - `--label-name`: external label column, required for `-m eval` and `-m rule-or`; in other modes it is optional and only used to exclude a label column from features.
 - `-o/--output`: exported spreadsheet path for `batch` and `rule-or` modes; supported suffixes are `.xlsx`, `.csv`, and `.tsv`.
 
@@ -405,6 +406,8 @@ Example for symptom plus CSVD:
 ```bash
 uv run iatreion rrl-eval \
   -n symptom csvd \
+  --index-name "<sample-id-column>" \
+  --label-name "<label-column>" \
   -g a c \
   --positive-label c \
   -t logs \
@@ -413,8 +416,6 @@ uv run iatreion rrl-eval \
   --data.csvd "<path-to-the-spreadsheet-for-csvd-data>" \
   -m eval \
   -k last \
-  --index-name "<sample-id-column>" \
-  --label-name "<label-column>" \
   -D
 ```
 
@@ -423,6 +424,8 @@ Example including MRI volume features:
 ```bash
 uv run iatreion rrl-eval \
   -n symptom csvd volume-new-pct \
+  --index-name "<sample-id-column>" \
+  --label-name "<label-column>" \
   -g a c \
   --positive-label c \
   -t logs \
@@ -434,8 +437,6 @@ uv run iatreion rrl-eval \
   --vmri-change "<path-to-the-file-storing-column-name-changes-for-mri-volume-data>" \
   -m eval \
   -k last \
-  --index-name "<sample-id-column>" \
-  --label-name "<label-column>" \
   -D
 ```
 
@@ -465,7 +466,7 @@ The GUI wraps the same parser API used by `iatreion rrl-eval`. It can load final
 
 ## XGBoost and Random Forest Baselines
 
-XGBoost and Random Forest can be trained with the same processed `.data` and `.info` files as RRL. Their defaults can live in `[train.xgboost]` and `[train.random-forest]` in `configs/config.toml`; common fields such as `prefix`, `names`, `groups`, `label-name`, `positive-label`, `aggregate`, `use-clinical-threshold`, `clinical-threshold-label`, `clinical-threshold-recall`, and `log-root` follow the same config/CLI override rules described above.
+XGBoost and Random Forest can be trained with the same processed `.data` and `.info` files as RRL. Their defaults can live in `[train.xgboost]` and `[train.random-forest]` in `configs/config.toml`; common fields such as `prefix`, `names`, `label-name`, `groups`, `positive-label`, `aggregate`, `use-clinical-threshold`, `clinical-threshold-label`, `clinical-threshold-recall`, and `log-root` follow the same config/CLI override rules described above.
 
 With the config file, run:
 
@@ -487,8 +488,8 @@ The equivalent direct commands are:
 uv run iatreion train xgboost \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom csvd \
-  -g a c \
   --label-name group_encrypted \
+  -g a c \
   --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
@@ -499,8 +500,8 @@ uv run iatreion train xgboost \
 uv run iatreion train random-forest \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom csvd \
-  -g a c \
   --label-name group_encrypted \
+  -g a c \
   --positive-label c \
   --clinical-threshold-label c --clinical-threshold-recall 0.6 \
   -a calibrated-fusion \
@@ -519,8 +520,8 @@ Common outputs:
 uv run iatreion show table-1 \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
-  -g a c \
   --label-name group_encrypted \
+  -g a c \
   --positive-label c \
   -o table_1
 ```

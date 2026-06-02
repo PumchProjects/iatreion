@@ -56,7 +56,7 @@ class Preprocessor(ABC):
         if 'group_names' not in self.config._data:
             data = read_spreadsheet(
                 self.config.group_data_path,
-                index_col='serial_num',
+                index_col=self.config.index_name,
                 dtype_backend='numpy_nullable',
             )
             data = data[~data.index.duplicated()]
@@ -78,7 +78,7 @@ class Preprocessor(ABC):
         if 'basic_data' not in self.config._data:
             data = read_spreadsheet(
                 self.config.basic_data_path,
-                index_col='serial_num',
+                index_col=self.config.index_name,
                 dtype_backend='numpy_nullable',
             )
             data.rename(columns={'实际出生日期': 'date of birth'}, inplace=True)
@@ -164,7 +164,7 @@ class Preprocessor(ABC):
             data = read_spreadsheet(
                 data_path,
                 sheet_name=sheet_name,
-                # HACK: serial_num is needed for merging birth dates
+                # HACK: The index is needed for merging birth dates.
                 index_col=self.config.index_name,
                 na_values=['/', '#NUM!'],
                 dtype_backend='numpy_nullable',
