@@ -9,6 +9,11 @@ from .base import Preprocessor
 
 
 class CategoricalPreprocessor(Preprocessor):
+    def cut_ages(self, data: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+        for col in columns:
+            data[col] = pd.cut(data[col], bins=list(range(0, 101, 5)))
+        return data
+
     def make_categorical(self, data: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
         for col in columns:
             if self.config._final:
@@ -46,8 +51,9 @@ class HarmonizedDemoPreprocessor(CategoricalPreprocessor):
     @override
     def get_data(self) -> pd.DataFrame:
         data = self.read_data()
+        data = self.cut_ages(data, ['age_at_visit', 'onset_age'])
         data = self.make_categorical(data, ['sex', 'handedness'])
-        selected = ['sex', 'age_at_visit', 'edu_year', 'handedness']
+        selected = ['sex', 'age_at_visit', 'onset_age', 'edu_year', 'handedness']
         return data[selected]
 
 

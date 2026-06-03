@@ -17,9 +17,9 @@ def read_spreadsheet(path: str | Path, **kwds: Any) -> pd.DataFrame:
         return pd.read_excel(path, **kwds)
     kwds.pop('sheet_name', None)
     if suffix in CSV_SUFFIXES:
-        return pd.read_csv(path, **kwds)
+        return pd.read_csv(path, low_memory=False, **kwds)
     if suffix in TSV_SUFFIXES:
-        return pd.read_csv(path, sep='\t', **kwds)
+        return pd.read_csv(path, sep='\t', low_memory=False, **kwds)
     raise IatreionException(
         'Unsupported spreadsheet file "$path". Use xlsx, csv, or tsv.',
         path=str(path),
