@@ -604,7 +604,7 @@ class RRL:
         print(metadata.format(*metadata_args), file=file)
         print('RuleID', end='\t', file=file)
         for i, ln in enumerate(label_name):
-            print(f'{ln}(b={layer.bl[i] / temp:.4f})', end='\t', file=file)
+            print(f'{ln}(b={layer.bl[i] / temp})', end='\t', file=file)
         if self.use_missing_aware:
             print('Support\tMeanCoverage\tRule', file=file)
         else:
@@ -612,7 +612,7 @@ class RRL:
         for rid, w in layer.rule2weights:
             print(rid, end='\t', file=file)
             for li in range(len(label_name)):
-                print(f'{w[li] / temp:.4f}', end='\t', file=file)
+                print(f'{w[li] / temp}', end='\t', file=file)
             now_layer = self.net.layer_list[-1 + rid[0]]
             support = (
                 now_layer.node_activation_cnt[layer.rid2dim[rid]]
