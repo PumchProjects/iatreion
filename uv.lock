@@ -529,6 +529,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "cyclopts" },
+    { name = "joblib" },
     { name = "matplotlib" },
     { name = "optuna" },
     { name = "pandas", extra = ["excel"] },
@@ -565,6 +566,7 @@ cu126 = [
 [package.metadata]
 requires-dist = [
     { name = "cyclopts", specifier = ">=4.14.0" },
+    { name = "joblib", specifier = ">=1.4.2" },
     { name = "matplotlib", specifier = ">=3.10.1" },
     { name = "optuna", specifier = ">=4.8.0" },
     { name = "pandas", extras = ["excel"], specifier = ">=2.2.3" },
