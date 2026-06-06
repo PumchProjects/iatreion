@@ -1,3 +1,4 @@
+from .baseline_eval import BaselineEvalConfig, BaselineEvalMode
 from .dataset import DataName, DatasetConfig
 from .feature_selection import FeatureSelectionConfig
 from .model_base import FoldScope, ImportanceMethod, ModelConfig

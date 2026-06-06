@@ -77,6 +77,8 @@ For other models, features are concatenated.
     cat_sep: str = ';'
     'Separator for categories of categorical features.'
 
+    _encode: bool = False
+
     @property
     def name_str(self) -> str:
         return '_'.join(self.names)

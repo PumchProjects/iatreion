@@ -186,8 +186,6 @@ For discrete RRL, validation set is used for optimization when val_size is set.
 
     _shuffle: bool = True
 
-    _encode: bool = False
-
     @staticmethod
     def parse_group(group: str) -> GroupSpec:
         if not group:

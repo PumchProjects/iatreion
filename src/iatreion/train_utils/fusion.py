@@ -293,7 +293,7 @@ class AvailableFusionArtifact:
         if not path.is_file():
             raise IatreionException(
                 'Available-fusion artifact not found: $path. '
-                'Run internal discrete RRL scoring before final/external evaluation.',
+                'Run final calibrated-fusion fitting before external evaluation.',
                 path=str(path),
             )
         data = load_dict(path)

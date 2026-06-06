@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import override
 
 import numpy as np
@@ -6,10 +7,13 @@ from numpy.typing import NDArray
 
 from iatreion.configs import XgboostConfig
 from iatreion.train_utils import TrainStepContext
+from iatreion.train_utils.preprocessing import DBEncoderArtifact
 from iatreion.utils import decode_string, encode_string, logger
 
-from .base import Model
+from .base import Model, get_final_artifact_dir, get_transform_artifact_path
 from .importance import ImportanceScore, calc_shap_importance
+
+XGBOOST_MODEL_FILE = 'model.json'
 
 
 class XgbLogging(xgb.callback.TrainingCallback):
@@ -69,6 +73,21 @@ class XgboostModel(Model):
             *('q' for _ in range(ctx.db_enc.numeric_flen)),
         ]
         super().fit(ctx)
+
+    @override
+    def save_final(self, ctx: TrainStepContext) -> None:
+        artifact_dir = get_final_artifact_dir(self.config.train._log_dir, ctx.name)
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        ctx.db_enc.save_transform_artifact(
+            get_transform_artifact_path(self.config.train._log_dir, ctx.name)
+        )
+        self.bst.save_model(artifact_dir / XGBOOST_MODEL_FILE)
+
+    @override
+    def load_final(self, artifact_dir: Path, transform: DBEncoderArtifact) -> None:
+        self.feature_types = transform.feature_types
+        self.bst = xgb.Booster()
+        self.bst.load_model(artifact_dir / XGBOOST_MODEL_FILE)
 
     @override
     def _predict_proba(self, X: NDArray) -> NDArray:

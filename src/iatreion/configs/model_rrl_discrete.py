@@ -9,7 +9,7 @@ from .model_base import ModelConfig
 @dataclass(kw_only=True)
 class DiscreteRrlConfig(ModelConfig):
     def __post_init__(self) -> None:
-        self.train._encode = True
+        self.dataset._encode = True
         if not self.train.final:
             self.register_log_dir(
                 'rrl-discrete',

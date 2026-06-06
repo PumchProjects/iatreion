@@ -28,14 +28,15 @@ class ShapBundle:
 
 
 def save_importance_score(
-    train: TrainConfig,
+    config: ModelConfig,
     ctx: TrainStepContext,
     score: ImportanceScore,
     *,
     method: ImportanceMethod,
 ) -> None:
-    if train._encode:
+    if config.dataset._encode:
         score = {decode_string(name): value for name, value in score.items()}
+    train = config.train
     score_file = train._log_dir / ctx.get_importance_file(method)
     with score_file.open('w', encoding='utf-8') as f:
         json.dump(score, f, ensure_ascii=False, indent=4)
@@ -158,8 +159,8 @@ def _reduce_shap_values(values: object, n_features: int) -> NDArray:
     )
 
 
-def _get_feature_names(train: TrainConfig, feature_names: list[str]) -> list[str]:
-    if not train._encode:
+def _get_feature_names(config: ModelConfig, feature_names: list[str]) -> list[str]:
+    if not config.dataset._encode:
         return feature_names
     return [decode_string(name) for name in feature_names]
 
@@ -183,7 +184,7 @@ def _build_shap_bundle(
     sample_indices: NDArray[np.integer],
     y_true: NDArray[np.integer],
 ) -> ShapBundle:
-    feature_names = _get_feature_names(config.train, list(ctx.db_enc.X_fname))
+    feature_names = _get_feature_names(config, list(ctx.db_enc.X_fname))
     values = np.asarray(explanation.values, dtype=float)
     base_values = np.asarray(explanation.base_values, dtype=float)
     data = np.asarray(explanation.data, dtype=float)
@@ -212,7 +213,7 @@ def calc_shap_importance(
     )
     X_sample = X_test[sample_indices]
     y_sample = y_test[sample_indices]
-    feature_names = _get_feature_names(config.train, list(ctx.db_enc.X_fname))
+    feature_names = _get_feature_names(config, list(ctx.db_enc.X_fname))
     if predict_proba is not None:
         explainer = shap.Explainer(
             predict_proba,

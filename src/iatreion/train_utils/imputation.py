@@ -28,14 +28,7 @@ class SimpleImputerArtifact:
     strategy: str = 'simple'
 
     @classmethod
-    def load(cls, path: Path) -> 'SimpleImputerArtifact':
-        if not path.is_file():
-            raise IatreionException(
-                'Simple imputer artifact not found: $path. '
-                'Retrain the original RRL model to export imputation statistics.',
-                path=str(path),
-            )
-        data = load_dict(path)
+    def from_dict(cls, data: dict) -> 'SimpleImputerArtifact':
         return cls(
             version=int(data['version']),
             strategy=str(data['strategy']),
@@ -53,8 +46,17 @@ class SimpleImputerArtifact:
             ],
         )
 
-    def save(self, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
+    @classmethod
+    def load(cls, path: Path) -> 'SimpleImputerArtifact':
+        if not path.is_file():
+            raise IatreionException(
+                'Simple imputer artifact not found: $path. '
+                'Retrain the original RRL model to export imputation statistics.',
+                path=str(path),
+            )
+        return cls.from_dict(load_dict(path))
+
+    def to_dict(self) -> dict:
         columns: list[dict[str, object]] = []
         for column in self.columns:
             data: dict[str, object] = {
@@ -64,14 +66,15 @@ class SimpleImputerArtifact:
             if column.snap_upper is not None:
                 data['snap_upper'] = column.snap_upper
             columns.append(data)
-        save_dict(
-            {
-                'version': self.version,
-                'strategy': self.strategy,
-                'columns': columns,
-            },
-            path,
-        )
+        return {
+            'version': self.version,
+            'strategy': self.strategy,
+            'columns': columns,
+        }
+
+    def save(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        save_dict(self.to_dict(), path)
 
     def apply(
         self,

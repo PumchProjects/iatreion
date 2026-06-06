@@ -1,10 +1,15 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from pathlib import Path
 
 from numpy.typing import NDArray
 
 from iatreion.configs import ImportanceMethod, ModelConfig
 from iatreion.train_utils import TrainStepContext
+from iatreion.train_utils.preprocessing import (
+    TRANSFORM_ARTIFACT_FILE,
+    DBEncoderArtifact,
+)
 from iatreion.utils import logger
 
 from .importance import (
@@ -16,6 +21,15 @@ from .importance import (
 
 type ModelReturn = tuple[NDArray, dict[str, float | tuple[float, str]]]
 type ImportanceCalculator = Callable[[TrainStepContext], ImportanceScore]
+MODEL_ARTIFACT_ROOT = 'artifacts'
+
+
+def get_final_artifact_dir(root: Path, name: str) -> Path:
+    return root / MODEL_ARTIFACT_ROOT / name
+
+
+def get_transform_artifact_path(root: Path, name: str) -> Path:
+    return get_final_artifact_dir(root, name) / TRANSFORM_ARTIFACT_FILE
 
 
 class Model(ABC):
@@ -29,6 +43,15 @@ class Model(ABC):
 
     def close(self) -> None:
         return None
+
+    def save_final(self, ctx: TrainStepContext) -> None:
+        return None
+
+    def load_final(self, artifact_dir: Path, transform: DBEncoderArtifact) -> None:
+        raise NotImplementedError
+
+    def predict_proba(self, X: NDArray) -> NDArray:
+        return self._predict_proba(X)
 
     def _calc_native_importance(self, ctx: TrainStepContext) -> ImportanceScore:
         raise NotImplementedError
@@ -64,7 +87,7 @@ class Model(ABC):
                     extra={'markup': True},
                 )
                 continue
-            save_importance_score(self.config.train, ctx, score, method=method)
+            save_importance_score(self.config, ctx, score, method=method)
 
     def _calc_complexity(self) -> dict[str, float | tuple[float, str]]:
         return {}

@@ -108,7 +108,7 @@ class RrlConfig(ModelConfig):
         return self.train._log_dir / 'events'
 
     def __post_init__(self) -> None:
-        self.train._encode = True
+        self.dataset._encode = True
         if self.missing_aware_mode == 'improved':
             self.train.missing_value_strategy = 'none'
             self.train.validate_preprocessing()

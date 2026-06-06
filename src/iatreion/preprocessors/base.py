@@ -208,7 +208,8 @@ class Preprocessor(ABC):
         data = self.discretize_data(data)
         if self.config._final:
             data = self.convert_categorical(data)
-            data.rename(columns=encode_string, inplace=True)
+            if self.config.dataset._encode:
+                data.rename(columns=encode_string, inplace=True)
         else:
             self.save_process_info()
         return data

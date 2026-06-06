@@ -3,7 +3,7 @@ from dataclasses import replace
 from typing import Any
 
 
-def apply_overrides(obj: Any, overrides: dict[str, Any]) -> Any:
+def apply_overrides[T: Any](obj: T, overrides: dict[str, Any]) -> T:
     direct: dict[str, Any] = {}
     nested: defaultdict[str, dict[str, Any]] = defaultdict(dict)
     for key, value in overrides.items():

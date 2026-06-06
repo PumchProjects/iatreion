@@ -6,6 +6,8 @@ import pandas as pd
 from numpy.typing import NDArray
 
 from iatreion.configs import TrainConfig
+from iatreion.exceptions import IatreionException
+from iatreion.utils import load_dict, save_dict
 
 from .feature_selection import FeatureSelectionArtifact, SupervisedFeatureSelector
 from .imputation import SimpleImputerArtifact, SimpleImputerColumn
@@ -13,6 +15,7 @@ from .limix import LimiXWorkerClient
 
 type EncodedData = tuple[NDArray, NDArray]
 type OptionalEncodedData = tuple[NDArray | None, NDArray | None]
+TRANSFORM_ARTIFACT_FILE = 'transform.toml'
 
 
 @dataclass(slots=True)
@@ -20,6 +23,208 @@ class _FrameSplits:
     train: pd.DataFrame
     val: pd.DataFrame | None
     test: pd.DataFrame
+
+
+@dataclass(frozen=True)
+class DBEncoderArtifact:
+    raw_feature_columns: list[str]
+    feature_columns: list[str]
+    unordered_columns: list[str]
+    ordered_columns: list[str]
+    continuous_columns: list[str]
+    category_labels: dict[str, list[str]]
+    binary_discrete_columns: list[str]
+    categorical_discrete_columns: list[str]
+    X_fname: list[str]
+    X_compl_fname: dict[int, str]
+    binary_flen: int
+    categorical_flen: int
+    numeric_flen: int
+    continuous_mean: dict[str, float]
+    continuous_std: dict[str, float]
+    preprocess: bool
+    missing_value_strategy: str
+    normalize_continuous: bool
+    discrete_processing: str
+    simple_imputer: SimpleImputerArtifact | None = None
+    version: int = 1
+
+    @classmethod
+    def load(cls, path: Path) -> 'DBEncoderArtifact':
+        data = load_dict(path)
+        simple_imputer = data.get('simple_imputer')
+        return cls(
+            version=int(data['version']),
+            raw_feature_columns=list(data['raw_feature_columns']),
+            feature_columns=list(data['feature_columns']),
+            unordered_columns=list(data['unordered_columns']),
+            ordered_columns=list(data['ordered_columns']),
+            continuous_columns=list(data['continuous_columns']),
+            category_labels={
+                str(name): list(labels)
+                for name, labels in data['category_labels'].items()
+            },
+            binary_discrete_columns=list(data['binary_discrete_columns']),
+            categorical_discrete_columns=list(data['categorical_discrete_columns']),
+            X_fname=list(data['X_fname']),
+            X_compl_fname={
+                int(index): str(name) for index, name in data['X_compl_fname'].items()
+            },
+            binary_flen=int(data['binary_flen']),
+            categorical_flen=int(data['categorical_flen']),
+            numeric_flen=int(data['numeric_flen']),
+            continuous_mean={
+                str(name): float(value)
+                for name, value in data['continuous_mean'].items()
+            },
+            continuous_std={
+                str(name): float(value)
+                for name, value in data['continuous_std'].items()
+            },
+            preprocess=bool(data['preprocess']),
+            missing_value_strategy=str(data['missing_value_strategy']),
+            normalize_continuous=bool(data['normalize_continuous']),
+            discrete_processing=str(data['discrete_processing']),
+            simple_imputer=(
+                None
+                if simple_imputer is None
+                else SimpleImputerArtifact.from_dict(simple_imputer)
+            ),
+        )
+
+    def save(self, path: Path) -> None:
+        data = {
+            'version': self.version,
+            'raw_feature_columns': self.raw_feature_columns,
+            'feature_columns': self.feature_columns,
+            'unordered_columns': self.unordered_columns,
+            'ordered_columns': self.ordered_columns,
+            'continuous_columns': self.continuous_columns,
+            'category_labels': self.category_labels,
+            'binary_discrete_columns': self.binary_discrete_columns,
+            'categorical_discrete_columns': self.categorical_discrete_columns,
+            'X_fname': self.X_fname,
+            'X_compl_fname': {
+                str(index): name for index, name in self.X_compl_fname.items()
+            },
+            'binary_flen': self.binary_flen,
+            'categorical_flen': self.categorical_flen,
+            'numeric_flen': self.numeric_flen,
+            'continuous_mean': self.continuous_mean,
+            'continuous_std': self.continuous_std,
+            'preprocess': self.preprocess,
+            'missing_value_strategy': self.missing_value_strategy,
+            'normalize_continuous': self.normalize_continuous,
+            'discrete_processing': self.discrete_processing,
+        }
+        if self.simple_imputer is not None:
+            data['simple_imputer'] = self.simple_imputer.to_dict()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        save_dict(data, path)
+
+    @property
+    def feature_types(self) -> list[str]:
+        return [
+            *('i' for _ in range(self.binary_flen)),
+            *('c' for _ in range(self.categorical_flen)),
+            *('q' for _ in range(self.numeric_flen)),
+        ]
+
+    def transform(self, X_df: pd.DataFrame) -> tuple[NDArray, NDArray]:
+        if not self.preprocess:
+            frame = X_df.loc[:, self.X_fname].apply(pd.to_numeric, errors='coerce')
+            return frame.to_numpy(dtype=float), frame.isna().all(axis=1).to_numpy()
+
+        raw = self._prepare_frame(X_df, self.raw_feature_columns)
+        missing = raw.isna().all(axis=1).to_numpy(dtype=bool)
+        frame = raw.loc[:, self.feature_columns].copy()
+        if self.simple_imputer is not None:
+            frame = self.simple_imputer.apply(frame, preserve_all_missing=False)
+        self._normalize_continuous(frame)
+        return self._encode_output_frame(frame), missing
+
+    @staticmethod
+    def _prepare_frame(X_df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+        frame = X_df.loc[:, columns].copy()
+        return frame.apply(pd.to_numeric, errors='coerce').astype(float)
+
+    def _normalize_continuous(self, frame: pd.DataFrame) -> None:
+        if not self.continuous_columns:
+            return
+        mean = pd.Series(self.continuous_mean).reindex(self.continuous_columns)
+        std = pd.Series(self.continuous_std).reindex(self.continuous_columns)
+        frame.loc[:, self.continuous_columns] = (
+            frame[self.continuous_columns] - mean
+        ) / std
+
+    def _category_count(self, name: str) -> int:
+        labels = self.category_labels.get(name, [])
+        return len(labels) if labels else 1
+
+    def _category_label(self, name: str, code: int) -> str:
+        labels = self.category_labels.get(name, [])
+        if 0 <= code < len(labels):
+            return labels[code]
+        return str(code)
+
+    def _one_hot_name(self, name: str, code: int) -> str:
+        return f'{name}_{code}_{self._category_label(name, code)}'
+
+    def _one_hot_encode(self, frame: pd.DataFrame) -> NDArray:
+        data_parts: list[NDArray] = []
+        for name in self.unordered_columns + self.ordered_columns:
+            series = frame[name]
+            category_count = self._category_count(name)
+            codes = [1] if category_count == 2 else list(range(category_count))
+            for code in codes:
+                values = np.where(
+                    series.isna(),
+                    np.nan,
+                    (series.to_numpy(dtype=float) == float(code)).astype(float),
+                )
+                data_parts.append(values.reshape(-1, 1))
+        if not data_parts:
+            return np.empty((len(frame), 0))
+        return np.hstack(data_parts)
+
+    def _transform_numeric_discrete(self, frame: pd.DataFrame) -> pd.DataFrame:
+        numeric = frame.loc[:, self.categorical_discrete_columns].copy()
+        for name in self.categorical_discrete_columns:
+            category_range = max(self._category_count(name) - 1, 0)
+            if category_range > 0:
+                numeric.loc[:, name] = numeric[name] / category_range
+            else:
+                numeric.loc[:, name] = numeric[name].where(numeric[name].isna(), 0.0)
+        return numeric
+
+    def _encode_output_frame(self, frame: pd.DataFrame) -> NDArray:
+        data_parts: list[NDArray] = []
+        if self.discrete_processing == 'onehot':
+            one_hot = self._one_hot_encode(frame)
+            if one_hot.shape[1] > 0:
+                data_parts.append(one_hot)
+        elif self.discrete_processing == 'none':
+            binary = frame.loc[:, self.binary_discrete_columns]
+            categorical = frame.loc[:, self.categorical_discrete_columns]
+            if binary.shape[1] > 0:
+                data_parts.append(binary.to_numpy(dtype=float))
+            if categorical.shape[1] > 0:
+                data_parts.append(categorical.to_numpy(dtype=float))
+        else:
+            binary = frame.loc[:, self.binary_discrete_columns]
+            numeric_discrete = self._transform_numeric_discrete(frame)
+            if binary.shape[1] > 0:
+                data_parts.append(binary.to_numpy(dtype=float))
+            if numeric_discrete.shape[1] > 0:
+                data_parts.append(numeric_discrete.to_numpy(dtype=float))
+
+        continuous = frame.loc[:, self.continuous_columns]
+        if continuous.shape[1] > 0:
+            data_parts.append(continuous.to_numpy(dtype=float))
+
+        if not data_parts:
+            return np.empty((len(frame), 0))
+        return np.hstack(data_parts)
 
 
 class DBEncoder:
@@ -56,6 +261,7 @@ class DBEncoder:
         self.continuous_columns = self._get_columns('continuous')
         self.discrete_columns = [*self.unordered_columns, *self.ordered_columns]
         self.feature_columns = [*self.discrete_columns, *self.continuous_columns]
+        self.raw_feature_columns = list(self.feature_columns)
         self.category_labels = self._build_category_labels()
         self.binary_discrete_columns = [
             name for name in self.discrete_columns if self._category_count(name) <= 2
@@ -243,6 +449,43 @@ class DBEncoder:
     def save_feature_selection(self, path: Path) -> None:
         if self.feature_selection is not None:
             self.feature_selection.save(path)
+
+    @staticmethod
+    def _series_to_dict(series: pd.Series) -> dict[str, float]:
+        return {str(name): float(value) for name, value in series.items()}
+
+    def to_artifact(self) -> DBEncoderArtifact:
+        if self.train.preprocess and self.train.missing_value_strategy == 'limix':
+            raise IatreionException(
+                'Baseline final artifacts do not support LimiX imputation.'
+            )
+        return DBEncoderArtifact(
+            raw_feature_columns=self.raw_feature_columns,
+            feature_columns=self.feature_columns,
+            unordered_columns=self.unordered_columns,
+            ordered_columns=self.ordered_columns,
+            continuous_columns=self.continuous_columns,
+            category_labels={
+                name: list(labels) for name, labels in self.category_labels.items()
+            },
+            binary_discrete_columns=self.binary_discrete_columns,
+            categorical_discrete_columns=self.categorical_discrete_columns,
+            X_fname=self.X_fname,
+            X_compl_fname=self.X_compl_fname,
+            binary_flen=self.binary_flen,
+            categorical_flen=self.categorical_flen,
+            numeric_flen=self.numeric_flen,
+            continuous_mean=self._series_to_dict(self._continuous_mean),
+            continuous_std=self._series_to_dict(self._continuous_std),
+            preprocess=self.train.preprocess,
+            missing_value_strategy=self.train.missing_value_strategy,
+            normalize_continuous=self.train.normalize_continuous,
+            discrete_processing=self.train.discrete_processing,
+            simple_imputer=self.simple_imputer,
+        )
+
+    def save_transform_artifact(self, path: Path) -> None:
+        self.to_artifact().save(path)
 
     def _limix_impute(self, frames: _FrameSplits, y_train: NDArray) -> _FrameSplits:
         if self.limix_client is None:

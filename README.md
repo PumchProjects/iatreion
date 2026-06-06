@@ -26,6 +26,9 @@ uv run iatreion train -h
 uv run iatreion train rrl -h
 uv run iatreion train xgboost -h
 uv run iatreion train random-forest -h
+uv run iatreion eval -h
+uv run iatreion eval xgboost -h
+uv run iatreion eval random-forest -h
 uv run iatreion train rrl-eval -h
 uv run iatreion rrl-eval -h
 uv run iatreion show -h
@@ -58,7 +61,7 @@ uv run iatreion-gui  # GUI
 
 ## Configuration Files
 
-Most commands can read defaults from `configs/config.toml` with the global `--config` option. The file is organized by command: `[process]` and `[process.data]` for raw-to-processed conversion, `[train.rrl]`, `[train.rrl-eval]`, `[train.xgboost]`, and `[train.random-forest]` for model runs, and `[show.*]` tables for figure/table helpers.
+Most commands can read defaults from `configs/config.toml` with the global `--config` option. The file is organized by command: `[process]` and `[process.data]` for raw-to-processed conversion, `[train.rrl]`, `[train.rrl-eval]`, `[train.xgboost]`, and `[train.random-forest]` for model runs, `[eval.xgboost]` and `[eval.random-forest]` for baseline external validation, and `[show.*]` tables for figure/table helpers.
 
 CLI options override TOML values, so `uv run iatreion train rrl --config configs/config.toml -i 6-7` uses the config but overrides `train.rrl.device-id`. Other commands that accept `--config` behave the same way, for example `uv run iatreion process --config configs/config.toml` or `uv run iatreion show table-1 --config configs/config.toml -o table_1_retry`.
 
@@ -454,6 +457,32 @@ For single-sample explanations, pass `--sample-id`.
 
 When `-o/--output` is omitted, `batch` writes `rrl_batch_result.xlsx` and `rule-or` writes `rrl_rule_or.tsv`.
 
+### Baseline External Validation
+
+Use `uv run iatreion eval xgboost` or `uv run iatreion eval random-forest` to apply final baseline models to external data. Baseline external validation always uses final calibrated-fusion artifacts: each requested modality must have `logs/final/<group-names>/<model>/artifacts/<name>/transform.toml` plus a saved model file, and `logs/final/<group-names>/<model>/available_fusion.toml` must exist. If `available_fusion.toml` is missing, the command fails instead of falling back to uncalibrated averaging. Final baseline fitting with `-f -a calibrated-fusion` writes these artifacts; when no Optuna tune config is used, the basic runner first fits an internal OOF calibration artifact and then fits the final modality models.
+
+Example for labeled external XGBoost validation:
+
+```bash
+uv run iatreion eval xgboost \
+  -n symptom csvd volume-new-pct \
+  --index-name "<sample-id-column>" \
+  --label-name "<label-column>" \
+  -g a c \
+  --positive-label c \
+  --log-root logs \
+  -p "<path-to-the-process-info-file>" \
+  --data.history "<path-to-the-spreadsheet-for-symptom-data>" \
+  --data.csvd "<path-to-the-spreadsheet-for-csvd-data>" \
+  --data.volume-new "<path-to-the-spreadsheet-for-mri-volume-data>" \
+  -v "<path-to-the-excel-file-storing-mean-and-std-for-mri-volume-data>" \
+  --vmri-change "<path-to-the-file-storing-column-name-changes-for-mri-volume-data>" \
+  -m eval \
+  -k last
+```
+
+For unlabeled batch prediction, use `-m batch`; when `-o/--output` is omitted, the command writes `baseline_batch_result.xlsx`.
+
 ## GUI
 
 After final model fitting, launch:
@@ -466,7 +495,7 @@ The GUI wraps the same parser API used by `iatreion rrl-eval`. It can load final
 
 ## XGBoost and Random Forest Baselines
 
-XGBoost and Random Forest can be trained with the same processed `.data` and `.info` files as RRL. Their defaults can live in `[train.xgboost]` and `[train.random-forest]` in `configs/config.toml`; common fields such as `prefix`, `names`, `label-name`, `groups`, `positive-label`, `aggregate`, `use-clinical-threshold`, `clinical-threshold-label`, `clinical-threshold-recall`, and `log-root` follow the same config/CLI override rules described above.
+XGBoost and Random Forest can be trained with the same processed `.data` and `.info` files as RRL. Their defaults can live in `[train.xgboost]` and `[train.random-forest]` in `configs/config.toml`; common fields such as `prefix`, `names`, `label-name`, `groups`, `positive-label`, `aggregate`, `use-clinical-threshold`, `clinical-threshold-label`, `clinical-threshold-recall`, and `log-root` follow the same config/CLI override rules described above. For external validation, train final baseline models with `-f -a calibrated-fusion` so the final log directory contains modality model artifacts, transform artifacts, and `available_fusion.toml`.
 
 With the config file, run:
 
@@ -508,7 +537,7 @@ uv run iatreion train random-forest \
   --log-root logs
 ```
 
-The baseline outputs follow the same dataset/group/aggregate directory convention as other training commands, with model-specific folders such as `xgboost` and `random_forest` under the selected log root.
+The baseline outputs follow the same dataset/group/aggregate directory convention as other training commands for internal evaluation. Final artifacts used by `iatreion eval` are written under `logs/final/<group-names>/xgboost/` or `logs/final/<group-names>/random_forest/`, with per-modality artifacts in `artifacts/<name>/`.
 
 ## Figures and Tables
 
@@ -610,7 +639,7 @@ src/iatreion/
 
 ### Available-fusion artifact not found
 
-Run final training with `uv run iatreion train rrl ... --tune-config configs/rrl_optuna.toml -f` before external validation. If using `--eval-names`, use the same `--eval-names` list for nested evaluation, final training, and external validation.
+Run final training before external validation. For RRL, use `uv run iatreion train rrl ... --tune-config configs/rrl_optuna.toml -f`; for baselines, use `uv run iatreion train xgboost ... -a calibrated-fusion -f` or `uv run iatreion train random-forest ... -a calibrated-fusion -f`. If using `--eval-names`, use the same `--eval-names` list for nested evaluation, final training, and external validation.
 
 ### No experiment root found
 

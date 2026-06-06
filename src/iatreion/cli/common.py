@@ -20,9 +20,10 @@ app['--help'].group = 'Admin'
 app['--version'].group = 'Admin'
 
 app.command('iatreion.cli.process:process', sort_key=0)
-app.command('iatreion.cli.train:sub_app', name='train')
-app.command('iatreion.cli.rrl_eval:rrl_eval', sort_key=2)
-app.command('iatreion.cli.show:sub_app', name='show')
+app.command('iatreion.cli.train:sub_app', name='train', sort_key=1)
+app.command('iatreion.cli.evaluate:sub_app', name='eval', sort_key=2)
+app.command('iatreion.cli.rrl_eval:rrl_eval', sort_key=3)
+app.command('iatreion.cli.show:sub_app', name='show', sort_key=4)
 
 
 @app.meta.default

@@ -1,3 +1,9 @@
+from .baseline_eval import (
+    get_baseline_batched_result,
+    get_baseline_eval_result,
+    get_baseline_prediction_result,
+    save_baseline_batched_result_table,
+)
 from .rrl_eval_explain import get_rule_waterfall_data, get_sample_explanation
 from .rrl_eval_results import (
     RrlTermOption,

@@ -59,7 +59,7 @@ def read_csv(
     X_df, y_df = make_data_labels(D, train, group_columns)
     f_df = f_df.loc[f_df['type'] != 'label'].iloc[1:]
 
-    if train._encode:
+    if dataset._encode:
         X_df.rename(columns=encode_string, inplace=True)
         f_df['name'] = f_df['name'].map(encode_string)
 

@@ -22,7 +22,7 @@ from iatreion.models import (
 from iatreion.runners import BasicRunner, OptunaRunner
 from iatreion.utils import progress
 
-sub_app = App(name='train', help='Train a model.', sort_key=1)
+sub_app = App(name='train', help='Train a model.')
 counter = count()
 
 
