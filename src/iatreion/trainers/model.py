@@ -41,8 +41,18 @@ class ModelTrainer(Trainer):
             self.model.config = self.base_config
             return
 
+        log_dir = self.train_config._log_dir
         config = apply_overrides(self.base_config, overrides)
+        transient_log = config.train._log_dir / 'train.log'
         config.close_log_handler()
+        if (
+            transient_log != log_dir / 'train.log'
+            and transient_log.is_file()
+            and transient_log.stat().st_size == 0
+        ):
+            transient_log.unlink()
+        config.train._log_dir = log_dir
+        self.train_config._log_dir = log_dir
         self.model.config = config
 
     @override

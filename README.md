@@ -253,7 +253,7 @@ uv run iatreion train rrl \
 
 The training output root is `logs` in this example; set it with `--log-root` or `train.rrl.log-root` in `configs/config.toml`. The Optuna artifact root shown below defaults to `logs_optuna_rrl`, controlled by `execution.trial-log-root` in `configs/rrl_optuna.toml`.
 
-Every training run writes a compact `manifest.toml` in its output directory. The manifest records the command line, git commit and dirty files, `uv.lock` version/revision/hash, Python/uv/PyTorch/CUDA/GPU environment, processed data hashes, resolved hyperparameters plus selected Optuna parameters, actual train/validation/test IDs, final objective metrics, and artifact paths with hashes; larger logs, predictions, rules, and plots remain in their normal files and are referenced from the manifest.
+Every training run writes a compact `manifest.toml` in its output directory. The manifest records the command line, git commit and dirty files, `uv.lock` version/revision/hash, Python/uv/PyTorch/CUDA/GPU environment, processed data hashes, resolved hyperparameters plus selected Optuna parameters, final objective metrics, and artifact paths with hashes; train/validation/test IDs are stored in `splits.npz`, while larger logs, predictions, rules, and plots remain in their normal files and are referenced from the manifest.
 
 Optuna artifacts are organized by stage, outer fold, and tuning target:
 

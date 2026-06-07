@@ -8,7 +8,6 @@ from importlib import import_module
 from math import isfinite
 from multiprocessing import get_context
 from pathlib import Path
-from shutil import copyfile
 from typing import Any, Literal, override
 
 import optuna
@@ -29,7 +28,6 @@ from iatreion.train_utils import (
     get_train_test,
     read_data,
 )
-from iatreion.train_utils.fusion import FUSION_ARTIFACT_FILE
 from iatreion.trainers import ModelTrainer
 from iatreion.utils import (
     apply_overrides,
@@ -43,6 +41,7 @@ from iatreion.utils import (
 )
 
 from .base import Runner
+from .final_calibration import fit_final_fusion_artifact, publish_fusion_artifact
 
 type SearchSpaceKind = Literal['float', 'int', 'categorical']
 type StudyDirection = Literal['maximize', 'minimize']
@@ -187,12 +186,37 @@ class TuningSpec:
 
 
 @dataclass(frozen=True)
+class TuningTarget:
+    name: str
+    aggregate: str
+    eval_names: list[str]
+
+    @classmethod
+    def from_candidate(cls, candidate: str) -> 'TuningTarget':
+        if candidate == 'all_concat':
+            return cls(name=candidate, aggregate='concat', eval_names=[])
+        return cls(name=candidate, aggregate='average', eval_names=[candidate])
+
+    def training_overrides(self, n_folds: int) -> dict[str, Any]:
+        return {
+            'importance_methods': [],
+            'train.aggregate': self.aggregate,
+            'train.eval_names': self.eval_names,
+            'train.final': False,
+            'train.n_outer_splits': n_folds,
+        }
+
+
+@dataclass(frozen=True)
 class StudyJob:
-    candidate: str
+    target: TuningTarget
     fold_specs: list[FoldSpec]
     root: Path
-    overrides: dict[str, Any]
     device_id: int | None = None
+
+    @property
+    def candidate(self) -> str:
+        return self.target.name
 
 
 @dataclass(frozen=True)
@@ -271,6 +295,32 @@ def study_label(root: Path, candidate: str) -> str:
     return candidate
 
 
+def model_name_for(model_cls: type[Model]) -> str:
+    name = model_cls.__name__.removesuffix('Model')
+    return name[:1].lower() + name[1:]
+
+
+def make_training_config(
+    base_config: ModelConfig,
+    model_name: str,
+    overrides: dict[str, Any],
+    *,
+    folder_name: str | None = None,
+    file_name: str = 'train.log',
+) -> ModelConfig:
+    config = apply_overrides(
+        base_config,
+        {
+            'tune_config': None,
+            'study_name': None,
+            'train.log_root': base_config.train.log_root,
+        }
+        | overrides,
+    )
+    config.register_log_dir(model_name, folder_name=folder_name, file_name=file_name)
+    return config
+
+
 def class_path(cls: type) -> str:
     return f'{cls.__module__}:{cls.__qualname__}'
 
@@ -297,24 +347,25 @@ def run_study_worker(
     if job.device_id is not None:
         config.train.device_id = str(job.device_id)
     model_cls = import_class(model_cls_path)
-    runner = OptunaRunner(model_cls, config)
+    executor = OptunaStudyExecutor(model_cls, config, TuningSpec.load(config))
     with suppress_console_logs(logging.CRITICAL + 1), disable_progress():
-        params = runner._run_study(
-            candidate=job.candidate,
-            fold_specs=job.fold_specs,
-            root=job.root,
-            overrides=job.overrides,
-            show_progress=False,
-        )
+        params = executor.run(job, show_progress=False)
     config.close_log_handler()
     return StudyResult(candidate=job.candidate, params=params)
 
 
-class OptunaRunner(Runner):
-    def __init__(self, model_cls: type[Model], config: ModelConfig) -> None:
-        super().__init__(model_cls, config)
+class OptunaStudyExecutor:
+    def __init__(
+        self,
+        model_cls: type[Model],
+        base_config: ModelConfig,
+        spec: TuningSpec,
+    ) -> None:
+        self.model_cls = model_cls
+        self.base_config = base_config
+        self.spec = spec
+        self.model_name = model_name_for(model_cls)
         optuna.logging.set_verbosity(optuna.logging.WARNING)
-        self.spec = TuningSpec.load(config)
 
     def _get_sampler(self) -> BaseSampler:
         match self.spec.study.sampler:
@@ -355,53 +406,25 @@ class OptunaRunner(Runner):
         self,
         overrides: dict[str, Any],
         *,
-        folder_name: str | None = None,
         file_name: str = 'train.log',
     ) -> ModelConfig:
-        full_overrides = {
-            'tune_config': None,
-            'study_name': None,
-            'train.log_root': self.base_config.train.log_root,
-        } | overrides
-        config = apply_overrides(
+        return make_training_config(
             self.base_config,
-            full_overrides,
+            self.model_name,
+            overrides,
+            file_name=file_name,
         )
-        config.register_log_dir(
-            self.model_name, folder_name=folder_name, file_name=file_name
-        )
-        return config
 
     def _sample(self, trial: Trial) -> dict[str, Any]:
         return {
             key: space.sample(trial, key) for key, space in self.spec.search.items()
         }
 
-    def _objective_key(self, candidate: str) -> str:
+    def _objective_key(self, target: TuningTarget) -> str:
         objective = self.spec.study.objective
         if '/' in objective:
             return objective
-        return f'{candidate}/{objective}'
-
-    def _candidate_names(self) -> list[str]:
-        return get_data_names(self.base_config.dataset, self.base_config.train)
-
-    def _candidate_tuning_overrides(
-        self, candidate: str, fold_specs: list[FoldSpec]
-    ) -> dict[str, Any]:
-        if candidate == 'all_concat':
-            aggregate = 'concat'
-            eval_names: list[str] = []
-        else:
-            aggregate = 'average'
-            eval_names = [candidate]
-        return {
-            'importance_methods': [],
-            'train.aggregate': aggregate,
-            'train.eval_names': eval_names,
-            'train.final': False,
-            'train.n_outer_splits': len(fold_specs),
-        }
+        return f'{target.name}/{objective}'
 
     def _n_jobs(self) -> int:
         n_jobs = self.spec.execution.n_jobs
@@ -415,6 +438,220 @@ class OptunaRunner(Runner):
                 'Use execution.n_jobs = 1 and reduce n_trials/folds for short runs.'
             )
         return n_jobs
+
+    @staticmethod
+    def _mark_unfinished_trials_failed(study: Study) -> None:
+        unfinished = study.get_trials(
+            deepcopy=False,
+            states=(TrialState.RUNNING, TrialState.WAITING),
+        )
+        for trial in unfinished:
+            study.tell(trial.number, state=TrialState.FAIL, skip_if_finished=True)
+            logger.warning(
+                'Marked stale Optuna trial #%s as FAIL in study "%s"',
+                trial.number,
+                study.study_name,
+            )
+
+    def _remaining_trials(self, study: Study) -> int | None:
+        n_trials = self.spec.study.n_trials
+        if n_trials is None:
+            return None
+        complete = len(study.get_trials(deepcopy=False, states=(TrialState.COMPLETE,)))
+        return max(n_trials - complete, 0)
+
+    @staticmethod
+    def _complete_trials(study: Study) -> int:
+        return len(study.get_trials(deepcopy=False, states=(TrialState.COMPLETE,)))
+
+    @staticmethod
+    def _trial_status(root: Path, trial: FrozenTrial) -> str:
+        info_path = root / f'trial_{trial.number:04d}' / 'trial_info.toml'
+        if not info_path.exists():
+            return trial.state.name.lower()
+        try:
+            info = load_dict(info_path)
+        except Exception:
+            return trial.state.name.lower()
+        status = info.get('status')
+        return status if isinstance(status, str) else trial.state.name.lower()
+
+    def _trial_callback(
+        self,
+        *,
+        root: Path,
+        target: TuningTarget,
+        task_id: int | None,
+    ):
+        label = study_label(root, target.name)
+
+        def callback(study: Study, trial: FrozenTrial) -> None:
+            complete = self._complete_trials(study)
+            best = format_objective(study.best_value) if complete else 'NA'
+            value = format_objective(trial.value)
+            status = self._trial_status(root, trial)
+            message = (
+                f'{label} trial #{trial.number} {status}: value={value} best={best}'
+            )
+            logger.info(message)
+            append_study_log(root, message)
+            if task_id is not None:
+                progress.update(
+                    task_id,
+                    completed=complete,
+                    description=f'{label}: best={best}',
+                )
+
+        return callback
+
+    def _run_trial(
+        self,
+        trial: Trial,
+        *,
+        job: StudyJob,
+    ) -> float:
+        sampled = self._sample(trial)
+        trial_log_root = job.root / f'trial_{trial.number:04d}'
+        config = self._training_config(
+            job.target.training_overrides(len(job.fold_specs))
+            | sampled
+            | {'train.log_root': trial_log_root},
+            file_name=f'trial_{trial.number:04d}.log',
+        )
+
+        model: Model | None = None
+        try:
+            with suppress_console_logs(), disable_progress():
+                model = self.model_cls(config)
+                trainer = ModelTrainer(
+                    model,
+                    fold_specs=job.fold_specs,
+                    calc_ci=False,
+                )
+                summary = trainer.train()
+        except Exception as error:
+            dump_trial_info(
+                trial_log_root,
+                status='failed',
+                sampled=sampled,
+                error=repr(error),
+            )
+            logger.exception(f'Optuna trial {trial.number} failed')
+            return self.spec.execution.fail_value
+        finally:
+            if model is not None:
+                model.close()
+            config.close_log_handler()
+
+        objective_name = self._objective_key(job.target)
+        objective = summary.objectives.get(objective_name)
+        objectives = {key: float(value) for key, value in summary.objectives.items()}
+        if objective is None:
+            dump_trial_info(
+                trial_log_root,
+                status=f'missing-objective:{objective_name}',
+                sampled=sampled,
+                objectives=objectives,
+            )
+            return self.spec.execution.fail_value
+
+        objective_value = float(objective)
+        if not isfinite(objective_value):
+            dump_trial_info(
+                trial_log_root,
+                status=f'nonfinite-objective:{objective_name}',
+                sampled=sampled,
+                objectives=objectives,
+            )
+            return self.spec.execution.fail_value
+
+        dump_trial_info(
+            trial_log_root,
+            status='completed',
+            sampled=sampled,
+            objectives=objectives,
+        )
+        return objective_value
+
+    def run(self, job: StudyJob, *, show_progress: bool = True) -> dict[str, Any]:
+        study = self._create_study(job.root, sanitize_name(job.candidate))
+        label = study_label(job.root, job.candidate)
+        objective_name = self._objective_key(job.target)
+        message = f'Optuna study "{label}" started: objective="{objective_name}"'
+        logger.info(message)
+        append_study_log(job.root, f'{message} root={job.root}')
+        self._mark_unfinished_trials_failed(study)
+
+        remaining_trials = self._remaining_trials(study)
+        if remaining_trials != 0:
+            task_id = (
+                progress.add_task(
+                    f'{label}: best=NA',
+                    total=self.spec.study.n_trials,
+                    completed=self._complete_trials(study),
+                )
+                if show_progress
+                else None
+            )
+            try:
+                study.optimize(
+                    lambda trial: self._run_trial(trial, job=job),
+                    n_trials=remaining_trials,
+                    timeout=self.spec.study.timeout_sec,
+                    n_jobs=self._n_jobs(),
+                    callbacks=[
+                        self._trial_callback(
+                            root=job.root,
+                            target=job.target,
+                            task_id=task_id,
+                        )
+                    ],
+                )
+            finally:
+                if task_id is not None:
+                    progress.remove_task(task_id)
+        else:
+            message = f'Optuna study {label} already has enough complete trials'
+            logger.info(message)
+            append_study_log(job.root, message)
+
+        trial_info = (
+            job.root / f'trial_{study.best_trial.number:04d}' / 'trial_info.toml'
+        )
+        info = {
+            'trial_number': study.best_trial.number,
+            'value': study.best_value,
+            'params': study.best_trial.params,
+            'trial_info': str(trial_info),
+        }
+        save_dict(info, job.root / 'best_trial.toml')
+        save_dict(study.best_trial.params, job.root / 'params.toml')
+        message = (
+            f'Best {label} trial #{study.best_trial.number}: '
+            f'value={study.best_value:.6f}'
+        )
+        logger.info(message)
+        append_study_log(job.root, f'{message} params={study.best_trial.params}')
+        return dict(study.best_trial.params)
+
+
+class OptunaRunner(Runner):
+    def __init__(self, model_cls: type[Model], config: ModelConfig) -> None:
+        super().__init__(model_cls, config)
+        self.spec = TuningSpec.load(config)
+        self.executor = OptunaStudyExecutor(model_cls, config, self.spec)
+
+    def _training_config(self, overrides: dict[str, Any]) -> ModelConfig:
+        return make_training_config(self.base_config, self.model_name, overrides)
+
+    def _targets(self) -> list[TuningTarget]:
+        return [
+            TuningTarget.from_candidate(candidate)
+            for candidate in get_data_names(
+                self.base_config.dataset,
+                self.base_config.train,
+            )
+        ]
 
     def _study_worker_count(self, n_studies: int) -> int:
         study_workers = self.spec.execution.study_workers
@@ -436,15 +673,7 @@ class OptunaRunner(Runner):
 
         workers = self._study_worker_count(len(jobs))
         if workers == 1:
-            return {
-                job.candidate: self._run_study(
-                    candidate=job.candidate,
-                    fold_specs=job.fold_specs,
-                    root=job.root,
-                    overrides=job.overrides,
-                )
-                for job in jobs
-            }
+            return {job.candidate: self.executor.run(job) for job in jobs}
 
         devices = self._study_worker_devices(workers)
         device_label = ', '.join(
@@ -495,215 +724,11 @@ class OptunaRunner(Runner):
 
         return {job.candidate: results[job.candidate] for job in jobs}
 
-    @staticmethod
-    def _mark_unfinished_trials_failed(study: Study) -> None:
-        unfinished = study.get_trials(
-            deepcopy=False,
-            states=(TrialState.RUNNING, TrialState.WAITING),
-        )
-        for trial in unfinished:
-            study.tell(trial.number, state=TrialState.FAIL, skip_if_finished=True)
-            logger.warning(
-                'Marked stale Optuna trial #%s as FAIL in study "%s"',
-                trial.number,
-                study.study_name,
-            )
-
-    def _remaining_trials(self, study: Study) -> int | None:
-        n_trials = self.spec.study.n_trials
-        if n_trials is None:
-            return None
-        complete = len(study.get_trials(deepcopy=False, states=(TrialState.COMPLETE,)))
-        return max(n_trials - complete, 0)
-
-    @staticmethod
-    def _complete_trials(study: Study) -> int:
-        return len(study.get_trials(deepcopy=False, states=(TrialState.COMPLETE,)))
-
-    @staticmethod
-    def _trial_status(root: Path, trial: FrozenTrial) -> str:
-        info_path = root / f'trial_{trial.number:04d}' / 'trial_info.toml'
-        if not info_path.exists():
-            return trial.state.name.lower()
-        try:
-            info = load_dict(info_path)
-        except Exception:
-            return trial.state.name.lower()
-        status = info.get('status')
-        return status if isinstance(status, str) else trial.state.name.lower()
-
-    def _trial_callback(
-        self,
-        *,
-        root: Path,
-        candidate: str,
-        task_id: int | None,
-    ):
-        label = study_label(root, candidate)
-
-        def callback(study: Study, trial: FrozenTrial) -> None:
-            complete = self._complete_trials(study)
-            best = format_objective(study.best_value) if complete else 'NA'
-            value = format_objective(trial.value)
-            status = self._trial_status(root, trial)
-            message = (
-                f'{label} trial #{trial.number} {status}: value={value} best={best}'
-            )
-            logger.info(message)
-            append_study_log(root, message)
-            if task_id is not None:
-                progress.update(
-                    task_id,
-                    completed=complete,
-                    description=f'{label}: best={best}',
-                )
-
-        return callback
-
-    def _run_trial(
-        self,
-        trial: Trial,
-        *,
-        candidate: str,
-        fold_specs: list[FoldSpec],
-        overrides: dict[str, Any],
-        study_root: Path,
-    ) -> float:
-        sampled = self._sample(trial)
-        trial_log_root = study_root / f'trial_{trial.number:04d}'
-        config = self._training_config(
-            overrides | sampled | {'train.log_root': trial_log_root},
-            file_name=f'trial_{trial.number:04d}.log',
-        )
-
-        model: Model | None = None
-        try:
-            with suppress_console_logs(), disable_progress():
-                model = self.model_cls(config)
-                trainer = ModelTrainer(model, fold_specs=fold_specs, calc_ci=False)
-                summary = trainer.train()
-        except Exception as error:
-            dump_trial_info(
-                trial_log_root,
-                status='failed',
-                sampled=sampled,
-                error=repr(error),
-            )
-            logger.exception(f'Optuna trial {trial.number} failed')
-            return self.spec.execution.fail_value
-        finally:
-            if model is not None:
-                model.close()
-            config.close_log_handler()
-
-        objective_name = self._objective_key(candidate)
-        objective = summary.objectives.get(objective_name)
-        if objective is None:
-            objectives = {
-                key: float(value) for key, value in summary.objectives.items()
-            }
-            dump_trial_info(
-                trial_log_root,
-                status=f'missing-objective:{objective_name}',
-                sampled=sampled,
-                objectives=objectives,
-            )
-            return self.spec.execution.fail_value
-        objective_value = float(objective)
-        objectives = {key: float(value) for key, value in summary.objectives.items()}
-        if not isfinite(objective_value):
-            dump_trial_info(
-                trial_log_root,
-                status=f'nonfinite-objective:{objective_name}',
-                sampled=sampled,
-                objectives=objectives,
-            )
-            return self.spec.execution.fail_value
-
-        dump_trial_info(
-            trial_log_root,
-            status='completed',
-            sampled=sampled,
-            objectives=objectives,
-        )
-        return objective_value
-
-    def _run_study(
-        self,
-        *,
-        candidate: str,
-        fold_specs: list[FoldSpec],
-        root: Path,
-        overrides: dict[str, Any],
-        show_progress: bool = True,
-    ) -> dict[str, Any]:
-        study = self._create_study(root, sanitize_name(candidate))
-        label = study_label(root, candidate)
-        objective_name = self._objective_key(candidate)
-        message = f'Optuna study "{label}" started: objective="{objective_name}"'
-        logger.info(message)
-        append_study_log(root, f'{message} root={root}')
-        self._mark_unfinished_trials_failed(study)
-        remaining_trials = self._remaining_trials(study)
-        if remaining_trials != 0:
-            task_id = (
-                progress.add_task(
-                    f'{label}: best=NA',
-                    total=self.spec.study.n_trials,
-                    completed=self._complete_trials(study),
-                )
-                if show_progress
-                else None
-            )
-            try:
-                study.optimize(
-                    lambda trial: self._run_trial(
-                        trial,
-                        candidate=candidate,
-                        fold_specs=fold_specs,
-                        overrides=overrides,
-                        study_root=root,
-                    ),
-                    n_trials=remaining_trials,
-                    timeout=self.spec.study.timeout_sec,
-                    n_jobs=self._n_jobs(),
-                    callbacks=[
-                        self._trial_callback(
-                            root=root,
-                            candidate=candidate,
-                            task_id=task_id,
-                        )
-                    ],
-                )
-            finally:
-                if task_id is not None:
-                    progress.remove_task(task_id)
-        else:
-            message = f'Optuna study {label} already has enough complete trials'
-            logger.info(message)
-            append_study_log(root, message)
-        trial_info = root / f'trial_{study.best_trial.number:04d}' / 'trial_info.toml'
-        info = {
-            'trial_number': study.best_trial.number,
-            'value': study.best_value,
-            'params': study.best_trial.params,
-            'trial_info': str(trial_info),
-        }
-        save_dict(info, root / 'best_trial.toml')
-        save_dict(study.best_trial.params, root / 'params.toml')
-        message = (
-            f'Best {label} trial #{study.best_trial.number}: '
-            f'value={study.best_value:.6f}'
-        )
-        logger.info(message)
-        append_study_log(root, f'{message} params={study.best_trial.params}')
-        return dict(study.best_trial.params)
-
     def _nested_tune(
         self,
     ) -> tuple[dict[int, dict[str, dict[str, Any]]], list[FoldSpec]]:
         _, _, ref_y, _ = read_data(self.base_config.dataset, self.base_config.train)
-        candidates = self._candidate_names()
+        targets = self._targets()
         selected: dict[int, dict[str, dict[str, Any]]] = {}
 
         for outer_fold, (train_outer, _test_outer) in enumerate(
@@ -716,17 +741,16 @@ class OptunaRunner(Runner):
             )
             jobs = [
                 StudyJob(
-                    candidate=candidate,
+                    target=target,
                     fold_specs=fold_specs,
                     root=(
                         self.spec.study_root
                         / 'nested'
                         / f'outer_{outer_fold}'
-                        / sanitize_name(candidate)
+                        / sanitize_name(target.name)
                     ),
-                    overrides=self._candidate_tuning_overrides(candidate, fold_specs),
                 )
-                for candidate in candidates
+                for target in targets
             ]
             selected[outer_fold] = self._run_study_jobs(jobs)
 
@@ -738,7 +762,7 @@ class OptunaRunner(Runner):
 
     def _evaluate_nested(self) -> None:
         selected, fold_specs = self._nested_tune()
-        config = self._training_config({'tune_config': None})
+        config = self._training_config({})
         model: Model | None = None
         try:
             model = self.model_cls(config)
@@ -754,57 +778,30 @@ class OptunaRunner(Runner):
         fold_specs = get_cv_fold_specs(train.n_inner_splits, ref_y)
         jobs = [
             StudyJob(
-                candidate=candidate,
+                target=target,
                 fold_specs=fold_specs,
-                root=self.spec.study_root / 'final' / sanitize_name(candidate),
-                overrides=self._candidate_tuning_overrides(candidate, fold_specs),
+                root=self.spec.study_root / 'final' / sanitize_name(target.name),
             )
-            for candidate in self._candidate_names()
+            for target in self._targets()
         ]
         selected = self._run_study_jobs(jobs)
         save_dict(selected, self.spec.study_root / 'final' / 'selected_params.toml')
         return selected
 
     def _fit_final_fusion_artifact(self, selected: dict[str, dict[str, Any]]) -> Path:
-        train = self.base_config.train
-        _, _, ref_y, _ = read_data(self.base_config.dataset, train)
-        fold_specs = get_cv_fold_specs(train.n_inner_splits, ref_y)
-        candidates = self._candidate_names()
-        artifact_aggregate = 'concat' if candidates == ['all_concat'] else 'average'
-        config = self._training_config(
-            {
-                'importance_methods': [],
-                'train.aggregate': artifact_aggregate,
-                'train.eval_names': [] if candidates == ['all_concat'] else candidates,
-                'train.final': False,
-                'train.n_outer_splits': len(fold_specs),
-            },
-            folder_name='final_calibration',
+        return fit_final_fusion_artifact(
+            self.model_cls,
+            self.base_config,
+            self.model_name,
+            parameter_map=selected,
         )
-
-        model: Model | None = None
-        try:
-            model = self.model_cls(config)
-            ModelTrainer(
-                model,
-                fold_specs=fold_specs,
-                parameter_map=selected,
-                calc_ci=False,
-            ).train()
-        finally:
-            if model is not None:
-                model.close()
-            config.close_log_handler()
-        return config.train._log_dir / FUSION_ARTIFACT_FILE
 
     def _fit_final_models(
         self, selected: dict[str, dict[str, Any]], artifact: Path | None
     ) -> None:
         config = self._training_config({'train.final': True})
         if artifact is not None:
-            target = config.train._log_dir / FUSION_ARTIFACT_FILE
-            target.parent.mkdir(parents=True, exist_ok=True)
-            copyfile(artifact, target)
+            publish_fusion_artifact(artifact, config.train._log_dir)
 
         model: Model | None = None
         try:

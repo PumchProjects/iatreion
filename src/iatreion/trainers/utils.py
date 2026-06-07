@@ -1,12 +1,9 @@
 from dataclasses import dataclass
-from pathlib import Path
-from shutil import copyfile
 
 import numpy as np
 from numpy.typing import NDArray
 
-from iatreion.configs import DatasetConfig, TrainConfig
-from iatreion.exceptions import IatreionException
+from iatreion.configs import TrainConfig
 from iatreion.train_utils.fusion import (
     FUSION_ARTIFACT_FILE,
     AvailableFusionArtifact,
@@ -311,41 +308,3 @@ def record_calibrated_fusion(
         final,
         fusion_artifact=fusion_artifact,
     )
-
-
-def get_final_available_fusion_artifact_source(
-    dataset: DatasetConfig, train: TrainConfig
-) -> Path:
-    source = (
-        train.log_root
-        / dataset.name_str
-        / train.group_name_str
-        / 'rrl-discrete'
-        / train.ref_name_str
-    )
-    if train.eval_names:
-        source /= train.eval_name_str
-    return source / FUSION_ARTIFACT_FILE
-
-
-def validate_final_available_fusion_artifact(
-    dataset: DatasetConfig, train: TrainConfig
-) -> None:
-    source = get_final_available_fusion_artifact_source(dataset, train)
-    if source.is_file():
-        return
-    raise IatreionException(
-        'Available-fusion artifact not found: $path. '
-        'Run internal discrete RRL scoring before final RRL training.',
-        path=str(source),
-    )
-
-
-def publish_final_available_fusion_artifact(
-    dataset: DatasetConfig, train: TrainConfig
-) -> None:
-    source = get_final_available_fusion_artifact_source(dataset, train)
-    target = train._log_dir / FUSION_ARTIFACT_FILE
-    target.parent.mkdir(parents=True, exist_ok=True)
-    copyfile(source, target)
-    logger.info(f'Published available-fusion artifact: {target}')
