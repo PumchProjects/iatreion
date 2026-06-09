@@ -6,6 +6,8 @@ from tkinter import ttk
 from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
 from typing import cast
 
+import matplotlib.pyplot as plt
+
 from iatreion.api import (
     RrlTermOption,
     get_batched_result,
@@ -106,10 +108,12 @@ def show_waterfall(master: tk.Tk, config: RrlEvalConfig) -> None:
     toolbar.update()
 
     def close_dialog() -> None:
+        fig_canvas.get_tk_widget().destroy()
+        plt.close(fig)
         dialog.destroy()
 
     ttk.Button(dialog, text='关闭', command=close_dialog).pack(pady=5)
-    master.protocol('WM_DELETE_WINDOW', fig_canvas.stop_event_loop)
+    dialog.protocol('WM_DELETE_WINDOW', close_dialog)
     master.wait_window(dialog)
 
 
@@ -202,15 +206,24 @@ def show_eval_output(master: tk.Tk, config: RrlEvalConfig) -> None:
     text_widget.config(state='disabled')
     right_frm = ttk.Frame(frm)
     right_frm.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    fig_canvas = None
     if fig is not None:
         fig_canvas = FigureCanvasTkAgg(fig, master=right_frm)
         fig_canvas.draw()
         fig_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         toolbar = NavigationToolbar2Tk(fig_canvas, right_frm)
         toolbar.update()
-        master.protocol('WM_DELETE_WINDOW', fig_canvas.stop_event_loop)
-    close_button = ttk.Button(dialog, text='关闭', command=dialog.destroy)
+
+    def close_dialog() -> None:
+        if fig_canvas is not None:
+            fig_canvas.get_tk_widget().destroy()
+        if fig is not None:
+            plt.close(fig)
+        dialog.destroy()
+
+    close_button = ttk.Button(dialog, text='关闭', command=close_dialog)
     close_button.pack(pady=5)
+    dialog.protocol('WM_DELETE_WINDOW', close_dialog)
     master.wait_window(dialog)
 
 

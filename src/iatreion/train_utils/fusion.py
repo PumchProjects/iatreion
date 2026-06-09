@@ -19,7 +19,7 @@ _WEIGHT_OBJECTIVE = 'log_loss'
 
 
 def get_fusion_subset_key(names: list[str]) -> str:
-    return '_'.join(names)
+    return '_'.join(sorted(names))
 
 
 def get_run_fusion_artifact_path(root: Path) -> Path:
