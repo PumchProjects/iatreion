@@ -24,14 +24,14 @@ uv run iatreion -h
 uv run iatreion process -h
 uv run iatreion train -h
 uv run iatreion train rrl -h
+uv run iatreion train rrl-parser -h
 uv run iatreion train xgboost -h
 uv run iatreion train random-forest -h
 uv run iatreion train result-replay -h
 uv run iatreion eval -h
+uv run iatreion eval rrl -h
 uv run iatreion eval xgboost -h
 uv run iatreion eval random-forest -h
-uv run iatreion train rrl-eval -h
-uv run iatreion rrl-eval -h
 uv run iatreion show -h
 uv run iatreion show rrl-waterfall -h
 ```
@@ -62,7 +62,7 @@ uv run iatreion-gui  # GUI
 
 ## Configuration Files
 
-Most commands can read defaults from `configs/config.toml` with the global `--config` option. The file is organized by command: `[process]` and `[process.data]` for raw-to-processed conversion, `[train.rrl]`, `[train.rrl-eval]`, `[train.result-replay]`, `[train.xgboost]`, and `[train.random-forest]` for model runs, `[eval.xgboost]` and `[eval.random-forest]` for baseline external validation, and `[show.*]` tables for figure/table helpers.
+Most commands can read defaults from `configs/config.toml` with the global `--config` option. The file is organized by command: `[process]` and `[process.data]` for raw-to-processed conversion, `[train.rrl]`, `[train.rrl-parser]`, `[train.result-replay]`, `[train.xgboost]`, and `[train.random-forest]` for model runs, `[eval.rrl]`, `[eval.xgboost]`, and `[eval.random-forest]` for final-model external validation, and `[show.*]` tables for figure/table helpers.
 
 CLI options override TOML values, so `uv run iatreion train rrl --config configs/config.toml -i 6-7` uses the config but overrides `train.rrl.device-id`. Other commands that accept `--config` behave the same way, for example `uv run iatreion process --config configs/config.toml` or `uv run iatreion show table-1 --config configs/config.toml -o table_1_retry`.
 
@@ -306,7 +306,7 @@ When `--no-clinical-threshold` is set, the `*_clinical_recall` result is omitted
 Downstream tools use the RRL parser rather than the live PyTorch model. Parser-based internal re-evaluation is an optional parser parity check against the live-model nested CV output; it reuses the live nested fold-level artifacts from `logs/<dataset-names>/<group-names>/rrl/calibrated-fusion/fold_artifacts/outer_<k>/available_fusion.toml` and does not publish artifacts for final external validation:
 
 ```bash
-uv run iatreion train rrl-eval \
+uv run iatreion train rrl-parser \
   -p "<path-to-the-folder-storing-processed-data>" \
   -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
   --label-name group_encrypted \
@@ -320,12 +320,12 @@ uv run iatreion train rrl-eval \
 
 Use `--no-pp` when the exported rules should be evaluated directly on processed feature values. In the current missing-aware RRL workflow, this is the usual choice for parser re-evaluation and external validation. Supervised feature selection is not re-fitted during parser evaluation; final rules access the selected features by column name.
 
-Parser re-evaluation does not train a live RRL model and does not use a validation split, so `--val-size` belongs in live RRL training settings rather than `[train.rrl-eval]`.
+Parser re-evaluation does not train a live RRL model and does not use a validation split, so `--val-size` belongs in live RRL training settings rather than `[train.rrl-parser]`.
 
 This command writes parser-based parity metrics under:
 
 ```text
-logs/<dataset-names>/<group-names>/rrl-discrete/calibrated-fusion/
+logs/<dataset-names>/<group-names>/rrl-parser/calibrated-fusion/
 ```
 
 ## Result Replay Subset Fusion
@@ -415,7 +415,7 @@ logs/final/<group-names>/rrl/<name>.tsv
 
 ## External Validation
 
-Use `uv run iatreion rrl-eval` to apply final RRL rule files to external data. The command uses:
+Use `uv run iatreion eval rrl` to apply final RRL rule files to external data. The command uses:
 
 - `-t/--thesaurus`: root directory containing final RRL logs.
 - `-p/--process`: internal `process_info.toml`, needed to reproduce feature encodings and category orders.
@@ -425,12 +425,12 @@ Use `uv run iatreion rrl-eval` to apply final RRL rule files to external data. T
 - `--label-name`: external label column, required for `-m eval` and `-m rule-or`; in other modes it is optional and only used to exclude a label column from features.
 - `-o/--output`: exported spreadsheet path for `batch` and `rule-or` modes; supported suffixes are `.xlsx`, `.csv`, and `.tsv`.
 
-For labeled external evaluation, logs and ROC plots are written under `logs/final/<group-names>/rrl-eval/<dataset-names>/`, so different modality lists do not overwrite each other.
+For labeled external evaluation, logs and ROC plots are written under `logs/final/<group-names>/rrl-parser/<dataset-names>/`, so different modality lists do not overwrite each other.
 
 Example for symptom plus CSVD:
 
 ```bash
-uv run iatreion rrl-eval \
+uv run iatreion eval rrl \
   -n symptom csvd \
   --index-name "<sample-id-column>" \
   --label-name "<label-column>" \
@@ -448,7 +448,7 @@ uv run iatreion rrl-eval \
 Example including MRI volume features:
 
 ```bash
-uv run iatreion rrl-eval \
+uv run iatreion eval rrl \
   -n symptom csvd volume-new-pct \
   --index-name "<sample-id-column>" \
   --label-name "<label-column>" \
@@ -504,7 +504,7 @@ uv run iatreion eval xgboost \
   -k last
 ```
 
-For unlabeled batch prediction, use `-m batch`; when `-o/--output` is omitted, the command writes `baseline_batch_result.xlsx`.
+For unlabeled batch prediction, use `-m batch`; when `-o/--output` is omitted, the command writes `rrl_batch_result.xlsx`.
 
 ## GUI
 
@@ -514,7 +514,7 @@ After final model fitting, launch:
 uv run iatreion-gui
 ```
 
-The GUI wraps the same parser API used by `iatreion rrl-eval`. It can load final RRL models, select input files, export batch predictions and rule-OR tables, view active rules, and evaluate labeled external data.
+The GUI wraps the same parser API used by `iatreion eval rrl`. It can load final RRL models, select input files, export batch predictions and rule-OR tables, view active rules, and evaluate labeled external data.
 
 ## XGBoost and Random Forest Baselines
 

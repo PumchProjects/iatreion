@@ -4,7 +4,7 @@ from iatreion.configs import ModelConfig
 from iatreion.models import Model
 
 MODEL_LOG_NAMES = {
-    'DiscreteRrlModel': 'rrl-discrete',
+    'DiscreteRrlModel': 'rrl-parser',
     'LimiXModel': 'limix',
     'RandomForestModel': 'random_forest',
     'RrlModel': 'rrl',

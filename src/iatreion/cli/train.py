@@ -23,7 +23,7 @@ from iatreion.models import (
 from iatreion.runners import BasicRunner, OptunaRunner, ResultReplayRunner
 from iatreion.utils import progress
 
-sub_app = App(name='train', help='Train a model.')
+sub_app = App(name='train')
 counter = count()
 
 
@@ -79,8 +79,8 @@ def limix(*, config: LimiXConfig) -> None:
 
 
 @sub_app.command(sort_key=next(counter))
-def rrl_eval(*, config: DiscreteRrlConfig) -> None:
-    """Evaluate trained RRL models."""
+def rrl_parser(*, config: DiscreteRrlConfig) -> None:
+    """Evaluate trained RRL models with the parser."""
     train(DiscreteRrlModel, config)
 
 

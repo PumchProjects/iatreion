@@ -3,7 +3,6 @@ from iatreion.preprocessors import get_preprocessors
 
 
 def process(*, config: PreprocessorConfig) -> None:
-    """Process the data."""
     preprocessors = get_preprocessors(config)
     for preprocessor in preprocessors:
         preprocessor.process()

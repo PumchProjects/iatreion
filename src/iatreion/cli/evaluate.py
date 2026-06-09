@@ -12,14 +12,16 @@ from iatreion.configs import (
     BaselineEvalConfig,
     ModelConfig,
     RandomForestConfig,
+    RrlEvalConfig,
     XgboostConfig,
 )
 from iatreion.models import Model, RandomForestModel, XgboostModel
 from iatreion.utils import logger
 
 from .common import console
+from .eval_rrl import run_rrl_eval
 
-sub_app = App(name='eval', help='Evaluate a final baseline model.')
+sub_app = App(name='eval')
 counter = count()
 
 
@@ -74,6 +76,14 @@ def evaluate_baseline(
             display_batched_result(config, model_cls, model_config_cls)
         case 'eval':
             display_eval_result(config, model_cls, model_config_cls, model_name)
+
+
+@sub_app.command(sort_key=next(counter))
+def rrl(*, config: RrlEvalConfig | None = None) -> None:
+    """Evaluate final RRL rule files with the parser."""
+    if config is None:
+        config = RrlEvalConfig()
+    run_rrl_eval(config)
 
 
 @sub_app.command(sort_key=next(counter))

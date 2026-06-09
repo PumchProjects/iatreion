@@ -102,7 +102,7 @@ def display_batched_result(config: RrlEvalConfig) -> None:
 def display_eval_result(config: RrlEvalConfig) -> None:
     result, fig, model_config = get_eval_result(config)
     model_config.register_log_dir(
-        'rrl-eval',
+        'rrl-parser',
         folder_name=model_config.dataset.name_str,
         file_name='eval.log',
     )
@@ -135,10 +135,7 @@ def display_models(config: RrlEvalConfig) -> None:
         console.print(table)
 
 
-def rrl_eval(*, config: RrlEvalConfig | None = None) -> None:
-    """Evaluate an RRL model."""
-    if config is None:
-        config = RrlEvalConfig()
+def run_rrl_eval(config: RrlEvalConfig) -> None:
     match config.mode:
         case 'single':
             display_result(config)

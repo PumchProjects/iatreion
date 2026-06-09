@@ -38,7 +38,7 @@ from iatreion.show_helpers import (
 
 from .common import console
 
-sub_app = App(name='show', help='Make figures and tables.')
+sub_app = App(name='show')
 data = Group.create_ordered('Data')
 performance = Group.create_ordered('Performance')
 interpretability = Group.create_ordered('Interpretability')

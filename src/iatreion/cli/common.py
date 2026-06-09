@@ -19,11 +19,29 @@ app = App(
 app['--help'].group = 'Admin'
 app['--version'].group = 'Admin'
 
-app.command('iatreion.cli.process:process', sort_key=0)
-app.command('iatreion.cli.train:sub_app', name='train', sort_key=1)
-app.command('iatreion.cli.evaluate:sub_app', name='eval', sort_key=2)
-app.command('iatreion.cli.rrl_eval:rrl_eval', sort_key=3)
-app.command('iatreion.cli.show:sub_app', name='show', sort_key=4)
+app.command(
+    'iatreion.cli.process:process',
+    help='Process the data.',
+    sort_key=0,
+)
+app.command(
+    'iatreion.cli.train:sub_app',
+    name='train',
+    help='Train a model.',
+    sort_key=1,
+)
+app.command(
+    'iatreion.cli.evaluate:sub_app',
+    name='eval',
+    help='Evaluate final models.',
+    sort_key=2,
+)
+app.command(
+    'iatreion.cli.show:sub_app',
+    name='show',
+    help='Make figures and tables.',
+    sort_key=3,
+)
 
 
 @app.meta.default
