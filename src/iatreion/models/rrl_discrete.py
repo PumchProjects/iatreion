@@ -17,6 +17,7 @@ from iatreion.train_utils import TrainStepContext
 from iatreion.train_utils.fusion import (
     AvailableFusionArtifact,
     ModalityCalibrator,
+    get_fold_fusion_artifact_path,
     get_published_fusion_artifact_path,
     get_run_fusion_artifact_path,
 )
@@ -535,6 +536,18 @@ class DiscreteRrlModel(Model):
             )
             self._artifact = AvailableFusionArtifact.load(path)
         return self._artifact
+
+    @property
+    def reuses_fusion_artifacts(self) -> bool:
+        return not self.config.train.final
+
+    @override
+    def get_fusion_artifact(self, outer_fold: int) -> AvailableFusionArtifact | None:
+        if self.config.train.final:
+            return None
+        return AvailableFusionArtifact.load(
+            get_fold_fusion_artifact_path(self.config.rrl_root, outer_fold)
+        )
 
     def _validate_artifact_names(self, names: list[DataName]) -> None:
         missing = sorted(set(names) - set(self.artifact.names))

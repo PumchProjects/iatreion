@@ -16,6 +16,7 @@ BASELINE_FINAL_MODEL_NAMES = {
 class BasicRunner(Runner):
     def __init__(self, model_cls: type[Model], config: ModelConfig) -> None:
         super().__init__(model_cls, config)
+        config.register_log_dir(self.model_name, folder_name=config.log_folder_name)
         self.model = model_cls(config)
 
     @property

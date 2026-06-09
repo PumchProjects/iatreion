@@ -17,6 +17,3 @@ class TabPFNConfig(ModelConfig):
 
     n_jobs: int = 4
     'Number of worker processes to use for the preprocessing. Default is 4.'
-
-    def __post_init__(self) -> None:
-        self.register_log_dir('tabpfn')

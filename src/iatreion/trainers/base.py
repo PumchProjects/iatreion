@@ -11,6 +11,7 @@ from iatreion.train_utils import (
     get_data_names,
     get_train_iterator,
 )
+from iatreion.train_utils.fusion import AvailableFusionArtifact
 from iatreion.utils import logger, task
 
 from .manifest import now_utc, write_manifest
@@ -47,6 +48,9 @@ class Trainer(ABC):
 
     def _uses_available_fusion_artifact(self) -> bool:
         return self.train_config.num_class == 2
+
+    def get_fusion_artifact(self, outer_fold: int) -> AvailableFusionArtifact | None:
+        return None
 
     @abstractmethod
     def train_step(self, ctx: TrainStepContext) -> TrainerReturn: ...
@@ -121,6 +125,7 @@ class Trainer(ABC):
                             recorders,
                             inner_recorders,
                             outer_recorders,
+                            fusion_artifact=self.get_fusion_artifact(outer_fold),
                         )
                     case 'calibrated-fusion':
                         record_calibrated_fusion(
@@ -129,6 +134,7 @@ class Trainer(ABC):
                             recorders,
                             inner_recorders,
                             outer_recorders,
+                            fusion_artifact=self.get_fusion_artifact(outer_fold),
                         )
 
         if not self.train_config.final:

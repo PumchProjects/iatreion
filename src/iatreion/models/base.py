@@ -6,6 +6,7 @@ from numpy.typing import NDArray
 
 from iatreion.configs import ImportanceMethod, ModelConfig
 from iatreion.train_utils import TrainStepContext
+from iatreion.train_utils.fusion import AvailableFusionArtifact
 from iatreion.train_utils.preprocessing import (
     TRANSFORM_ARTIFACT_FILE,
     DBEncoderArtifact,
@@ -49,6 +50,13 @@ class Model(ABC):
 
     def load_final(self, artifact_dir: Path, transform: DBEncoderArtifact) -> None:
         raise NotImplementedError
+
+    def get_fusion_artifact(self, outer_fold: int) -> AvailableFusionArtifact | None:
+        return None
+
+    @property
+    def reuses_fusion_artifacts(self) -> bool:
+        return False
 
     def predict_proba(self, X: NDArray) -> NDArray:
         return self._predict_proba(X)

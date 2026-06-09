@@ -244,7 +244,9 @@ def aggregate(
         last, fusion_artifact=fusion_artifact
     )
     thresholds: dict[str, float | None] = {'original': None}
-    if final is not None:
+    if fusion_artifact is not None:
+        thresholds |= fusion_artifact.thresholds
+    elif final is not None:
         final_mask = get_all_missing_mask(final.y_mask_list)
         y_pos_score = aggregate_pos_scores(final, fusion_artifact=fusion_artifact)
         thresholds |= get_thresholds(
@@ -289,12 +291,16 @@ def record_calibrated_concat(
     recorders: dict[str, Recorder],
     inner_recorders: dict[str, Recorder],
     outer_recorders: dict[str, Recorder],
+    *,
+    fusion_artifact: AvailableFusionArtifact | None = None,
 ) -> None:
     last = get_last_predictions(outer_recorders)
-    final = get_final_predictions(fold, inner_recorders)
-    fusion_artifact = fit_available_fusion_artifact(
-        config, fold, final, log_prefix='weights_calibrated_concat'
-    )
+    final = None
+    if fusion_artifact is None:
+        final = get_final_predictions(fold, inner_recorders)
+        fusion_artifact = fit_available_fusion_artifact(
+            config, fold, final, log_prefix='weights_calibrated_concat'
+        )
     aggregate(
         config,
         fold,
@@ -312,13 +318,16 @@ def record_calibrated_fusion(
     recorders: dict[str, Recorder],
     inner_recorders: dict[str, Recorder],
     outer_recorders: dict[str, Recorder],
+    *,
+    fusion_artifact: AvailableFusionArtifact | None = None,
 ) -> None:
     last = get_last_predictions(outer_recorders)
-    final = get_final_predictions(fold, inner_recorders)
-
-    fusion_artifact = fit_available_fusion_artifact(
-        config, fold, final, log_prefix='weights_calibrated_fusion'
-    )
+    final = None
+    if fusion_artifact is None:
+        final = get_final_predictions(fold, inner_recorders)
+        fusion_artifact = fit_available_fusion_artifact(
+            config, fold, final, log_prefix='weights_calibrated_fusion'
+        )
     aggregate(
         config,
         fold,

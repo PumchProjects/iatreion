@@ -50,7 +50,11 @@ def display_eval_result(
         config, model_cls, model_config_cls
     )
     try:
-        model_config.register_log_dir(model_name, file_name='eval.log')
+        model_config.register_log_dir(
+            model_name,
+            folder_name=model_config.dataset.name_str,
+            file_name='eval.log',
+        )
         logger.info(result)
         if fig is not None:
             dataset, train = model_config.dataset, model_config.train

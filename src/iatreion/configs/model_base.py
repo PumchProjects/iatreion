@@ -52,6 +52,10 @@ class ModelConfig:
     def tune(self) -> bool:
         return self.tune_config is not None
 
+    @property
+    def log_folder_name(self) -> str | None:
+        return None
+
     def get_exp_root(self, model_name: str) -> Path:
         return (
             self.train.log_root
@@ -82,7 +86,7 @@ class ModelConfig:
         if self.tune:
             return
         self.train._log_dir = self.get_exp_root(model_name)
-        if folder_name is not None and not self.train.final:
+        if folder_name is not None:
             self.train._log_dir /= folder_name
         self.close_log_handler()
         self._log_handler = add_file_handler(self.train._log_dir / file_name)

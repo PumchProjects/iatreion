@@ -303,7 +303,7 @@ When `--no-clinical-threshold` is set, the `*_clinical_recall` result is omitted
 
 ## Parser Re-evaluation
 
-Downstream tools use the RRL parser rather than the live PyTorch model. Parser-based internal re-evaluation is optional for checking exported rule files against the live-model nested CV output:
+Downstream tools use the RRL parser rather than the live PyTorch model. Parser-based internal re-evaluation is an optional parser parity check against the live-model nested CV output; it reuses the live nested fold-level artifacts from `logs/<dataset-names>/<group-names>/rrl/calibrated-fusion/fold_artifacts/outer_<k>/available_fusion.toml` and does not publish artifacts for final external validation:
 
 ```bash
 uv run iatreion train rrl-eval \
@@ -322,7 +322,7 @@ Use `--no-pp` when the exported rules should be evaluated directly on processed 
 
 Parser re-evaluation does not train a live RRL model and does not use a validation split, so `--val-size` belongs in live RRL training settings rather than `[train.rrl-eval]`.
 
-This command writes parser-based metrics under:
+This command writes parser-based parity metrics under:
 
 ```text
 logs/<dataset-names>/<group-names>/rrl-discrete/calibrated-fusion/
@@ -424,6 +424,8 @@ Use `uv run iatreion rrl-eval` to apply final RRL rule files to external data. T
 - `--index-name`: external sample ID column, required for modes that read external data.
 - `--label-name`: external label column, required for `-m eval` and `-m rule-or`; in other modes it is optional and only used to exclude a label column from features.
 - `-o/--output`: exported spreadsheet path for `batch` and `rule-or` modes; supported suffixes are `.xlsx`, `.csv`, and `.tsv`.
+
+For labeled external evaluation, logs and ROC plots are written under `logs/final/<group-names>/rrl-eval/<dataset-names>/`, so different modality lists do not overwrite each other.
 
 Example for symptom plus CSVD:
 

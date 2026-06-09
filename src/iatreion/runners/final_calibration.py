@@ -60,14 +60,7 @@ def fit_final_fusion_artifact(
             'train.n_outer_splits': len(fold_specs),
         },
     )
-    default_log = config.train._log_dir / 'train.log'
     config.register_log_dir(model_name, folder_name=target.folder_name)
-    if (
-        default_log != config.train._log_dir / 'train.log'
-        and default_log.is_file()
-        and default_log.stat().st_size == 0
-    ):
-        default_log.unlink()
 
     model: Model | None = None
     try:

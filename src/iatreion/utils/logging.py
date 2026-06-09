@@ -44,6 +44,10 @@ logger.addHandler(rich_handler)
 
 def add_file_handler(filename: Path, *, format: bool = True) -> FileHandler:
     filename.parent.mkdir(parents=True, exist_ok=True)
+    filename = filename.resolve()
+    for handler in list(logger.handlers):
+        if isinstance(handler, FileHandler) and Path(handler.baseFilename) == filename:
+            remove_file_handler(handler)
     file_handler = FileHandler(filename, mode='w', encoding='utf-8')
     if format:
         file_handler.setFormatter(Formatter('%(asctime)s %(levelname)-8s %(message)s'))

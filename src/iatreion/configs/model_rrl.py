@@ -107,6 +107,10 @@ class RrlConfig(ModelConfig):
     def folder_path(self) -> Path:
         return self.train._log_dir / 'events'
 
+    @property
+    def log_folder_name(self) -> str | None:
+        return self._folder_name
+
     def __post_init__(self) -> None:
         self.dataset._encode = True
         if self.missing_aware_mode == 'improved':
@@ -124,4 +128,3 @@ class RrlConfig(ModelConfig):
                 f'_vm{self.validation_metric}_esp{self.early_stop_patience}_esd{self.early_stop_min_delta}'
                 f'_ls{self.label_smoothing}_mgn{self.max_grad_norm}'
             )
-        self.register_log_dir('rrl', folder_name=self._folder_name)

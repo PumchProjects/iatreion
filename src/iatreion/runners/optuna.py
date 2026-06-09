@@ -40,7 +40,7 @@ from iatreion.utils import (
     task,
 )
 
-from .base import Runner
+from .base import Runner, model_name_for
 from .final_calibration import fit_final_fusion_artifact, publish_fusion_artifact
 
 type SearchSpaceKind = Literal['float', 'int', 'categorical']
@@ -295,11 +295,6 @@ def study_label(root: Path, candidate: str) -> str:
     return candidate
 
 
-def model_name_for(model_cls: type[Model]) -> str:
-    name = model_cls.__name__.removesuffix('Model')
-    return name[:1].lower() + name[1:]
-
-
 def make_training_config(
     base_config: ModelConfig,
     model_name: str,
@@ -317,6 +312,8 @@ def make_training_config(
         }
         | overrides,
     )
+    if folder_name is None:
+        folder_name = config.log_folder_name
     config.register_log_dir(model_name, folder_name=folder_name, file_name=file_name)
     return config
 

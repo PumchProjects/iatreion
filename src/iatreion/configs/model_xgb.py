@@ -13,6 +13,3 @@ class XgboostConfig(ModelConfig):
 
     num_round: int = 100
     'Set the number of boosting rounds.'
-
-    def __post_init__(self) -> None:
-        self.register_log_dir('xgboost')

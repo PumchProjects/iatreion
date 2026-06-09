@@ -13,6 +13,3 @@ class RandomForestConfig(ModelConfig):
 
     n_jobs: int = 4
     'Number of jobs to run in parallel. Default is 4.'
-
-    def __post_init__(self) -> None:
-        self.register_log_dir('random_forest')

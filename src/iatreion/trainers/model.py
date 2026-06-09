@@ -2,6 +2,7 @@ from typing import Any, override
 
 from iatreion.models import Model
 from iatreion.train_utils import FoldSpec, TrainStepContext
+from iatreion.train_utils.fusion import AvailableFusionArtifact
 from iatreion.utils import Timer, apply_overrides
 
 from .base import Trainer, TrainerReturn
@@ -23,6 +24,15 @@ class ModelTrainer(Trainer):
         self.base_config = model.config
         self.parameter_map = parameter_map or {}
 
+    def _uses_available_fusion_artifact(self) -> bool:
+        return (
+            super()._uses_available_fusion_artifact()
+            and not self.model.reuses_fusion_artifacts
+        )
+
+    def get_fusion_artifact(self, outer_fold: int) -> AvailableFusionArtifact | None:
+        return self.model.get_fusion_artifact(outer_fold)
+
     def _get_overrides(self, ctx: TrainStepContext) -> dict[str, Any]:
         outer_params = self.parameter_map.get(ctx.outer_fold)
         if isinstance(outer_params, dict):
@@ -43,14 +53,6 @@ class ModelTrainer(Trainer):
 
         log_dir = self.train_config._log_dir
         config = apply_overrides(self.base_config, overrides)
-        transient_log = config.train._log_dir / 'train.log'
-        config.close_log_handler()
-        if (
-            transient_log != log_dir / 'train.log'
-            and transient_log.is_file()
-            and transient_log.stat().st_size == 0
-        ):
-            transient_log.unlink()
         config.train._log_dir = log_dir
         self.train_config._log_dir = log_dir
         self.model.config = config
