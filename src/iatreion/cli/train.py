@@ -8,6 +8,7 @@ from iatreion.configs import (
     LimiXConfig,
     ModelConfig,
     RandomForestConfig,
+    ResultReplayConfig,
     RrlConfig,
     TabPFNConfig,
     XgboostConfig,
@@ -19,7 +20,7 @@ from iatreion.models import (
     RandomForestModel,
     XgboostModel,
 )
-from iatreion.runners import BasicRunner, OptunaRunner
+from iatreion.runners import BasicRunner, OptunaRunner, ResultReplayRunner
 from iatreion.utils import progress
 
 sub_app = App(name='train', help='Train a model.')
@@ -81,3 +82,10 @@ def limix(*, config: LimiXConfig) -> None:
 def rrl_eval(*, config: DiscreteRrlConfig) -> None:
     """Evaluate trained RRL models."""
     train(DiscreteRrlModel, config)
+
+
+@sub_app.command(sort_key=next(counter))
+def result_replay(*, config: ResultReplayConfig) -> None:
+    """Replay saved result probabilities and refit calibrated-fusion artifacts."""
+    with progress:
+        ResultReplayRunner(config).run()

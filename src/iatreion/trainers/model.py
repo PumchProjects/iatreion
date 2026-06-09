@@ -67,6 +67,10 @@ class ModelTrainer(Trainer):
             ctx.test_data[1],
             y_score,
             complexity,
+            sample_id=ctx.test_index.astype(str).to_numpy(),
+            outer_fold=ctx.outer_fold,
+            inner_fold=ctx.inner_fold,
+            kind='inner' if ctx.is_inner else 'outer',
             test_mask=ctx.test_mask,
         )
 

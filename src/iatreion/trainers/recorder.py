@@ -28,6 +28,10 @@ class PredictionRecord:
     pred: NDArray
     score: NDArray
     mask: NDArray
+    sample_id: NDArray
+    outer_fold: NDArray
+    inner_fold: NDArray
+    kind: NDArray
 
     @cached_property
     def pos_score(self) -> NDArray:
@@ -40,6 +44,10 @@ class PredictionRecord:
             pred=np.concatenate([record.pred for record in lst]),
             score=np.concatenate([record.score for record in lst]),
             mask=np.concatenate([record.mask for record in lst]),
+            sample_id=np.concatenate([record.sample_id for record in lst]),
+            outer_fold=np.concatenate([record.outer_fold for record in lst]),
+            inner_fold=np.concatenate([record.inner_fold for record in lst]),
+            kind=np.concatenate([record.kind for record in lst]),
         )
 
     def __getitem__(self, index: NDArray) -> Self:
@@ -48,6 +56,10 @@ class PredictionRecord:
             pred=self.pred[index],
             score=self.score[index],
             mask=self.mask[index],
+            sample_id=self.sample_id[index],
+            outer_fold=self.outer_fold[index],
+            inner_fold=self.inner_fold[index],
+            kind=self.kind[index],
         )
 
     def observed(self) -> Self:
@@ -59,6 +71,10 @@ class PredictionRecord:
             'y_pred': self.pred,
             'y_score': self.score,
             'y_mask': self.mask,
+            'sample_id': self.sample_id,
+            'outer_fold': self.outer_fold,
+            'inner_fold': self.inner_fold,
+            'kind': self.kind,
         }
 
 
@@ -68,6 +84,10 @@ class TrainerReturn:
     y_true: NDArray
     y_score: NDArray
     complexity: dict[str, float | tuple[float, str]] = field(default_factory=dict)
+    sample_id: NDArray | None = None
+    outer_fold: int | NDArray = 0
+    inner_fold: int | NDArray = 0
+    kind: str | NDArray = 'unknown'
     y_mask: NDArray = field(init=False)
     y_pred: NDArray = field(init=False)
     _: KW_ONLY
@@ -84,9 +104,38 @@ class TrainerReturn:
             self.y_pred = (self.y_score[:, 1] >= self.threshold).astype(int)
         else:
             self.y_pred = self.y_score.argmax(axis=1)
+        n = self.y_true.shape[0]
+        if self.sample_id is None:
+            self.sample_id = np.arange(n).astype(str)
+        else:
+            self.sample_id = np.asarray(self.sample_id, dtype=str)
+        self.outer_fold = (
+            np.full(n, self.outer_fold)
+            if np.isscalar(self.outer_fold)
+            else np.asarray(self.outer_fold, dtype=int)
+        )
+        self.inner_fold = (
+            np.full(n, self.inner_fold)
+            if np.isscalar(self.inner_fold)
+            else np.asarray(self.inner_fold, dtype=int)
+        )
+        self.kind = (
+            np.full(n, self.kind, dtype=str)
+            if isinstance(self.kind, str)
+            else np.asarray(self.kind, dtype=str)
+        )
 
     def get_prediction(self) -> PredictionRecord:
-        return PredictionRecord(self.y_true, self.y_pred, self.y_score, self.y_mask)
+        return PredictionRecord(
+            self.y_true,
+            self.y_pred,
+            self.y_score,
+            self.y_mask,
+            self.sample_id,
+            self.outer_fold,
+            self.inner_fold,
+            self.kind,
+        )
 
 
 @dataclass

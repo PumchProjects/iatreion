@@ -10,7 +10,10 @@ from iatreion.models import Model
 from iatreion.models.base import get_final_artifact_dir, get_transform_artifact_path
 from iatreion.preprocessors import get_preprocessors
 from iatreion.train_utils import make_data_labels
-from iatreion.train_utils.fusion import FUSION_ARTIFACT_FILE, AvailableFusionArtifact
+from iatreion.train_utils.fusion import (
+    AvailableFusionArtifact,
+    get_published_fusion_artifact_path,
+)
 from iatreion.train_utils.preprocessing import DBEncoderArtifact
 from iatreion.trainers import Recorder, TrainerReturn
 from iatreion.utils import write_spreadsheet
@@ -25,7 +28,10 @@ def _combined_index(data: list[pd.DataFrame]) -> pd.Index:
 
 def _load_fusion_artifact(model_config: ModelConfig) -> AvailableFusionArtifact:
     artifact = AvailableFusionArtifact.load(
-        model_config.train._log_dir / FUSION_ARTIFACT_FILE
+        get_published_fusion_artifact_path(
+            model_config.train._log_dir,
+            list(model_config.dataset.names),
+        )
     )
     if artifact.labels != model_config.train.group_labels:
         raise IatreionException(
@@ -174,10 +180,11 @@ def get_baseline_eval_result(
         TrainerReturn(0.0, y_true, y_score, threshold=artifact.default_threshold)
     )
     fig = recorder.roc.fig if train_config.plot_roc else None
-    summary = (
-        'Final calibrated-fusion baseline evaluation\n'
-        f'Artifact: {model_config.train._log_dir / FUSION_ARTIFACT_FILE}'
+    artifact_path = get_published_fusion_artifact_path(
+        model_config.train._log_dir,
+        list(model_config.dataset.names),
     )
+    summary = f'Final calibrated-fusion baseline evaluation\nArtifact: {artifact_path}'
     return f'{summary}\n\n{eval_result}', fig, model_config
 
 

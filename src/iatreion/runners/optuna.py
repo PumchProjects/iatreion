@@ -201,7 +201,7 @@ class TuningTarget:
         return {
             'importance_methods': [],
             'train.aggregate': self.aggregate,
-            'train.eval_names': self.eval_names,
+            'train._eval_names': self.eval_names,
             'train.final': False,
             'train.n_outer_splits': n_folds,
         }
@@ -801,7 +801,11 @@ class OptunaRunner(Runner):
     ) -> None:
         config = self._training_config({'train.final': True})
         if artifact is not None:
-            publish_fusion_artifact(artifact, config.train._log_dir)
+            publish_fusion_artifact(
+                artifact,
+                config.train._log_dir,
+                list(config.dataset.names),
+            )
 
         model: Model | None = None
         try:

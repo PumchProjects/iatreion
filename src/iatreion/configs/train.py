@@ -101,10 +101,7 @@ and combine available modalities with learned non-negative late-fusion weights.
     )
     'Supervised feature-selection settings.'
 
-    eval_names: Annotated[list[str], Parameter(consume_multiple=True)] = field(
-        default_factory=list
-    )
-    'Optional subset of modalities to evaluate/fuse while keeping splits based on all input modalities.'
+    _eval_names: list[str] = field(default_factory=list)
 
     n_outer_splits: int = 5
     'Number of splits for outer cross-validation.'
@@ -289,6 +286,10 @@ For discrete RRL, validation set is used for optimization when val_size is set.
     def ref_name_str(self) -> str:
         # HACK: Don't include `preprocess` here since RRL needs preprocessed data while discrete RRL doesn't
         return self.aggregate
+
+    @property
+    def eval_names(self) -> list[str]:
+        return self._eval_names
 
     @property
     def eval_name_str(self) -> str:

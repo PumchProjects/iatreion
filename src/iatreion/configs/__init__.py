@@ -3,6 +3,7 @@ from .dataset import DataName, DatasetConfig
 from .feature_selection import FeatureSelectionConfig
 from .model_base import FoldScope, ImportanceMethod, ModelConfig
 from .model_limix import LimiXConfig
+from .model_result_replay import ResultReplayConfig, SourceModelName
 from .model_rf import RandomForestConfig
 from .model_rrl import RrlConfig
 from .model_rrl_discrete import DiscreteRrlConfig

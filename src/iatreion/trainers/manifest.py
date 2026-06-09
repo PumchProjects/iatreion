@@ -12,13 +12,10 @@ from numbers import Integral, Real
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 from iatreion.configs import ModelConfig
 from iatreion.utils import load_dict, save_dict
 
 MANIFEST_FILE = 'manifest.toml'
-SPLITS_FILE = 'splits.npz'
 SKIPPED_CONFIG_FIELDS = {'_log_handler'}
 
 
@@ -193,53 +190,16 @@ def artifact_files(root: Path) -> list[dict[str, Any]]:
     return [file_record(path, base=root) for path in sorted(paths)]
 
 
-def flatten_ids(rows: list[list[str]]) -> tuple[np.ndarray, np.ndarray]:
-    offsets = [0]
-    flat: list[str] = []
-    for row in rows:
-        flat.extend(row)
-        offsets.append(len(flat))
-    return np.asarray(flat, dtype=str), np.asarray(offsets, dtype=np.int64)
-
-
-def write_splits(root: Path, splits: list[dict[str, Any]]) -> Path:
-    root.mkdir(parents=True, exist_ok=True)
-    path = root / SPLITS_FILE
-    train_ids, train_offsets = flatten_ids([split['train_ids'] for split in splits])
-    val_ids, val_offsets = flatten_ids([split['val_ids'] for split in splits])
-    test_ids, test_offsets = flatten_ids([split['test_ids'] for split in splits])
-    np.savez_compressed(
-        path,
-        name=np.asarray([split['name'] for split in splits], dtype=str),
-        kind=np.asarray([split['kind'] for split in splits], dtype=str),
-        outer_fold=np.asarray(
-            [split['outer_fold'] for split in splits], dtype=np.int64
-        ),
-        inner_fold=np.asarray(
-            [split['inner_fold'] for split in splits], dtype=np.int64
-        ),
-        train_ids=train_ids,
-        train_offsets=train_offsets,
-        val_ids=val_ids,
-        val_offsets=val_offsets,
-        test_ids=test_ids,
-        test_offsets=test_offsets,
-    )
-    return path
-
-
 def write_manifest(
     config: ModelConfig,
     *,
     started_at: str,
-    splits: list[dict[str, Any]],
     objectives: Mapping[str, float],
     parameter_map: Mapping[Any, Any],
 ) -> Path:
     git = git_info()
     repo_root = Path(git['root'])
     root = config.train._log_dir
-    split_path = write_splits(root, splits)
     manifest = {
         'run': {
             'started_at': started_at,
@@ -256,7 +216,6 @@ def write_manifest(
         'dataset_files': dataset_files(config, repo_root),
         'hyperparameters': dataclass_dict(config),
         'selected_hyperparameters': parameter_map,
-        'splits': file_record(split_path, base=root),
         'metrics': dict(objectives),
         'artifacts': artifact_files(root),
     }

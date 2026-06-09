@@ -15,9 +15,10 @@ from iatreion.configs import DataName, DiscreteRrlConfig, ZeroMeanFallback
 from iatreion.exceptions import IatreionException
 from iatreion.train_utils import TrainStepContext
 from iatreion.train_utils.fusion import (
-    FUSION_ARTIFACT_FILE,
     AvailableFusionArtifact,
     ModalityCalibrator,
+    get_published_fusion_artifact_path,
+    get_run_fusion_artifact_path,
 )
 from iatreion.train_utils.imputation import (
     SimpleImputerArtifact,
@@ -525,9 +526,14 @@ class DiscreteRrlModel(Model):
     @property
     def artifact(self) -> AvailableFusionArtifact:
         if self._artifact is None:
-            self._artifact = AvailableFusionArtifact.load(
-                self.config.rrl_root / FUSION_ARTIFACT_FILE
+            path = (
+                get_published_fusion_artifact_path(
+                    self.config.rrl_root, list(self.config.dataset.names)
+                )
+                if self.config.train.final
+                else get_run_fusion_artifact_path(self.config.rrl_root)
             )
+            self._artifact = AvailableFusionArtifact.load(path)
         return self._artifact
 
     def _validate_artifact_names(self, names: list[DataName]) -> None:

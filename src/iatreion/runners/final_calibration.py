@@ -6,7 +6,10 @@ from typing import Any
 from iatreion.configs import ModelConfig
 from iatreion.models import Model
 from iatreion.train_utils import get_cv_fold_specs, get_data_names, read_data
-from iatreion.train_utils.fusion import FUSION_ARTIFACT_FILE
+from iatreion.train_utils.fusion import (
+    get_published_fusion_artifact_path,
+    get_run_fusion_artifact_path,
+)
 from iatreion.trainers import ModelTrainer
 from iatreion.utils import apply_overrides
 
@@ -29,9 +32,7 @@ def get_final_calibration_target(config: ModelConfig) -> FinalCalibrationTarget:
     return FinalCalibrationTarget(
         aggregate='average',
         eval_names=names,
-        folder_name=(
-            'all' if not config.train.eval_names else config.train.eval_name_str
-        ),
+        folder_name=config.train.eval_name_str or config.dataset.name_str,
     )
 
 
@@ -53,7 +54,7 @@ def fit_final_fusion_artifact(
             'study_name': None,
             'tune_config': None,
             'train.aggregate': target.aggregate,
-            'train.eval_names': target.eval_names,
+            'train._eval_names': target.eval_names,
             'train.final': False,
             'train.log_root': train.log_root / 'final-calibration',
             'train.n_outer_splits': len(fold_specs),
@@ -82,11 +83,13 @@ def fit_final_fusion_artifact(
             model.close()
         config.close_log_handler()
 
-    return config.train._log_dir / FUSION_ARTIFACT_FILE
+    return get_run_fusion_artifact_path(config.train._log_dir)
 
 
-def publish_fusion_artifact(source: Path, target_root: Path) -> Path:
-    target = target_root / FUSION_ARTIFACT_FILE
-    target.parent.mkdir(parents=True, exist_ok=True)
-    copyfile(source, target)
-    return target
+def publish_fusion_artifact(
+    source: Path, target_root: Path, subset_names: list[str]
+) -> Path:
+    subset_target = get_published_fusion_artifact_path(target_root, subset_names)
+    subset_target.parent.mkdir(parents=True, exist_ok=True)
+    copyfile(source, subset_target)
+    return subset_target

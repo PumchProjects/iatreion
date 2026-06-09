@@ -1,4 +1,5 @@
 from .limix import LimiXWorkerClient, LimiXWorkerConfig
+from .results import ResultBundle, ResultRecord, ResultStore
 from .splitter import (
     FoldSpec,
     TrainStepContext,

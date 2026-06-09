@@ -38,7 +38,11 @@ class BasicRunner(Runner):
             self.base_config,
             model_name,
         )
-        publish_fusion_artifact(source, self.base_config.train._log_dir)
+        publish_fusion_artifact(
+            source,
+            self.base_config.train._log_dir,
+            list(self.base_config.dataset.names),
+        )
 
     @override
     def run(self) -> None:

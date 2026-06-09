@@ -11,10 +11,29 @@ from iatreion.exceptions import IatreionException
 from iatreion.utils import load_dict, save_dict
 
 FUSION_ARTIFACT_FILE = 'available_fusion.toml'
+FUSION_ARTIFACT_DIR = 'fusion'
 _PROB_EPS = 1e-6
 _FUSION_SCHEMA_VERSION = 2
 _FUSION_POLICY = 'learned_global_weights'
 _WEIGHT_OBJECTIVE = 'log_loss'
+
+
+def get_fusion_subset_key(names: list[str]) -> str:
+    return '_'.join(names)
+
+
+def get_run_fusion_artifact_path(root: Path) -> Path:
+    return root / FUSION_ARTIFACT_FILE
+
+
+def get_fold_fusion_artifact_path(root: Path, outer_fold: int) -> Path:
+    return root / 'fold_artifacts' / f'outer_{outer_fold}' / FUSION_ARTIFACT_FILE
+
+
+def get_published_fusion_artifact_path(root: Path, names: list[str]) -> Path:
+    return (
+        root / FUSION_ARTIFACT_DIR / get_fusion_subset_key(names) / FUSION_ARTIFACT_FILE
+    )
 
 
 def clip_probability(y_pos_score: NDArray) -> NDArray:

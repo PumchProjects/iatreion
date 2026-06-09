@@ -5,9 +5,10 @@ from numpy.typing import NDArray
 
 from iatreion.configs import TrainConfig
 from iatreion.train_utils.fusion import (
-    FUSION_ARTIFACT_FILE,
     AvailableFusionArtifact,
+    get_fold_fusion_artifact_path,
     get_operating_thresholds,
+    get_run_fusion_artifact_path,
 )
 from iatreion.utils import logger
 
@@ -21,6 +22,10 @@ class LastPredictions:
     y_mask_list: list[NDArray]
     names: list[str]
     time: float
+    sample_id: NDArray
+    outer_fold: NDArray
+    inner_fold: NDArray
+    kind: NDArray
 
 
 def get_last_predictions(named_recorders: dict[str, Recorder]) -> LastPredictions:
@@ -34,8 +39,18 @@ def get_last_predictions(named_recorders: dict[str, Recorder]) -> LastPrediction
         y_score_list.append(child.result.y_all[-1].score)
         y_mask_list.append(child.result.y_all[-1].mask)
     time = sum(time_list)
-    y_true = child.result.y_all[-1].true
-    return LastPredictions(y_true, y_score_list, y_mask_list, names, time)
+    record = child.result.y_all[-1]
+    return LastPredictions(
+        record.true,
+        y_score_list,
+        y_mask_list,
+        names,
+        time,
+        record.sample_id,
+        record.outer_fold,
+        record.inner_fold,
+        record.kind,
+    )
 
 
 @dataclass
@@ -110,6 +125,7 @@ def fit_available_fusion_artifact(
         final.y_pos_score_list,
         final.y_mask_list,
     )
+    artifact.save(get_fold_fusion_artifact_path(config._log_dir, fold))
     log_available_fusion_artifact(config, f'{log_prefix}_{fold}', artifact)
     return artifact
 
@@ -138,7 +154,7 @@ def save_available_fusion_artifact(
         final.y_pos_score_list,
         final.y_mask_list,
     )
-    artifact.save(config._log_dir / FUSION_ARTIFACT_FILE)
+    artifact.save(get_run_fusion_artifact_path(config._log_dir))
     log_available_fusion_artifact(config, 'weights_available_fusion_artifact', artifact)
 
 
@@ -243,6 +259,10 @@ def aggregate(
             last.time,
             last.y_true,
             y_score,
+            sample_id=last.sample_id,
+            outer_fold=last.outer_fold,
+            inner_fold=last.inner_fold,
+            kind=last.kind,
             threshold=threshold,
             test_mask=last_mask,
         )
