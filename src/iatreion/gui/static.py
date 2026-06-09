@@ -11,6 +11,14 @@ names_mapping: dict[DataName, str] = {
     'cbf': '核磁CBF',
     'csvd': '核磁CSVD',
     'volume-new-pct': '核磁体积',
+    'h-demo': '人口学',
+    'h-mmse': 'MMSE',
+    'h-moca': 'MoCA',
+    'h-mri': '核磁体积',
+    'h-mri-roi': '核磁体积（分区）',
+    'h-plasma': '血浆生物标记物',
+    'h-history': '病史',
+    'sh-apoe-labdata': 'APOE + 血化验',
 }
 
 data_mapping: dict[str, str] = {
@@ -21,19 +29,36 @@ data_mapping: dict[str, str] = {
     'cbf': '核磁CBF',
     'csvd': '核磁CSVD',
     'volume-new': '核磁体积',
+    'harmonized': '标准化',
 }
 
 names_list: list[list[str]] = [
-    ['symptom'],
-    ['s-screen-sum', 's-screen-sum-pct', 'composite-bin'],
-    ['biomarker'],
-    ['cbf', 'csvd', 'volume-new-pct'],
+    [
+        'symptom',
+        's-screen-sum',
+        's-screen-sum-pct',
+        'composite-bin',
+        'biomarker',
+        'cbf',
+        'csvd',
+        'volume-new-pct',
+    ],
+    [
+        'h-demo',
+        'h-mmse',
+        'h-moca',
+        'h-mri',
+        'h-mri-roi',
+        'h-plasma',
+        'h-history',
+        'sh-apoe-labdata',
+    ],
 ]
 
 groups_list: list[list[str]] = [
     ['a', 'c', '@ac', '@abc', 'l', '@dgn', 'o', '@deghijklmnop', '@defghijklmnopq'],
     ['1', '2', 'f'],
-    ['A<60', 'A<60C<60', 'F<60', 'A>60', 'A>60C>60', 'F>60'],
+    ['A+', 'A-', 'T+', 'T-', 'fast', 'slow'],
 ]
 
 groups_mapping = {
@@ -53,14 +78,14 @@ groups_mapping = {
     '@dgn': 'FTLD',
     'dgn': 'FTLD',
     'o': 'VAD',
-    'A<60': 'EOAD (<60)',
-    'A>60': 'LOAD (>60)',
-    'F<60': 'HC (<60)',
-    'F>60': 'HC (>60)',
-    'A<60C<60': 'AD + AD-mix (<60)',
-    'A>60C>60': 'AD + AD-mix (>60)',
     '1': 'Aβ+',
     '2': 'Aβ-',
+    'A+': 'A+',
+    'A-': 'A-',
+    'T+': 'T+',
+    'T-': 'T-',
+    'fast': '快进展',
+    'slow': '慢进展',
 }
 
 keep_mapping: dict[Literal['first', 'last'], str] = {
