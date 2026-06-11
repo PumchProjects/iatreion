@@ -11,8 +11,11 @@ from iatreion.rrl.experiment import (
 )
 from iatreion.rrl.rrl.models import RRL
 from iatreion.train_utils import TrainStepContext
-from iatreion.train_utils.feature_selection import get_feature_selection_path
-from iatreion.train_utils.imputation import get_simple_imputer_path
+from iatreion.train_utils.artifacts import (
+    get_rrl_feature_selection_path,
+    get_rrl_rule_path,
+    get_rrl_simple_imputer_path,
+)
 from iatreion.utils import set_seed_torch
 
 from .base import Model
@@ -48,14 +51,14 @@ class RrlModel(Model):
         set_seed_torch(self.config.train.seed)
         train_model(self.config, self.save_model_callback, ctx)
         self.load_model()
-        self.rule2weights = print_rules(self.config, ctx, self.model, self.metrics)
-        ctx.db_enc.save_feature_selection(
-            get_feature_selection_path(self.config.train._log_dir / ctx.rrl_file)
+        assert self.model is not None
+        rule_path = get_rrl_rule_path(self.config.train._log_dir, ctx)
+        self.rule2weights = print_rules(
+            self.config, ctx, self.model, self.metrics, rule_path
         )
+        ctx.db_enc.save_feature_selection(get_rrl_feature_selection_path(rule_path))
         if self.config.missing_aware_mode == 'original':
-            imputer_path = get_simple_imputer_path(
-                self.config.train._log_dir / ctx.rrl_file
-            )
+            imputer_path = get_rrl_simple_imputer_path(rule_path)
             ctx.db_enc.save_simple_imputer(imputer_path)
 
     @override

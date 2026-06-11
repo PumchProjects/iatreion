@@ -7,12 +7,6 @@ import pandas as pd
 from iatreion.exceptions import IatreionException
 from iatreion.utils import load_dict, save_dict
 
-SIMPLE_IMPUTER_SUFFIX = '.simple-imputer.toml'
-
-
-def get_simple_imputer_path(rrl_path: Path) -> Path:
-    return rrl_path.with_name(f'{rrl_path.stem}{SIMPLE_IMPUTER_SUFFIX}')
-
 
 @dataclass(frozen=True)
 class SimpleImputerColumn:

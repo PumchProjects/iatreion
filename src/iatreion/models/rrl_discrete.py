@@ -14,6 +14,11 @@ from scipy.special import softmax
 from iatreion.configs import DataName, DiscreteRrlConfig, ZeroMeanFallback
 from iatreion.exceptions import IatreionException
 from iatreion.train_utils import TrainStepContext
+from iatreion.train_utils.artifacts import (
+    get_final_rrl_rule_path,
+    get_rrl_rule_path,
+    get_rrl_simple_imputer_path,
+)
 from iatreion.train_utils.fusion import (
     AvailableFusionArtifact,
     ModalityCalibrator,
@@ -21,10 +26,7 @@ from iatreion.train_utils.fusion import (
     get_published_fusion_artifact_path,
     get_run_fusion_artifact_path,
 )
-from iatreion.train_utils.imputation import (
-    SimpleImputerArtifact,
-    get_simple_imputer_path,
-)
+from iatreion.train_utils.imputation import SimpleImputerArtifact
 from iatreion.utils import decode_string
 
 from .base import Model
@@ -349,7 +351,7 @@ class Rrl:
         self.imputer: SimpleImputerArtifact | None = (
             None
             if self.tau is not None
-            else SimpleImputerArtifact.load(get_simple_imputer_path(file))
+            else SimpleImputerArtifact.load(get_rrl_simple_imputer_path(file))
         )
 
         self.labels, self.biases, schema = self._parse_table_header(headers)
@@ -559,13 +561,12 @@ class DiscreteRrlModel(Model):
         )
 
     def get_model(self, ctx: TrainStepContext) -> Rrl:
-        return Rrl(self.config.rrl_root / ctx.rrl_file)
+        return Rrl(get_rrl_rule_path(self.config.rrl_root, ctx))
 
     def get_raw_models(self) -> list[Rrl]:
-        # HACK: Coupled with TrainStepContext.rrl_file
         # TODO: Unimplemented when TrainConfig.aggregate is 'concat'
         return [
-            Rrl(self.config.rrl_root / f'{name}.tsv', callback)
+            Rrl(get_final_rrl_rule_path(self.config.rrl_root, name), callback)
             for name, callback in zip(
                 self.config.dataset.names, self.callbacks, strict=True
             )

@@ -18,12 +18,6 @@ from iatreion.utils import save_dict
 if TYPE_CHECKING:
     from iatreion.configs import TrainConfig
 
-FEATURE_SELECTION_SUFFIX = '.feature-selection.toml'
-
-
-def get_feature_selection_path(rrl_path: Path) -> Path:
-    return rrl_path.with_name(f'{rrl_path.stem}{FEATURE_SELECTION_SUFFIX}')
-
 
 @dataclass(frozen=True)
 class FeatureSelectionArtifact:
@@ -38,23 +32,38 @@ class FeatureSelectionArtifact:
     params: dict[str, object]
     version: int = 1
 
+    @classmethod
+    def from_dict(cls, data: dict) -> FeatureSelectionArtifact:
+        return cls(
+            version=int(data['version']),
+            method=str(data['method']),
+            params=dict(data['params']),
+            keep_count=int(data['keep_count']),
+            keep_fraction=float(data['keep_fraction']),
+            score_aggregate=str(data['score_aggregate']),
+            selected_features=list(data['selected_features']),
+            dropped_features=list(data['dropped_features']),
+            ranked_features=list(data['ranked_features']),
+            scores={str(name): float(value) for name, value in data['scores'].items()},
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            'version': self.version,
+            'method': self.method,
+            'params': self.params,
+            'keep_count': self.keep_count,
+            'keep_fraction': self.keep_fraction,
+            'score_aggregate': self.score_aggregate,
+            'selected_features': self.selected_features,
+            'dropped_features': self.dropped_features,
+            'ranked_features': self.ranked_features,
+            'scores': self.scores,
+        }
+
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        save_dict(
-            {
-                'version': self.version,
-                'method': self.method,
-                'params': self.params,
-                'keep_count': self.keep_count,
-                'keep_fraction': self.keep_fraction,
-                'score_aggregate': self.score_aggregate,
-                'selected_features': self.selected_features,
-                'dropped_features': self.dropped_features,
-                'ranked_features': self.ranked_features,
-                'scores': self.scores,
-            },
-            path,
-        )
+        save_dict(self.to_dict(), path)
 
 
 class SupervisedFeatureSelector:

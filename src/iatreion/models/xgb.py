@@ -7,10 +7,14 @@ from numpy.typing import NDArray
 
 from iatreion.configs import XgboostConfig
 from iatreion.train_utils import TrainStepContext
+from iatreion.train_utils.artifacts import (
+    get_artifact_dir,
+    get_transform_artifact_path,
+)
 from iatreion.train_utils.preprocessing import DBEncoderArtifact
 from iatreion.utils import decode_string, encode_string, logger
 
-from .base import Model, get_final_artifact_dir, get_transform_artifact_path
+from .base import Model
 from .importance import ImportanceScore, calc_shap_importance
 
 XGBOOST_MODEL_FILE = 'model.json'
@@ -76,7 +80,7 @@ class XgboostModel(Model):
 
     @override
     def save_final(self, ctx: TrainStepContext) -> None:
-        artifact_dir = get_final_artifact_dir(self.config.train._log_dir, ctx.name)
+        artifact_dir = get_artifact_dir(self.config.train._log_dir, ctx.name)
         artifact_dir.mkdir(parents=True, exist_ok=True)
         ctx.db_enc.save_transform_artifact(
             get_transform_artifact_path(self.config.train._log_dir, ctx.name)

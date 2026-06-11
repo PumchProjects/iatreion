@@ -15,7 +15,6 @@ from .limix import LimiXWorkerClient
 
 type EncodedData = tuple[NDArray, NDArray]
 type OptionalEncodedData = tuple[NDArray | None, NDArray | None]
-TRANSFORM_ARTIFACT_FILE = 'transform.toml'
 
 
 @dataclass(slots=True)
@@ -46,12 +45,14 @@ class DBEncoderArtifact:
     missing_value_strategy: str
     normalize_continuous: bool
     discrete_processing: str
+    feature_selection: FeatureSelectionArtifact | None = None
     simple_imputer: SimpleImputerArtifact | None = None
-    version: int = 1
+    version: int = 2
 
     @classmethod
     def load(cls, path: Path) -> 'DBEncoderArtifact':
         data = load_dict(path)
+        feature_selection = data.get('feature_selection')
         simple_imputer = data.get('simple_imputer')
         return cls(
             version=int(data['version']),
@@ -85,6 +86,11 @@ class DBEncoderArtifact:
             missing_value_strategy=str(data['missing_value_strategy']),
             normalize_continuous=bool(data['normalize_continuous']),
             discrete_processing=str(data['discrete_processing']),
+            feature_selection=(
+                None
+                if feature_selection is None
+                else FeatureSelectionArtifact.from_dict(feature_selection)
+            ),
             simple_imputer=(
                 None
                 if simple_imputer is None
@@ -117,6 +123,8 @@ class DBEncoderArtifact:
             'normalize_continuous': self.normalize_continuous,
             'discrete_processing': self.discrete_processing,
         }
+        if self.feature_selection is not None:
+            data['feature_selection'] = self.feature_selection.to_dict()
         if self.simple_imputer is not None:
             data['simple_imputer'] = self.simple_imputer.to_dict()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -481,6 +489,7 @@ class DBEncoder:
             missing_value_strategy=self.train.missing_value_strategy,
             normalize_continuous=self.train.normalize_continuous,
             discrete_processing=self.train.discrete_processing,
+            feature_selection=self.feature_selection,
             simple_imputer=self.simple_imputer,
         )
 

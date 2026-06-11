@@ -1,5 +1,6 @@
 from collections import defaultdict
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -129,10 +130,12 @@ def print_rules(
     ctx: TrainStepContext,
     rrl: RRL,
     metrics: tuple[float, ...],
+    rule_path: Path,
 ) -> Any:
     train_loader = get_data_loader(args, *ctx.train_data)
     db_enc = ctx.db_enc
-    with open(args.train._log_dir / ctx.rrl_file, 'w', encoding='utf-8') as rrl_file:
+    rule_path.parent.mkdir(parents=True, exist_ok=True)
+    with rule_path.open('w', encoding='utf-8') as rrl_file:
         rule2weights = rrl.rule_print(
             db_enc.X_fname,
             db_enc.X_compl_fname,

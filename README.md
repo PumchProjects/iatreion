@@ -278,6 +278,7 @@ The important exported files include:
 | `train.log` | Training log |
 | `rrl_<name>_<outer>_<inner>.tsv` | Exported RRL rule table for one modality/fold |
 | `rrl_<name>_<outer>_<inner>.feature-selection.toml` | Fold-fitted supervised feature-selection artifact when feature selection is enabled |
+| `rrl_<name>_<outer>_<inner>.simple-imputer.toml` | Fold-fitted simple-imputer artifact when original missing-aware RRL mode is enabled |
 | `train_avg_<result>.log` | Mean/std fold metrics |
 | `train_ci_<result>.log` | Bootstrap confidence intervals |
 | `results_<result>.npz` | Saved `y_true`, `y_pred`, `y_score`, `y_mask`, and fold metrics |
@@ -407,11 +408,15 @@ The final runner fits an internal OOF `available_fusion.toml` with the selected 
 logs/final/<group-names>/rrl/fusion/<dataset-names>/available_fusion.toml
 ```
 
-Final rule files are saved as:
+Final RRL artifacts are saved per modality as:
 
 ```text
-logs/final/<group-names>/rrl/<name>.tsv
+logs/final/<group-names>/rrl/artifacts/<name>/rules.tsv
+logs/final/<group-names>/rrl/artifacts/<name>/feature-selection.toml
+logs/final/<group-names>/rrl/artifacts/<name>/simple-imputer.toml
 ```
+
+The `feature-selection.toml` and `simple-imputer.toml` sidecars are written only when those preprocessing steps are enabled.
 
 ## External Validation
 
@@ -482,7 +487,7 @@ When `-o/--output` is omitted, `batch` writes `rrl_batch_result.xlsx` and `rule-
 
 ### Baseline External Validation
 
-Use `uv run iatreion eval xgboost` or `uv run iatreion eval random-forest` to apply final baseline models to external data. Baseline external validation always uses final calibrated-fusion artifacts: each requested modality must have `logs/final/<group-names>/<model>/artifacts/<name>/transform.toml` plus a saved model file, and `logs/final/<group-names>/<model>/fusion/<dataset-names>/available_fusion.toml` must exist for exactly the requested modality list. Labeled external-evaluation logs and ROC plots are written under `logs/final/<group-names>/<model>/eval/<dataset-names>/`. If the subset artifact is missing, the command fails instead of falling back to uncalibrated averaging. Final baseline fitting with `-f -a calibrated-fusion` writes the full-modality artifact; use final result replay to publish additional modality subsets.
+Use `uv run iatreion eval xgboost` or `uv run iatreion eval random-forest` to apply final baseline models to external data. Baseline external validation always uses final calibrated-fusion artifacts: each requested modality must have `logs/final/<group-names>/<model>/artifacts/<name>/transform.toml` plus a saved model file, and `logs/final/<group-names>/<model>/fusion/<dataset-names>/available_fusion.toml` must exist for exactly the requested modality list. The transform artifact contains the fitted preprocessing schema and, when enabled, embedded feature-selection and simple-imputer metadata. Labeled external-evaluation logs and ROC plots are written under `logs/final/<group-names>/<model>/eval/<dataset-names>/`. If the subset artifact is missing, the command fails instead of falling back to uncalibrated averaging. Final baseline fitting with `-f -a calibrated-fusion` writes the full-modality artifact; use final result replay to publish additional modality subsets.
 
 Example for labeled external XGBoost validation:
 
@@ -560,7 +565,7 @@ uv run iatreion train random-forest \
   --log-root logs
 ```
 
-The baseline outputs follow the same dataset/group/aggregate directory convention as other training commands for internal evaluation. Final artifacts used by `iatreion eval` are written under `logs/final/<group-names>/xgboost/` or `logs/final/<group-names>/random-forest/`, with per-modality artifacts in `artifacts/<name>/`; external-validation logs and ROC plots are written under each final model root's `eval/<dataset-names>/` subdirectory.
+The baseline outputs follow the same dataset/group/aggregate directory convention as other training commands for internal evaluation. Final artifacts used by `iatreion eval` are written under `logs/final/<group-names>/xgboost/` or `logs/final/<group-names>/random-forest/`, with per-modality artifacts in `artifacts/<name>/`; each `transform.toml` records the fitted preprocessing schema and embeds feature-selection or simple-imputer metadata when those steps are enabled, and external-validation logs and ROC plots are written under each final model root's `eval/<dataset-names>/` subdirectory.
 
 ## Figures and Tables
 

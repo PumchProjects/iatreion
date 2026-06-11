@@ -8,10 +8,10 @@ from matplotlib.figure import Figure
 from iatreion.configs import BaselineEvalConfig, ModelConfig
 from iatreion.exceptions import IatreionException
 from iatreion.models import Model
-from iatreion.models.base import get_final_artifact_dir, get_transform_artifact_path
 from iatreion.models.naming import model_name_for
 from iatreion.preprocessors import get_preprocessors
 from iatreion.train_utils import make_data_labels
+from iatreion.train_utils.artifacts import get_artifact_dir, get_transform_artifact_path
 from iatreion.train_utils.fusion import (
     AvailableFusionArtifact,
     get_published_fusion_artifact_path,
@@ -103,7 +103,7 @@ def _predict_module(
     name: str,
     frame: pd.DataFrame,
 ) -> tuple[pd.Series, pd.Series]:
-    artifact_dir = get_final_artifact_dir(model_config.train._log_dir, name)
+    artifact_dir = get_artifact_dir(model_config.train._log_dir, name)
     transform = DBEncoderArtifact.load(
         get_transform_artifact_path(model_config.train._log_dir, name)
     )
