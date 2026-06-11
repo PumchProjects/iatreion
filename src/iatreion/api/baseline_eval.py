@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -8,6 +9,7 @@ from iatreion.configs import BaselineEvalConfig, ModelConfig
 from iatreion.exceptions import IatreionException
 from iatreion.models import Model
 from iatreion.models.base import get_final_artifact_dir, get_transform_artifact_path
+from iatreion.models.naming import model_name_for
 from iatreion.preprocessors import get_preprocessors
 from iatreion.train_utils import make_data_labels
 from iatreion.train_utils.fusion import (
@@ -17,6 +19,15 @@ from iatreion.train_utils.fusion import (
 from iatreion.train_utils.preprocessing import DBEncoderArtifact
 from iatreion.trainers import Recorder, TrainerReturn
 from iatreion.utils import write_spreadsheet
+
+
+@dataclass(frozen=True)
+class BaselinePredictionResult:
+    result: pd.DataFrame
+    additional_data: list[pd.DataFrame]
+    group_names: pd.DataFrame | None
+    model_config: ModelConfig
+    artifact: AvailableFusionArtifact
 
 
 def _combined_index(data: list[pd.DataFrame]) -> pd.Index:
@@ -68,7 +79,9 @@ def _predict_labels(
 
 
 def _get_external_data(
-    config: BaselineEvalConfig, model_config_cls: type[ModelConfig]
+    config: BaselineEvalConfig,
+    model_config_cls: type[ModelConfig],
+    model_name: str,
 ) -> tuple[
     list[pd.DataFrame],
     list[pd.DataFrame],
@@ -76,6 +89,7 @@ def _get_external_data(
     ModelConfig,
 ]:
     process_config, model_config = config.make_configs(model_config_cls)
+    model_config.train._log_dir = model_config.get_exp_root(model_name)
     preprocessors = get_preprocessors(process_config)
     data = [preprocessor.get_data_outer() for preprocessor in preprocessors]
     additional_data = process_config._final_indices
@@ -116,9 +130,9 @@ def get_baseline_prediction_result(
     config: BaselineEvalConfig,
     model_cls: type[Model],
     model_config_cls: type[ModelConfig],
-) -> tuple[pd.DataFrame, list[pd.DataFrame], pd.DataFrame | None, ModelConfig]:
+) -> BaselinePredictionResult:
     data, additional_data, group_names, model_config = _get_external_data(
-        config, model_config_cls
+        config, model_config_cls, model_name_for(model_cls)
     )
     artifact = _load_fusion_artifact(model_config)
     names = list(model_config.dataset.names)
@@ -139,7 +153,13 @@ def get_baseline_prediction_result(
     )
     available_any = ~np.column_stack(y_mask_list).all(axis=1)
     result.loc[~available_any] = np.nan
-    return result, additional_data, group_names, model_config
+    return BaselinePredictionResult(
+        result,
+        additional_data,
+        group_names,
+        model_config,
+        artifact,
+    )
 
 
 def get_baseline_batched_result(
@@ -147,14 +167,11 @@ def get_baseline_batched_result(
     model_cls: type[Model],
     model_config_cls: type[ModelConfig],
 ) -> tuple[pd.DataFrame, ModelConfig]:
-    result, additional_data, _, model_config = get_baseline_prediction_result(
-        config, model_cls, model_config_cls
-    )
-    artifact = _load_fusion_artifact(model_config)
-    y_pred = _predict_labels(result, artifact)
-    probability = result.add_prefix('Probability ')
-    table = pd.concat(additional_data + [y_pred, probability], axis=1)
-    return table, model_config
+    prediction = get_baseline_prediction_result(config, model_cls, model_config_cls)
+    y_pred = _predict_labels(prediction.result, prediction.artifact)
+    probability = prediction.result.add_prefix('Probability ')
+    table = pd.concat(prediction.additional_data + [y_pred, probability], axis=1)
+    return table, prediction.model_config
 
 
 def get_baseline_eval_result(
@@ -162,13 +179,11 @@ def get_baseline_eval_result(
     model_cls: type[Model],
     model_config_cls: type[ModelConfig],
 ) -> tuple[str, Figure | None, ModelConfig]:
-    result, _, group_names, model_config = get_baseline_prediction_result(
-        config, model_cls, model_config_cls
-    )
+    prediction = get_baseline_prediction_result(config, model_cls, model_config_cls)
+    group_names = prediction.group_names
     assert group_names is not None
-    artifact = _load_fusion_artifact(model_config)
-    result = pd.concat([result, group_names], axis=1)
-    train_config = model_config.train
+    result = pd.concat([prediction.result, group_names], axis=1)
+    train_config = prediction.model_config.train
     X_df, y_df = make_data_labels(result, train_config, group_names.columns.to_list())
     available = ~X_df.isna().all(axis=1)
     X_df = X_df.loc[available]
@@ -177,15 +192,20 @@ def get_baseline_eval_result(
     y_score = X_df.to_numpy()
     recorder = Recorder(train_config)
     eval_result = recorder.record(
-        TrainerReturn(0.0, y_true, y_score, threshold=artifact.default_threshold)
+        TrainerReturn(
+            0.0,
+            y_true,
+            y_score,
+            threshold=prediction.artifact.default_threshold,
+        )
     )
     fig = recorder.roc.fig if train_config.plot_roc else None
     artifact_path = get_published_fusion_artifact_path(
-        model_config.train._log_dir,
-        list(model_config.dataset.names),
+        prediction.model_config.train._log_dir,
+        list(prediction.model_config.dataset.names),
     )
     summary = f'Final calibrated-fusion baseline evaluation\nArtifact: {artifact_path}'
-    return f'{summary}\n\n{eval_result}', fig, model_config
+    return f'{summary}\n\n{eval_result}', fig, prediction.model_config
 
 
 def save_baseline_batched_result_table(table: pd.DataFrame, path: str | Path) -> Path:

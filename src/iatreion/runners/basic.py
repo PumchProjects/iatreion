@@ -7,10 +7,7 @@ from iatreion.trainers import ModelTrainer
 from .base import Runner
 from .final_calibration import fit_final_fusion_artifact, publish_fusion_artifact
 
-BASELINE_FINAL_MODEL_NAMES = {
-    'RandomForestModel': 'random_forest',
-    'XgboostModel': 'xgboost',
-}
+BASELINE_FINAL_MODEL_NAMES = {'random-forest', 'xgboost'}
 
 
 class BasicRunner(Runner):
@@ -21,7 +18,10 @@ class BasicRunner(Runner):
 
     @property
     def _baseline_model_name(self) -> str | None:
-        return BASELINE_FINAL_MODEL_NAMES.get(self.model_cls.__name__)
+        model_name = self.model_name
+        if model_name in BASELINE_FINAL_MODEL_NAMES:
+            return model_name
+        return None
 
     def _fit_final_fusion_artifact(self) -> None:
         model_name = self._baseline_model_name

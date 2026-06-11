@@ -20,6 +20,7 @@ from optuna.trial import FrozenTrial, Trial, TrialState
 
 from iatreion.configs import ModelConfig
 from iatreion.models import Model
+from iatreion.models.naming import model_name_for
 from iatreion.train_utils import (
     FoldSpec,
     get_cv_fold_specs,
@@ -40,7 +41,7 @@ from iatreion.utils import (
     task,
 )
 
-from .base import Runner, model_name_for
+from .base import Runner
 from .final_calibration import fit_final_fusion_artifact, publish_fusion_artifact
 
 type SearchSpaceKind = Literal['float', 'int', 'categorical']

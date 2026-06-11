@@ -62,6 +62,7 @@ def read_csv(
     if dataset._encode:
         X_df.rename(columns=encode_string, inplace=True)
         f_df['name'] = f_df['name'].map(encode_string)
+        f_df['categories'] = f_df['categories'].map(encode_string, na_action='ignore')
 
     return X_df, y_df, f_df
 

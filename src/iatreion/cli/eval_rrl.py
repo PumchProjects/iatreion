@@ -101,11 +101,7 @@ def display_batched_result(config: RrlEvalConfig) -> None:
 
 def display_eval_result(config: RrlEvalConfig) -> None:
     result, fig, model_config = get_eval_result(config)
-    model_config.register_log_dir(
-        'rrl-parser',
-        folder_name=model_config.dataset.name_str,
-        file_name='eval.log',
-    )
+    model_config.register_eval_log_dir('rrl')
     logger.info(result)
     if fig is not None:
         dataset, train = model_config.dataset, model_config.train

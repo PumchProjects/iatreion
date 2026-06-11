@@ -330,7 +330,7 @@ logs/<dataset-names>/<group-names>/rrl-parser/calibrated-fusion/
 
 ## Result Replay Subset Fusion
 
-`uv run iatreion train result-replay` reads saved `results_<name>.npz` probability files from a source model (`rrl`, `xgboost`, or `random_forest`), aligns samples by the embedded sample IDs, and refits calibrated-fusion artifacts for the requested modality subset without retraining the source models. `-n/--names` should list the source modalities whose result files define the run, `--eval-names` selects the subset to fuse, and `-a/--aggregate` selects the source result directory for internal replay; final replay infers the source aggregate from the final-calibration rules.
+`uv run iatreion train result-replay` reads saved `results_<name>.npz` probability files from a source model (`rrl`, `xgboost`, or `random-forest`), aligns samples by the embedded sample IDs, and refits calibrated-fusion artifacts for the requested modality subset without retraining the source models. `-n/--names` should list the source modalities whose result files define the run, `--eval-names` selects the subset to fuse, and `-a/--aggregate` selects the source result directory for internal replay; final replay infers the source aggregate from the final-calibration rules.
 
 ```bash
 uv run iatreion train result-replay \
@@ -425,7 +425,7 @@ Use `uv run iatreion eval rrl` to apply final RRL rule files to external data. T
 - `--label-name`: external label column, required for `-m eval` and `-m rule-or`; in other modes it is optional and only used to exclude a label column from features.
 - `-o/--output`: exported spreadsheet path for `batch` and `rule-or` modes; supported suffixes are `.xlsx`, `.csv`, and `.tsv`.
 
-For labeled external evaluation, logs and ROC plots are written under `logs/final/<group-names>/rrl-parser/<dataset-names>/`, so different modality lists do not overwrite each other.
+For labeled external evaluation, logs and ROC plots are written under `logs/final/<group-names>/rrl/eval/<dataset-names>/`, so different modality lists do not overwrite each other.
 
 Example for symptom plus CSVD:
 
@@ -482,7 +482,7 @@ When `-o/--output` is omitted, `batch` writes `rrl_batch_result.xlsx` and `rule-
 
 ### Baseline External Validation
 
-Use `uv run iatreion eval xgboost` or `uv run iatreion eval random-forest` to apply final baseline models to external data. Baseline external validation always uses final calibrated-fusion artifacts: each requested modality must have `logs/final/<group-names>/<model>/artifacts/<name>/transform.toml` plus a saved model file, and `logs/final/<group-names>/<model>/fusion/<dataset-names>/available_fusion.toml` must exist for exactly the requested modality list. If the subset artifact is missing, the command fails instead of falling back to uncalibrated averaging. Final baseline fitting with `-f -a calibrated-fusion` writes the full-modality artifact; use final result replay to publish additional modality subsets.
+Use `uv run iatreion eval xgboost` or `uv run iatreion eval random-forest` to apply final baseline models to external data. Baseline external validation always uses final calibrated-fusion artifacts: each requested modality must have `logs/final/<group-names>/<model>/artifacts/<name>/transform.toml` plus a saved model file, and `logs/final/<group-names>/<model>/fusion/<dataset-names>/available_fusion.toml` must exist for exactly the requested modality list. Labeled external-evaluation logs and ROC plots are written under `logs/final/<group-names>/<model>/eval/<dataset-names>/`. If the subset artifact is missing, the command fails instead of falling back to uncalibrated averaging. Final baseline fitting with `-f -a calibrated-fusion` writes the full-modality artifact; use final result replay to publish additional modality subsets.
 
 Example for labeled external XGBoost validation:
 
@@ -504,7 +504,7 @@ uv run iatreion eval xgboost \
   -k last
 ```
 
-For unlabeled batch prediction, use `-m batch`; when `-o/--output` is omitted, the command writes `rrl_batch_result.xlsx`.
+For unlabeled batch prediction, use `-m batch`; when `-o/--output` is omitted, the command writes `baseline_batch_result.xlsx`.
 
 ## GUI
 
@@ -560,7 +560,7 @@ uv run iatreion train random-forest \
   --log-root logs
 ```
 
-The baseline outputs follow the same dataset/group/aggregate directory convention as other training commands for internal evaluation. Final artifacts used by `iatreion eval` are written under `logs/final/<group-names>/xgboost/` or `logs/final/<group-names>/random_forest/`, with per-modality artifacts in `artifacts/<name>/`.
+The baseline outputs follow the same dataset/group/aggregate directory convention as other training commands for internal evaluation. Final artifacts used by `iatreion eval` are written under `logs/final/<group-names>/xgboost/` or `logs/final/<group-names>/random-forest/`, with per-modality artifacts in `artifacts/<name>/`; external-validation logs and ROC plots are written under each final model root's `eval/<dataset-names>/` subdirectory.
 
 ## Figures and Tables
 

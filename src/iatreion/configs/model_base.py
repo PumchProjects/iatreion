@@ -65,6 +65,9 @@ class ModelConfig:
             / ('' if self.train.final else self.train.ref_name_str)
         )
 
+    def get_eval_root(self, model_name: str) -> Path:
+        return self.get_exp_root(model_name) / 'eval' / self.dataset.name_str
+
     @cached_property
     def rrl_root(self) -> Path:
         exp_root = self.get_exp_root('rrl')
@@ -90,6 +93,13 @@ class ModelConfig:
             self.train._log_dir /= folder_name
         self.close_log_handler()
         self._log_handler = add_file_handler(self.train._log_dir / file_name)
+
+    def register_eval_log_dir(self, model_name: str) -> None:
+        if self.tune:
+            return
+        self.train._log_dir = self.get_eval_root(model_name)
+        self.close_log_handler()
+        self._log_handler = add_file_handler(self.train._log_dir / 'eval.log')
 
     def close_log_handler(self) -> None:
         if self._log_handler is None:
