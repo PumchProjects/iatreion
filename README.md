@@ -4,18 +4,21 @@
 
 The name comes from Ancient Greek `ἰατρεῖον` ("clinic").
 
-This README documents the RRL workflow used for the dementia manuscript, with brief instructions for XGBoost and Random Forest baseline training.
+This README documents the workflow used for the dementia manuscript, including the RRL model, XGBoost and Random Forest baselines, external validation, and figure/table helpers.
 
 ## Overview
 
-The core pipeline is:
+The manuscript results can be reproduced from `configs/config.toml` with the command sequence in `scripts/pipeline.sh`. The rest of this README explains the same workflow step by step for inspection, debugging, and custom runs.
+
+The core workflow is:
 
 1. Install the package and dependencies with `uv`.
 2. Convert raw hospital spreadsheets into processed `.data`, `.info`, and `process_info.toml` files.
-3. Run nested internal RRL evaluation: each outer fold tunes modality-specific hyperparameters only inside its outer-training data, then evaluates the held-out outer test fold.
-4. Run final RRL tuning on all internal data with one-layer CV, fit the final modality-specific models on all internal data, and write the final fusion artifact.
-5. Validate final models on external data with the parser.
-6. Generate tables, ROC plots, rule waterfalls, or use the GUI.
+3. Run nested internal evaluation for RRL and baseline models: each outer fold tunes modality-specific hyperparameters only inside its outer-training data, then evaluates the held-out outer test fold.
+4. Run final tuning on all internal data with one-layer CV, fit the final modality-specific models on all internal data, and write final fusion artifacts.
+5. Publish modality-subset fusion artifacts with result replay.
+6. Validate final models on external data.
+7. Generate tables, ROC plots, rule waterfalls, or use the GUI.
 
 Most commands expose detailed help:
 
@@ -59,6 +62,23 @@ The main entry points are:
 uv run iatreion      # CLI
 uv run iatreion-gui  # GUI
 ```
+
+## Manuscript Reproduction
+
+Fill `configs/config.toml` with the local raw-data paths, preprocessing settings, labels, modality names, tuning files, log roots, and external-validation inputs for the manuscript run. Then execute:
+
+```bash
+bash scripts/pipeline.sh
+```
+
+The script first runs `process` to generate the processed internal data referenced by the config. It then runs the main modeling and external-validation command sequence for `xgboost`, `random-forest`, and `rrl`. For each model, it runs nested internal evaluation, final fitting, full-modality result replay, two manuscript modality-subset result replays, final subset-artifact publication, and external validation for the two subset definitions:
+
+```text
+h-demo h-mmse h-moca h-mri h-history sh-apoe-labdata
+h-demo h-mmse h-moca h-mri-roi h-history sh-apoe-labdata
+```
+
+It also runs `train rrl-parser --n-inner-splits 2 --n-outer-splits 2` as a parser parity/internal re-evaluation check. Figure and table commands are documented in the Figures and Tables section; `show` commands will be appended to `scripts/pipeline.sh` when the manuscript plotting workflow is finalized.
 
 ## Configuration Files
 
@@ -329,44 +349,6 @@ This command writes parser-based parity metrics under:
 logs/<dataset-names>/<group-names>/rrl-parser/calibrated-fusion/
 ```
 
-## Result Replay Subset Fusion
-
-`uv run iatreion train result-replay` reads saved `results_<name>.npz` probability files from a source model (`rrl`, `xgboost`, or `random-forest`), aligns samples by the embedded sample IDs, and refits calibrated-fusion artifacts for the requested modality subset without retraining the source models. `-n/--names` should list the source modalities whose result files define the run, `--eval-names` selects the subset to fuse, and `-a/--aggregate` selects the source result directory for internal replay; final replay infers the source aggregate from the final-calibration rules.
-
-```bash
-uv run iatreion train result-replay \
-  -p "<path-to-the-folder-storing-processed-data>" \
-  -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
-  --eval-names symptom csvd \
-  --label-name group_encrypted \
-  -g a c \
-  --positive-label c \
-  --clinical-threshold-label c --clinical-threshold-recall 0.6 \
-  -a calibrated-fusion \
-  --source-model rrl \
-  --log-root logs
-```
-
-For internal evaluation, result replay fits each outer fold's subset fusion artifact from the corresponding inner-CV result NPZ files and evaluates that artifact on the outer fold; it also fits a global OOF artifact for later inspection. Output is written under `logs/<dataset-names>/<group-names>/result-replay/<source-model>/<aggregate>/<subset-key>/`, with the global artifact at `available_fusion.toml` and fold artifacts under `fold_artifacts/outer_<k>/available_fusion.toml`.
-
-For final subset artifacts, first run final model fitting so `logs/final-calibration/<dataset-names>/<group-names>/<source-model>/average/<dataset-names>/results_<name>.npz` exists, then replay with `-f`:
-
-```bash
-uv run iatreion train result-replay \
-  -p "<path-to-the-folder-storing-processed-data>" \
-  -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
-  --eval-names symptom csvd \
-  --label-name group_encrypted \
-  -g a c \
-  --positive-label c \
-  --clinical-threshold-label c --clinical-threshold-recall 0.6 \
-  --source-model rrl \
-  --log-root logs \
-  -f
-```
-
-Final result replay writes metrics and its run-local artifact under `logs/final-calibration/<dataset-names>/<group-names>/result-replay/<source-model>/<source-aggregate>/<subset-key>/`, then publishes the subset artifact to `logs/final/<group-names>/<source-model>/fusion/<subset-key>/available_fusion.toml`. Samples missing all selected modalities are excluded from metric calculation.
-
 ## Final Model Fitting
 
 For external validation, run final tuning and final fitting on all internal data with `--tune-config -f`. The final command should match the internal nested-evaluation settings for source modalities, labels, groups, preprocessing, and aggregation; modality-subset fusion artifacts can then be published with result replay.
@@ -417,6 +399,44 @@ logs/final/<group-names>/rrl/artifacts/<name>/simple-imputer.toml
 ```
 
 The `feature-selection.toml` and `simple-imputer.toml` sidecars are written only when those preprocessing steps are enabled.
+
+## Result Replay Subset Fusion
+
+`uv run iatreion train result-replay` reads saved `results_<name>.npz` probability files from a source model (`rrl`, `xgboost`, or `random-forest`), aligns samples by the embedded sample IDs, and refits calibrated-fusion artifacts for the requested modality subset without retraining the source models. `-n/--names` should list the source modalities whose result files define the run, `--eval-names` selects the subset to fuse, and `-a/--aggregate` selects the source result directory for internal replay; final replay infers the source aggregate from the final-calibration rules.
+
+```bash
+uv run iatreion train result-replay \
+  -p "<path-to-the-folder-storing-processed-data>" \
+  -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
+  --eval-names symptom csvd \
+  --label-name group_encrypted \
+  -g a c \
+  --positive-label c \
+  --clinical-threshold-label c --clinical-threshold-recall 0.6 \
+  -a calibrated-fusion \
+  --source-model rrl \
+  --log-root logs
+```
+
+For internal evaluation, result replay fits each outer fold's subset fusion artifact from the corresponding inner-CV result NPZ files and evaluates that artifact on the outer fold; it also fits a global OOF artifact for later inspection. Output is written under `logs/<dataset-names>/<group-names>/result-replay/<source-model>/<aggregate>/<subset-key>/`, with the global artifact at `available_fusion.toml` and fold artifacts under `fold_artifacts/outer_<k>/available_fusion.toml`.
+
+For final subset artifacts, first run final model fitting so `logs/final-calibration/<dataset-names>/<group-names>/<source-model>/average/<dataset-names>/results_<name>.npz` exists, then replay with `-f`:
+
+```bash
+uv run iatreion train result-replay \
+  -p "<path-to-the-folder-storing-processed-data>" \
+  -n symptom s-screen-sum composite-bin biomarker cbf csvd volume-new-pct \
+  --eval-names symptom csvd \
+  --label-name group_encrypted \
+  -g a c \
+  --positive-label c \
+  --clinical-threshold-label c --clinical-threshold-recall 0.6 \
+  --source-model rrl \
+  --log-root logs \
+  -f
+```
+
+Final result replay writes metrics and its run-local artifact under `logs/final-calibration/<dataset-names>/<group-names>/result-replay/<source-model>/<source-aggregate>/<subset-key>/`, then publishes the subset artifact to `logs/final/<group-names>/<source-model>/fusion/<subset-key>/available_fusion.toml`. Samples missing all selected modalities are excluded from metric calculation.
 
 ## External Validation
 
@@ -485,42 +505,6 @@ For single-sample explanations, pass `--sample-id`.
 
 When `-o/--output` is omitted, `batch` writes `rrl_batch_result.xlsx` and `rule-or` writes `rrl_rule_or.tsv`.
 
-### Baseline External Validation
-
-Use `uv run iatreion eval xgboost` or `uv run iatreion eval random-forest` to apply final baseline models to external data. Baseline external validation always uses final calibrated-fusion artifacts: each requested modality must have `logs/final/<group-names>/<model>/artifacts/<name>/transform.toml` plus a saved model file, and `logs/final/<group-names>/<model>/fusion/<dataset-names>/available_fusion.toml` must exist for exactly the requested modality list. The transform artifact contains the fitted preprocessing schema and, when enabled, embedded feature-selection and simple-imputer metadata. Labeled external-evaluation logs and ROC plots are written under `logs/final/<group-names>/<model>/eval/<dataset-names>/`. If the subset artifact is missing, the command fails instead of falling back to uncalibrated averaging. Final baseline fitting with `-f -a calibrated-fusion` writes the full-modality artifact; use final result replay to publish additional modality subsets.
-
-Example for labeled external XGBoost validation:
-
-```bash
-uv run iatreion eval xgboost \
-  -n symptom csvd volume-new-pct \
-  --index-name "<sample-id-column>" \
-  --label-name "<label-column>" \
-  -g a c \
-  --positive-label c \
-  --log-root logs \
-  -p "<path-to-the-process-info-file>" \
-  --data.history "<path-to-the-spreadsheet-for-symptom-data>" \
-  --data.csvd "<path-to-the-spreadsheet-for-csvd-data>" \
-  --data.volume-new "<path-to-the-spreadsheet-for-mri-volume-data>" \
-  -v "<path-to-the-excel-file-storing-mean-and-std-for-mri-volume-data>" \
-  --vmri-change "<path-to-the-file-storing-column-name-changes-for-mri-volume-data>" \
-  -m eval \
-  -k last
-```
-
-For unlabeled batch prediction, use `-m batch`; when `-o/--output` is omitted, the command writes `baseline_batch_result.xlsx`.
-
-## GUI
-
-After final model fitting, launch:
-
-```bash
-uv run iatreion-gui
-```
-
-The GUI wraps the same parser API used by `iatreion eval rrl`. It can load final RRL models, select input files, export batch predictions and rule-OR tables, view active rules, and evaluate labeled external data.
-
 ## XGBoost and Random Forest Baselines
 
 XGBoost and Random Forest can be trained with the same processed `.data` and `.info` files as RRL. Their defaults can live in `[train.xgboost]` and `[train.random-forest]` in `configs/config.toml`; common fields such as `prefix`, `names`, `label-name`, `groups`, `positive-label`, `aggregate`, `use-clinical-threshold`, `clinical-threshold-label`, `clinical-threshold-recall`, `log-root`, and `tune-config` follow the same config/CLI override rules described above. For external validation, train final baseline models with `-f -a calibrated-fusion` so the final log directory contains modality model artifacts, transform artifacts, and `fusion/<dataset-names>/available_fusion.toml`; use final result replay for any additional subset artifacts.
@@ -571,6 +555,32 @@ uv run iatreion train random-forest \
 
 The baseline outputs follow the same dataset/group/aggregate directory convention as other training commands for internal evaluation. Final artifacts used by `iatreion eval` are written under `logs/final/<group-names>/xgboost/` or `logs/final/<group-names>/random-forest/`, with per-modality artifacts in `artifacts/<name>/`; each `transform.toml` records the fitted preprocessing schema and embeds feature-selection or simple-imputer metadata when those steps are enabled, and external-validation logs and ROC plots are written under each final model root's `eval/<dataset-names>/` subdirectory.
 
+### Baseline External Validation
+
+Use `uv run iatreion eval xgboost` or `uv run iatreion eval random-forest` to apply final baseline models to external data. Baseline external validation always uses final calibrated-fusion artifacts: each requested modality must have `logs/final/<group-names>/<model>/artifacts/<name>/transform.toml` plus a saved model file, and `logs/final/<group-names>/<model>/fusion/<dataset-names>/available_fusion.toml` must exist for exactly the requested modality list. The transform artifact contains the fitted preprocessing schema and, when enabled, embedded feature-selection and simple-imputer metadata. If the subset artifact is missing, the command fails instead of falling back to uncalibrated averaging. Final baseline fitting with `-f -a calibrated-fusion` writes the full-modality artifact; use final result replay to publish additional modality subsets.
+
+Example for labeled external XGBoost validation:
+
+```bash
+uv run iatreion eval xgboost \
+  -n symptom csvd volume-new-pct \
+  --index-name "<sample-id-column>" \
+  --label-name "<label-column>" \
+  -g a c \
+  --positive-label c \
+  --log-root logs \
+  -p "<path-to-the-process-info-file>" \
+  --data.history "<path-to-the-spreadsheet-for-symptom-data>" \
+  --data.csvd "<path-to-the-spreadsheet-for-csvd-data>" \
+  --data.volume-new "<path-to-the-spreadsheet-for-mri-volume-data>" \
+  -v "<path-to-the-excel-file-storing-mean-and-std-for-mri-volume-data>" \
+  --vmri-change "<path-to-the-file-storing-column-name-changes-for-mri-volume-data>" \
+  -m eval \
+  -k last
+```
+
+For unlabeled batch prediction, use `-m batch`; when `-o/--output` is omitted, the command writes `baseline_batch_result.xlsx`.
+
 ## Figures and Tables
 
 Use `uv run iatreion show` for manuscript tables and figures.
@@ -618,6 +628,16 @@ uv run iatreion show rrl-waterfall \
 
 Generated figures and tables are written to `figures/` by default.
 
+## GUI
+
+After final model fitting, launch:
+
+```bash
+uv run iatreion-gui
+```
+
+The GUI wraps the same parser API used by `iatreion eval rrl`. It can load final RRL models, select input files, export batch predictions and rule-OR tables, view active rules, and evaluate labeled external data.
+
 ## Metrics and Statistical Tests
 
 Training and evaluation report:
@@ -656,6 +676,8 @@ configs/
   optuna_rrl.toml                  # RRL Optuna search-space defaults
   optuna_xgboost.toml              # XGBoost Optuna search-space defaults
   optuna_random_forest.toml        # Random Forest Optuna search-space defaults
+scripts/
+  pipeline.sh                      # Manuscript modeling/evaluation command sequence
 src/iatreion/
   cli/                             # CLI commands
   configs/                         # CLI dataclasses and config semantics

@@ -187,7 +187,8 @@ cython_debug/
 /configs*/*
 !/configs/config.toml
 !/configs/optuna_*.toml
-/scripts*/
+/scripts*/*
+!/scripts/pipeline.sh
 /test.py
 
 # Figures and tables
