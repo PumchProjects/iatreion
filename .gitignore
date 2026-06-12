@@ -186,7 +186,7 @@ cython_debug/
 /dependencies*/
 /configs*/*
 !/configs/config.toml
-!/configs/rrl_optuna.toml
+!/configs/optuna_*.toml
 /scripts*/
 /test.py
 

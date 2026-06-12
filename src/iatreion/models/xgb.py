@@ -35,25 +35,40 @@ class XgboostModel(Model):
         super().__init__()
         self.config: XgboostConfig = config
         self.num_class = config.train.num_class
-        self.param = config._param
-        self.update_param()
+        self.param: dict[str, object] = {}
         self.feature_types: list[str] = []
 
-    def update_param(self) -> None:
-        self.param |= (
-            {
+    def _params(self) -> dict[str, object]:
+        config = self.config
+        params: dict[str, object] = {
+            'device': config.device,
+            'tree_method': config.tree_method,
+            'learning_rate': config.learning_rate,
+            'max_depth': config.max_depth,
+            'min_child_weight': config.min_child_weight,
+            'subsample': config.subsample,
+            'colsample_bytree': config.colsample_bytree,
+            'gamma': config.gamma,
+            'reg_lambda': config.reg_lambda,
+            'reg_alpha': config.reg_alpha,
+            'seed': config.train.seed,
+        }
+        if self.num_class <= 2:
+            params |= {
                 'objective': 'binary:logistic',
                 'eval_metric': ['auc'],
+                'scale_pos_weight': config.scale_pos_weight,
             }
-            if self.num_class <= 2
-            else {
+        else:
+            params |= {
                 'objective': 'multi:softprob',
                 'num_class': self.num_class,
             }
-        )
+        return params
 
     @override
     def _fit(self, X: NDArray, y: NDArray) -> None:
+        self.param = self._params()
         dtrain = xgb.DMatrix(
             X,
             y,

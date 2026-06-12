@@ -1,5 +1,4 @@
 from itertools import count
-from typing import Any
 
 from cyclopts import App
 
@@ -45,16 +44,8 @@ def rrl(*, config: RrlConfig) -> None:
 
 
 @sub_app.command(sort_key=next(counter))
-def xgboost(*, config: XgboostConfig, **param: Any) -> None:
-    """Train an XGBoost model.
-
-    Parameters
-    ----------
-    param: dict
-        Parameters for XGBoost. See https://xgboost.readthedocs.io/en/stable/parameter.html
-        for more details.
-    """
-    config._param = param
+def xgboost(*, config: XgboostConfig) -> None:
+    """Train an XGBoost model."""
     train(XgboostModel, config)
 
 

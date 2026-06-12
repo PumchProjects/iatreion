@@ -29,8 +29,8 @@ class RrlEvalConfig:
     positive_label: str = ''
     'Positive class label for binary tasks.'
 
-    thesaurus: Annotated[str, Parameter(alias='-t')] = ''
-    'Root directory for trained RRL models.'
+    log_root: str = ''
+    'Root directory for trained final RRL models.'
 
     process: Annotated[str, Parameter(alias='-p')] = ''
     'Path to the processing info file.'
@@ -104,7 +104,7 @@ class RrlEvalConfig:
             suspected_case=self.suspected_case,
             label_name=label_name,
             positive_label=self.positive_label,
-            log_root=Path(self.thesaurus),
+            log_root=Path(self.log_root),
             _shuffle=False,
         )
         process_config = PreprocessorConfig(

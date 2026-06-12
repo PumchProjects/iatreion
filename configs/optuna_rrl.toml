@@ -11,7 +11,7 @@ pruner = "none"
 load-if-exists = true
 
 [execution]
-trial-log-root = "logs_optuna_rrl"
+trial-log-root = "logs_optuna"
 fail-value = 0.0
 n-jobs = 1
 # study-workers = 4

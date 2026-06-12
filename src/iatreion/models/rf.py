@@ -19,19 +19,41 @@ from .importance import ImportanceScore, calc_shap_importance
 RANDOM_FOREST_MODEL_FILE = 'model.joblib'
 
 
+def parse_max_features(value: str) -> str | int | float | None:
+    if value == 'none':
+        return None
+    if value in {'sqrt', 'log2'}:
+        return value
+    return float(value) if '.' in value else int(value)
+
+
 class RandomForestModel(Model):
     def __init__(self, config: RandomForestConfig) -> None:
         super().__init__()
         self.config: RandomForestConfig = config
         self.num_class = config.train.num_class
-        self.forest = RandomForestClassifier(
-            config.n_estimators,
+        self.forest = self._make_forest()
+
+    def _make_forest(self) -> RandomForestClassifier:
+        config = self.config
+        return RandomForestClassifier(
+            n_estimators=config.n_estimators,
+            criterion=config.criterion,
+            max_depth=None if config.max_depth == 0 else config.max_depth,
+            min_samples_split=config.min_samples_split,
+            min_samples_leaf=config.min_samples_leaf,
+            max_features=parse_max_features(config.max_features),
+            bootstrap=config.bootstrap,
             n_jobs=config.n_jobs,
-            random_state=0,
+            random_state=config.train.seed,
+            class_weight=None if config.class_weight == 'none' else config.class_weight,
+            max_samples=config.max_samples if config.bootstrap else None,
+            ccp_alpha=config.ccp_alpha,
         )
 
     @override
     def _fit(self, X: NDArray, y: NDArray) -> None:
+        self.forest = self._make_forest()
         self.forest.fit(X, y)
 
     @override

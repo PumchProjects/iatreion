@@ -22,7 +22,7 @@ class ConfigBundle:
     names: tk.StringVar = field(default_factory=tk.StringVar)
     groups: tk.StringVar = field(default_factory=tk.StringVar)
     positive_label: tk.StringVar = field(default_factory=tk.StringVar)
-    thesaurus: tk.StringVar = field(default_factory=tk.StringVar)
+    log_root: tk.StringVar = field(default_factory=tk.StringVar)
     process: tk.StringVar = field(default_factory=tk.StringVar)
     data: defaultdict[str, tk.StringVar] = field(
         default_factory=lambda: defaultdict(tk.StringVar)
@@ -54,8 +54,8 @@ class ConfigBundle:
                         self.config.positive_label,
                     )
                 )
-            case 'thesaurus':
-                self.thesaurus.set(os.path.basename(self.config.thesaurus))
+            case 'log_root':
+                self.log_root.set(os.path.basename(self.config.log_root))
             case 'process':
                 self.process.set(os.path.basename(self.config.process))
             case 'data':
@@ -118,9 +118,9 @@ class ConfigBundle:
             self.config.positive_label = TrainConfig.canonicalize_group_label(value)
         self.set_field('positive_label')
 
-    def set_thesaurus(self, path: str) -> None:
-        self.config.thesaurus = path
-        self.set_field('thesaurus')
+    def set_log_root(self, path: str) -> None:
+        self.config.log_root = path
+        self.set_field('log_root')
 
     def set_process(self, path: str) -> None:
         self.config.process = path

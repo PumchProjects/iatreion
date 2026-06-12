@@ -639,6 +639,10 @@ class OptunaRunner(Runner):
         self.spec = TuningSpec.load(config)
         self.executor = OptunaStudyExecutor(model_cls, config, self.spec)
 
+    @property
+    def study_root(self) -> Path:
+        return self.spec.study_root / self.model_name
+
     def _training_config(self, overrides: dict[str, Any]) -> ModelConfig:
         return make_training_config(self.base_config, self.model_name, overrides)
 
@@ -742,7 +746,7 @@ class OptunaRunner(Runner):
                     target=target,
                     fold_specs=fold_specs,
                     root=(
-                        self.spec.study_root
+                        self.study_root
                         / 'nested'
                         / f'outer_{outer_fold}'
                         / sanitize_name(target.name)
@@ -754,7 +758,7 @@ class OptunaRunner(Runner):
 
         save_dict(
             {f'outer_{outer}': params for outer, params in selected.items()},
-            self.spec.study_root / 'nested' / 'selected_params.toml',
+            self.study_root / 'nested' / 'selected_params.toml',
         )
         return selected, get_nested_fold_specs(self.base_config.train, ref_y)
 
@@ -778,12 +782,12 @@ class OptunaRunner(Runner):
             StudyJob(
                 target=target,
                 fold_specs=fold_specs,
-                root=self.spec.study_root / 'final' / sanitize_name(target.name),
+                root=self.study_root / 'final' / sanitize_name(target.name),
             )
             for target in self._targets()
         ]
         selected = self._run_study_jobs(jobs)
-        save_dict(selected, self.spec.study_root / 'final' / 'selected_params.toml')
+        save_dict(selected, self.study_root / 'final' / 'selected_params.toml')
         return selected
 
     def _fit_final_fusion_artifact(self, selected: dict[str, dict[str, Any]]) -> Path:

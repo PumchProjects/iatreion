@@ -28,7 +28,7 @@ class BaselineEvalConfig:
     positive_label: str = ''
     'Positive class label for binary tasks.'
 
-    log_root: Annotated[Path, Parameter(alias='-t')] = Path('logs')
+    log_root: Path = Path('logs')
     'Root directory for trained final baseline models.'
 
     process: Annotated[str, Parameter(alias='-p')] = ''

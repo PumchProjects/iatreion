@@ -1,0 +1,66 @@
+[study]
+name = ""
+objective = "AUROC"
+direction = "maximize"
+n-trials = 60
+sampler = "tpe"
+seed = 42
+n-startup-trials = 20
+multivariate = true
+pruner = "none"
+load-if-exists = true
+
+[execution]
+trial-log-root = "logs_optuna"
+fail-value = 0.0
+n-jobs = 1
+# study-workers = 4
+
+[search.num-round]
+type = "int"
+low = 50
+high = 500
+step = 25
+
+[search.learning-rate]
+type = "float"
+low = 0.01
+high = 0.2
+log = true
+
+[search.max-depth]
+type = "int"
+low = 2
+high = 6
+
+[search.min-child-weight]
+type = "float"
+low = 1.0
+high = 20.0
+log = true
+
+[search.subsample]
+type = "float"
+low = 0.6
+high = 1.0
+step = 0.05
+
+[search.colsample-bytree]
+type = "float"
+low = 0.5
+high = 1.0
+step = 0.05
+
+[search.gamma]
+type = "categorical"
+choices = [0.0, 0.1, 0.5, 1.0, 2.0, 5.0]
+
+[search.reg-lambda]
+type = "float"
+low = 0.1
+high = 20.0
+log = true
+
+[search.reg-alpha]
+type = "categorical"
+choices = [0.0, 1e-3, 1e-2, 0.1, 1.0, 10.0]
