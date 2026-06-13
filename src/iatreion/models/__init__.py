@@ -1,4 +1,4 @@
-from .base import Model, ModelReturn
+from .base import Model, ModelPrediction
 from .importance import ImportanceScore
 from .limix import LimiXModel
 from .result_replay import ResultReplayModel

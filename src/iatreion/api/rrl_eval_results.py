@@ -122,8 +122,8 @@ def _prepare_module_data(
     frame: pd.DataFrame, index: pd.Index, rrl, *, keep: str
 ) -> tuple[pd.DataFrame, pd.Series]:
     frame = frame[~frame.index.duplicated(keep=keep)].reindex(index)
-    available = ~frame.isna().all(axis=1)
-    return rrl.impute(frame), available
+    available = rrl.available_mask(frame)
+    return rrl.prepare_data(frame), available
 
 
 def get_rule_or_table(config: RrlEvalConfig) -> pd.DataFrame:

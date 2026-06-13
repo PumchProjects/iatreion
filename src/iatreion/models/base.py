@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from numpy.typing import NDArray
@@ -17,8 +18,15 @@ from .importance import (
     save_importance_score,
 )
 
-type ModelReturn = tuple[NDArray, dict[str, float | tuple[float, str]]]
+type Complexity = dict[str, float | tuple[float, str]]
 type ImportanceCalculator = Callable[[TrainStepContext], ImportanceScore]
+
+
+@dataclass(frozen=True)
+class ModelPrediction:
+    y_score: NDArray
+    complexity: Complexity = field(default_factory=dict)
+    y_mask: NDArray | None = None
 
 
 class Model(ABC):
@@ -85,13 +93,13 @@ class Model(ABC):
                 continue
             save_importance_score(self.config, ctx, score, method=method)
 
-    def _calc_complexity(self) -> dict[str, float | tuple[float, str]]:
+    def _calc_complexity(self) -> Complexity:
         return {}
 
     def fit(self, ctx: TrainStepContext) -> None:
         self._fit(*ctx.train_data)
 
-    def predict(self, ctx: TrainStepContext) -> ModelReturn:
+    def predict(self, ctx: TrainStepContext) -> ModelPrediction:
         y_score = self._predict_proba(ctx.test_data[0])
         self._calc_importance(ctx)
-        return y_score, self._calc_complexity()
+        return ModelPrediction(y_score, self._calc_complexity())

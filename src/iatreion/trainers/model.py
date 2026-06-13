@@ -63,17 +63,18 @@ class ModelTrainer(Trainer):
         self._update_config(ctx)
         with Timer() as timer:
             self.model.fit(ctx)
-        y_score, complexity = self.model.predict(ctx)
+        prediction = self.model.predict(ctx)
+        test_mask = ctx.test_mask if prediction.y_mask is None else prediction.y_mask
         return TrainerReturn(
             timer.duration,
             ctx.test_data[1],
-            y_score,
-            complexity,
+            prediction.y_score,
+            prediction.complexity,
             sample_id=ctx.test_index.astype(str).to_numpy(),
             outer_fold=ctx.outer_fold,
             inner_fold=ctx.inner_fold,
             kind='inner' if ctx.is_inner else 'outer',
-            test_mask=ctx.test_mask,
+            test_mask=test_mask,
         )
 
     @override

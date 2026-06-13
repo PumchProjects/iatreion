@@ -31,7 +31,7 @@ from iatreion.train_utils.imputation import SimpleImputerArtifact
 from iatreion.train_utils.rrl_preprocessing import RrlPreprocessingArtifact
 from iatreion.utils import decode_string
 
-from .base import Model
+from .base import Model, ModelPrediction
 
 
 @dataclass(frozen=True)
@@ -412,10 +412,19 @@ class Rrl:
         for label, bias in zip(self.labels, self.biases, strict=True):
             result[label] += bias
 
-    def impute(self, data: pd.DataFrame) -> pd.DataFrame:
+    def prepare_data(self, data: pd.DataFrame) -> pd.DataFrame:
         if self.imputer is None:
             return data
         return self.imputer.apply(data)
+
+    def available_mask(
+        self, data: pd.DataFrame, index: pd.Index | None = None
+    ) -> pd.Series:
+        columns = self.preprocessing.available_columns
+        available = ~data.reindex(columns=columns).isna().all(axis=1)
+        if index is None:
+            return available.astype(bool)
+        return available.reindex(index, fill_value=False).astype(bool)
 
     def _iter_enabled_lines(self, enabled_rule_indices: list[int] | None) -> list[Line]:
         if enabled_rule_indices is None:
@@ -456,6 +465,7 @@ class Rrl:
         enabled_rule_indices: list[int] | None = None,
         zero_mean_fallback: ZeroMeanFallback = 'uniform',
     ) -> pd.DataFrame:
+        data = self.prepare_data(data)
         result = self._make_empty_result(data)
         if bias_enabled:
             self._add_bias(result)
@@ -605,6 +615,23 @@ class DiscreteRrlModel(Model):
         result = self.get_model(self.ctx).eval(data)
         return result.to_numpy()
 
+    def _predict_with_mask(self, ctx: TrainStepContext) -> tuple[NDArray, NDArray]:
+        data = pd.DataFrame(
+            ctx.test_data[0],
+            columns=ctx.db_enc.X_fname,
+            index=ctx.test_index,
+        )
+        model = self.get_model(ctx)
+        y_score = model.eval(data).to_numpy()
+        y_mask = ~model.available_mask(data).to_numpy(dtype=bool)
+        return y_score, y_mask
+
+    @override
+    def predict(self, ctx: TrainStepContext) -> ModelPrediction:
+        y_score, y_mask = self._predict_with_mask(ctx)
+        self._calc_importance(ctx)
+        return ModelPrediction(y_score, y_mask=y_mask)
+
     def _validate_enabled_terms(
         self,
         names: list[DataName],
@@ -646,12 +673,6 @@ class DiscreteRrlModel(Model):
             index = index.union(frame.index, sort=False)
         return index
 
-    @staticmethod
-    def _available_mask(model: Rrl, frame: pd.DataFrame, index: pd.Index) -> pd.Series:
-        columns = model.preprocessing.available_columns
-        available = ~frame.reindex(columns=columns).isna().all(axis=1)
-        return available.reindex(index, fill_value=False).astype(bool)
-
     def eval(
         self,
         data: list[pd.DataFrame],
@@ -670,7 +691,7 @@ class DiscreteRrlModel(Model):
         y_mask_list: list[NDArray] = []
         for name, X, model in zip(names, data, raw_models, strict=True):
             result = model.eval(
-                model.impute(X),
+                X,
                 bias_enabled=(
                     True if enabled_biases is None else enabled_biases.get(name, True)
                 ),
@@ -679,7 +700,7 @@ class DiscreteRrlModel(Model):
                 ),
                 zero_mean_fallback=zero_mean_fallback,
             )
-            available = self._available_mask(model, X, index)
+            available = model.available_mask(X, index)
             y_mask_list.append((~available).to_numpy(dtype=bool))
             y_pos_score = result.reindex(index)[self.artifact.positive_label]
             y_pos_score_list.append(y_pos_score.fillna(0.5).to_numpy())
@@ -725,10 +746,10 @@ class DiscreteRrlModel(Model):
                     name=name,
                     n=str(len(X)),
                 )
-            if X.isna().all(axis=1).item():
+            if not model.available_mask(X).item():
                 continue
             available_names.append(name)
-            available_data.append(model.impute(X))
+            available_data.append(X)
             available_models.append(model)
 
         if not available_names:
