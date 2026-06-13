@@ -198,12 +198,13 @@ The main fold-fitted preprocessing controls are:
 | `-k/--keep` | Resolve duplicate samples during training and parser evaluation; the default is `last` |
 | `--feature-selection-method/--feature-selection-fraction/--feature-selection-top-k/--feature-selection-c` | Supervised feature selection method, kept fraction, exact top-k, or L1-logistic inverse regularization; `--feature-selection-method none` disables it |
 | `--feature-selection-min-features/--feature-selection-max-features/--feature-selection-score-aggregate` | Minimum/maximum selected raw features and category-score aggregation (`max` or `mean`) |
+| `--no-missingness-filter/--missingness-filter-max-missing-rate/--missingness-filter-min-observed` | Fold-fitted raw-feature missingness filter; by default, features with >95% missing values or fewer than 10 observed training-fold values are removed before feature selection and imputation |
 | `--missing-value-strategy` | Fold-fitted missing-value handling: `simple`, `limix`, or `none` |
 | `--no-normalize-continuous` | Disable continuous-feature z-scoring |
 | `--under-sampler` | Apply optional under-sampling to each training fold; currently `random` |
 | `--target-n-samples` | Maximum samples kept per class after under-sampling; `0` balances to the smallest class |
 
-Optional supervised feature selection is applied before imputation, normalization, under-sampling, and final encoding. Available methods are:
+The missingness filter is applied before optional supervised feature selection, and both are fitted only on the current training fold; removed features are excluded from fold rules, simple-imputer statistics, baseline transform artifacts, and modality-availability masks. Available feature-selection methods are:
 
 | Method | Meaning |
 | --- | --- |
@@ -297,6 +298,7 @@ The important exported files include:
 | `manifest.toml` | Compact provenance manifest for reproducing and auditing the run |
 | `train.log` | Training log |
 | `rrl_<name>_<outer>_<inner>.tsv` | Exported RRL rule table for one modality/fold |
+| `rrl_<name>_<outer>_<inner>.preprocessing.toml` | Fold-fitted RRL parser preprocessing sidecar with retained availability columns and missingness-filter metadata |
 | `rrl_<name>_<outer>_<inner>.feature-selection.toml` | Fold-fitted supervised feature-selection artifact when feature selection is enabled |
 | `rrl_<name>_<outer>_<inner>.simple-imputer.toml` | Fold-fitted simple-imputer artifact when original missing-aware RRL mode is enabled |
 | `train_avg_<result>.log` | Mean/std fold metrics |
@@ -394,11 +396,12 @@ Final RRL artifacts are saved per modality as:
 
 ```text
 logs/final/<group-names>/rrl/artifacts/<name>/rules.tsv
+logs/final/<group-names>/rrl/artifacts/<name>/preprocessing.toml
 logs/final/<group-names>/rrl/artifacts/<name>/feature-selection.toml
 logs/final/<group-names>/rrl/artifacts/<name>/simple-imputer.toml
 ```
 
-The `feature-selection.toml` and `simple-imputer.toml` sidecars are written only when those preprocessing steps are enabled.
+The `preprocessing.toml` sidecar is always written for RRL and tells the parser which retained raw features define modality availability; `feature-selection.toml` and `simple-imputer.toml` are written only when those preprocessing steps are enabled. Original RRL uses `simple-imputer.toml` for parser-time imputation, while improved missing-aware RRL keeps missing values and uses `preprocessing.toml` for availability without requiring a simple-imputer artifact.
 
 ## Result Replay Subset Fusion
 
@@ -554,11 +557,11 @@ uv run iatreion train random-forest \
   --tune-config configs/optuna_random_forest.toml
 ```
 
-Baseline internal outputs follow the same `{log-root}/training/<dataset-names>/<group-names>/<model>/<aggregate>/` directory convention as other training commands. Final artifacts used by `iatreion eval` are written under `logs/final/<group-names>/xgboost/` or `logs/final/<group-names>/random-forest/`, with per-modality artifacts in `artifacts/<name>/`; each `transform.toml` records the fitted preprocessing schema and embeds feature-selection or simple-imputer metadata when those steps are enabled, and external-validation `eval.log` files report point estimates with bootstrap confidence intervals under each final model root's `eval/<dataset-names>/` subdirectory.
+Baseline internal outputs follow the same `{log-root}/training/<dataset-names>/<group-names>/<model>/<aggregate>/` directory convention as other training commands. Final artifacts used by `iatreion eval` are written under `logs/final/<group-names>/xgboost/` or `logs/final/<group-names>/random-forest/`, with per-modality artifacts in `artifacts/<name>/`; each `transform.toml` records the fitted preprocessing schema and embeds missingness-filter, feature-selection, or simple-imputer metadata when those steps are enabled, and external-validation `eval.log` files report point estimates with bootstrap confidence intervals under each final model root's `eval/<dataset-names>/` subdirectory.
 
 ### Baseline External Validation
 
-Use `uv run iatreion eval xgboost` or `uv run iatreion eval random-forest` to apply final baseline models to external data. Baseline external validation always uses final calibrated-fusion artifacts: each requested modality must have `logs/final/<group-names>/<model>/artifacts/<name>/transform.toml` plus a saved model file, and `logs/final/<group-names>/<model>/fusion/<dataset-names>/available_fusion.toml` must exist for exactly the requested modality list. Labeled baseline external validation uses the same non-stratified bootstrap CI controls as RRL eval: `--bootstrap-samples` and `--ci-level`. The transform artifact contains the fitted preprocessing schema and, when enabled, embedded feature-selection and simple-imputer metadata. If the subset artifact is missing, the command fails instead of falling back to uncalibrated averaging. Final baseline fitting with `-f -a calibrated-fusion` writes the full-modality artifact; use final result replay to publish additional modality subsets.
+Use `uv run iatreion eval xgboost` or `uv run iatreion eval random-forest` to apply final baseline models to external data. Baseline external validation always uses final calibrated-fusion artifacts: each requested modality must have `logs/final/<group-names>/<model>/artifacts/<name>/transform.toml` plus a saved model file, and `logs/final/<group-names>/<model>/fusion/<dataset-names>/available_fusion.toml` must exist for exactly the requested modality list. Labeled baseline external validation uses the same non-stratified bootstrap CI controls as RRL eval: `--bootstrap-samples` and `--ci-level`. The transform artifact contains the fitted preprocessing schema and, when enabled, embedded missingness-filter, feature-selection, and simple-imputer metadata. If the subset artifact is missing, the command fails instead of falling back to uncalibrated averaging. Final baseline fitting with `-f -a calibrated-fusion` writes the full-modality artifact; use final result replay to publish additional modality subsets.
 
 Example for labeled external XGBoost validation:
 

@@ -13,6 +13,7 @@ from iatreion.rrl.rrl.models import RRL
 from iatreion.train_utils import TrainStepContext
 from iatreion.train_utils.artifacts import (
     get_rrl_feature_selection_path,
+    get_rrl_preprocessing_path,
     get_rrl_rule_path,
     get_rrl_simple_imputer_path,
 )
@@ -55,6 +56,10 @@ class RrlModel(Model):
         rule_path = get_rrl_rule_path(self.config.train._log_dir, ctx)
         self.rule2weights = print_rules(
             self.config, ctx, self.model, self.metrics, rule_path
+        )
+        ctx.db_enc.save_rrl_preprocessing(
+            get_rrl_preprocessing_path(rule_path),
+            missing_aware_mode=self.config.missing_aware_mode,
         )
         ctx.db_enc.save_feature_selection(get_rrl_feature_selection_path(rule_path))
         if self.config.missing_aware_mode == 'original':

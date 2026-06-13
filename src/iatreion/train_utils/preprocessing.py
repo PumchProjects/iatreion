@@ -12,6 +12,8 @@ from iatreion.utils import load_dict, save_dict
 from .feature_selection import FeatureSelectionArtifact, SupervisedFeatureSelector
 from .imputation import SimpleImputerArtifact, SimpleImputerColumn
 from .limix import LimiXWorkerClient
+from .missingness import MissingnessFilterArtifact
+from .rrl_preprocessing import RrlPreprocessingArtifact
 
 type EncodedData = tuple[NDArray, NDArray]
 type OptionalEncodedData = tuple[NDArray | None, NDArray | None]
@@ -45,13 +47,15 @@ class DBEncoderArtifact:
     missing_value_strategy: str
     normalize_continuous: bool
     discrete_processing: str
+    missingness_filter: MissingnessFilterArtifact | None = None
     feature_selection: FeatureSelectionArtifact | None = None
     simple_imputer: SimpleImputerArtifact | None = None
-    version: int = 2
+    version: int = 3
 
     @classmethod
     def load(cls, path: Path) -> 'DBEncoderArtifact':
         data = load_dict(path)
+        missingness_filter = data.get('missingness_filter')
         feature_selection = data.get('feature_selection')
         simple_imputer = data.get('simple_imputer')
         return cls(
@@ -86,6 +90,11 @@ class DBEncoderArtifact:
             missing_value_strategy=str(data['missing_value_strategy']),
             normalize_continuous=bool(data['normalize_continuous']),
             discrete_processing=str(data['discrete_processing']),
+            missingness_filter=(
+                None
+                if missingness_filter is None
+                else MissingnessFilterArtifact.from_dict(missingness_filter)
+            ),
             feature_selection=(
                 None
                 if feature_selection is None
@@ -123,6 +132,8 @@ class DBEncoderArtifact:
             'normalize_continuous': self.normalize_continuous,
             'discrete_processing': self.discrete_processing,
         }
+        if self.missingness_filter is not None:
+            data['missingness_filter'] = self.missingness_filter.to_dict()
         if self.feature_selection is not None:
             data['feature_selection'] = self.feature_selection.to_dict()
         if self.simple_imputer is not None:
@@ -144,8 +155,8 @@ class DBEncoderArtifact:
             return frame.to_numpy(dtype=float), frame.isna().all(axis=1).to_numpy()
 
         raw = self._prepare_frame(X_df, self.raw_feature_columns)
-        missing = raw.isna().all(axis=1).to_numpy(dtype=bool)
         frame = raw.loc[:, self.feature_columns].copy()
+        missing = frame.isna().all(axis=1).to_numpy(dtype=bool)
         if self.simple_imputer is not None:
             frame = self.simple_imputer.apply(frame, preserve_all_missing=False)
         self._normalize_continuous(frame)
@@ -261,6 +272,7 @@ class DBEncoder:
         self.std: pd.Series | None = None
         self.simple_imputer: SimpleImputerArtifact | None = None
         self.feature_selection: FeatureSelectionArtifact | None = None
+        self.missingness_filter: MissingnessFilterArtifact | None = None
         self._continuous_mean = pd.Series(dtype=float)
         self._continuous_std = pd.Series(dtype=float)
 
@@ -311,6 +323,7 @@ class DBEncoder:
             test=self._prepare_frame(test_frame),
         )
 
+        frames = self._apply_missingness_filter(frames)
         frames = self._apply_feature_selection(frames, y_train_encoded)
         frames = self._apply_missing_value_strategy(frames, y_train_encoded)
         frames = self._normalize_continuous_data(frames)
@@ -357,6 +370,51 @@ class DBEncoder:
     def _prepare_frame(self, X_df: pd.DataFrame) -> pd.DataFrame:
         frame = X_df.loc[:, self.feature_columns].copy()
         return frame.apply(pd.to_numeric, errors='coerce').astype(float)
+
+    def missing_mask(self, X_df: pd.DataFrame) -> NDArray:
+        return self._prepare_frame(X_df).isna().all(axis=1).to_numpy(dtype=bool)
+
+    def _apply_missingness_filter(self, frames: _FrameSplits) -> _FrameSplits:
+        if not self.train.missingness_filter:
+            return frames
+
+        observed = frames.train.notna().sum()
+        missing_rate = frames.train.isna().mean()
+        keep = (missing_rate <= self.train.missingness_filter_max_missing_rate) & (
+            observed >= self.train.missingness_filter_min_observed
+        )
+        selected = [name for name in self.feature_columns if bool(keep[name])]
+        dropped = [name for name in self.feature_columns if name not in selected]
+        if not selected:
+            raise IatreionException(
+                'Missingness filter dropped every feature. Relax '
+                'missingness_filter_max_missing_rate or '
+                'missingness_filter_min_observed.'
+            )
+        if not dropped:
+            self.missingness_filter = None
+            return frames
+
+        self.missingness_filter = MissingnessFilterArtifact(
+            selected_features=selected,
+            dropped_features=dropped,
+            missing_rates={
+                name: float(missing_rate[name]) for name in self.feature_columns
+            },
+            observed_counts={
+                name: int(observed[name]) for name in self.feature_columns
+            },
+            params={
+                'max_missing_rate': self.train.missingness_filter_max_missing_rate,
+                'min_observed': self.train.missingness_filter_min_observed,
+            },
+        )
+        self._restrict_feature_columns(selected)
+        return _FrameSplits(
+            train=frames.train.loc[:, selected].copy(),
+            val=None if frames.val is None else frames.val.loc[:, selected].copy(),
+            test=frames.test.loc[:, selected].copy(),
+        )
 
     def _apply_feature_selection(
         self,
@@ -425,10 +483,12 @@ class DBEncoder:
         columns: list[SimpleImputerColumn] = []
         for name in self.unordered_columns:
             mode = frames.train[name].dropna().mode()
-            fill_value = np.nan if mode.empty else float(mode.iloc[0])
+            fill_value = 0.0 if mode.empty else float(mode.iloc[0])
             columns.append(SimpleImputerColumn(name, fill_value))
         for name in self.ordered_columns:
             fill_value = float(frames.train[name].median(skipna=True))
+            if pd.isna(fill_value):
+                fill_value = 0.0
             columns.append(
                 SimpleImputerColumn(
                     name,
@@ -438,6 +498,8 @@ class DBEncoder:
             )
         for name in self.continuous_columns:
             fill_value = float(frames.train[name].mean(skipna=True))
+            if pd.isna(fill_value):
+                fill_value = 0.0
             columns.append(SimpleImputerColumn(name, fill_value))
 
         self.simple_imputer = SimpleImputerArtifact(columns)
@@ -457,6 +519,13 @@ class DBEncoder:
     def save_feature_selection(self, path: Path) -> None:
         if self.feature_selection is not None:
             self.feature_selection.save(path)
+
+    def save_rrl_preprocessing(self, path: Path, *, missing_aware_mode: str) -> None:
+        RrlPreprocessingArtifact(
+            available_columns=list(self.feature_columns),
+            missing_aware_mode=missing_aware_mode,
+            missingness_filter=self.missingness_filter,
+        ).save(path)
 
     @staticmethod
     def _series_to_dict(series: pd.Series) -> dict[str, float]:
@@ -489,6 +558,7 @@ class DBEncoder:
             missing_value_strategy=self.train.missing_value_strategy,
             normalize_continuous=self.train.normalize_continuous,
             discrete_processing=self.train.discrete_processing,
+            missingness_filter=self.missingness_filter,
             feature_selection=self.feature_selection,
             simple_imputer=self.simple_imputer,
         )

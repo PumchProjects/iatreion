@@ -16,6 +16,7 @@ from iatreion.exceptions import IatreionException
 from iatreion.train_utils import TrainStepContext
 from iatreion.train_utils.artifacts import (
     get_final_rrl_rule_path,
+    get_rrl_preprocessing_path,
     get_rrl_rule_path,
     get_rrl_simple_imputer_path,
 )
@@ -27,6 +28,7 @@ from iatreion.train_utils.fusion import (
     get_run_fusion_artifact_path,
 )
 from iatreion.train_utils.imputation import SimpleImputerArtifact
+from iatreion.train_utils.rrl_preprocessing import RrlPreprocessingArtifact
 from iatreion.utils import decode_string
 
 from .base import Model
@@ -348,10 +350,13 @@ class Rrl:
         else:
             self.temp = 0.01
             self.tau = None
+        self.preprocessing = RrlPreprocessingArtifact.load(
+            get_rrl_preprocessing_path(file)
+        )
         self.imputer: SimpleImputerArtifact | None = (
-            None
-            if self.tau is not None
-            else SimpleImputerArtifact.load(get_rrl_simple_imputer_path(file))
+            SimpleImputerArtifact.load(get_rrl_simple_imputer_path(file))
+            if self.preprocessing.missing_aware_mode == 'original'
+            else None
         )
 
         self.labels, self.biases, schema = self._parse_table_header(headers)
@@ -642,8 +647,9 @@ class DiscreteRrlModel(Model):
         return index
 
     @staticmethod
-    def _available_mask(frame: pd.DataFrame, index: pd.Index) -> pd.Series:
-        available = ~frame.isna().all(axis=1)
+    def _available_mask(model: Rrl, frame: pd.DataFrame, index: pd.Index) -> pd.Series:
+        columns = model.preprocessing.available_columns
+        available = ~frame.reindex(columns=columns).isna().all(axis=1)
         return available.reindex(index, fill_value=False).astype(bool)
 
     def eval(
@@ -673,7 +679,7 @@ class DiscreteRrlModel(Model):
                 ),
                 zero_mean_fallback=zero_mean_fallback,
             )
-            available = self._available_mask(X, index)
+            available = self._available_mask(model, X, index)
             y_mask_list.append((~available).to_numpy(dtype=bool))
             y_pos_score = result.reindex(index)[self.artifact.positive_label]
             y_pos_score_list.append(y_pos_score.fillna(0.5).to_numpy())

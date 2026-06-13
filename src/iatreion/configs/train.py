@@ -84,6 +84,19 @@ and combine available modalities with learned non-negative late-fusion weights.
 'none': keep missing values unchanged.
 """
 
+    missingness_filter: Annotated[
+        bool, Parameter(negative='--no-missingness-filter')
+    ] = True
+    'Whether to drop raw features that are too sparse inside the current training fold.'
+
+    missingness_filter_max_missing_rate: Annotated[
+        float, Parameter(validator=Number(gte=0, lte=1))
+    ] = 0.95
+    'Drop raw features whose training-fold missing rate is greater than this value.'
+
+    missingness_filter_min_observed: NonNegativeInt = 10
+    'Drop raw features with fewer observed training-fold values than this count.'
+
     normalize_continuous: Annotated[
         bool, Parameter(negative='--no-normalize-continuous')
     ] = True

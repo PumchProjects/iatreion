@@ -21,6 +21,10 @@ class SimpleImputerArtifact:
     version: int = 1
     strategy: str = 'simple'
 
+    @property
+    def column_names(self) -> list[str]:
+        return [column.name for column in self.columns]
+
     @classmethod
     def from_dict(cls, data: dict) -> 'SimpleImputerArtifact':
         return cls(
@@ -80,7 +84,7 @@ class SimpleImputerArtifact:
         if frame.empty:
             return frame
 
-        column_names = [column.name for column in self.columns]
+        column_names = self.column_names
         available = (
             ~frame[column_names].isna().all(axis=1)
             if preserve_all_missing

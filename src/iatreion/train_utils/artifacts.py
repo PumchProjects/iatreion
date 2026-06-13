@@ -10,9 +10,11 @@ ARTIFACT_ROOT = 'artifacts'
 TRANSFORM_ARTIFACT_FILE = 'transform.toml'
 
 RRL_RULE_FILE = 'rules.tsv'
+RRL_PREPROCESSING_FILE = 'preprocessing.toml'
 RRL_FEATURE_SELECTION_FILE = 'feature-selection.toml'
 RRL_SIMPLE_IMPUTER_FILE = 'simple-imputer.toml'
 
+RRL_FOLD_PREPROCESSING_SUFFIX = '.preprocessing.toml'
 RRL_FOLD_FEATURE_SELECTION_SUFFIX = '.feature-selection.toml'
 RRL_FOLD_SIMPLE_IMPUTER_SUFFIX = '.simple-imputer.toml'
 
@@ -39,6 +41,12 @@ def get_rrl_feature_selection_path(rule_path: Path) -> Path:
     if rule_path.name == RRL_RULE_FILE:
         return rule_path.with_name(RRL_FEATURE_SELECTION_FILE)
     return rule_path.with_name(f'{rule_path.stem}{RRL_FOLD_FEATURE_SELECTION_SUFFIX}')
+
+
+def get_rrl_preprocessing_path(rule_path: Path) -> Path:
+    if rule_path.name == RRL_RULE_FILE:
+        return rule_path.with_name(RRL_PREPROCESSING_FILE)
+    return rule_path.with_name(f'{rule_path.stem}{RRL_FOLD_PREPROCESSING_SUFFIX}')
 
 
 def get_rrl_simple_imputer_path(rule_path: Path) -> Path:

@@ -2,7 +2,6 @@ from collections.abc import Generator, Iterable
 from dataclasses import dataclass
 from functools import reduce
 
-import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 from sklearn.model_selection import StratifiedKFold, train_test_split
@@ -288,7 +287,6 @@ def get_train_iterator(
                 y_val = None if val_final is None else ref_y_df.loc[val_final]
                 X_test = X_df.reindex(spec.test_index)
                 y_test = ref_y_df.loc[spec.test_index]
-                test_mask = np.isnan(X_test).all(axis=1)
 
                 db_enc = DBEncoder(
                     train, f_df, cat_sep=dataset.cat_sep, limix_client=limix_client
@@ -296,6 +294,7 @@ def get_train_iterator(
                 train_data, val_data, test_data = db_enc.fit_transform(
                     X_train, y_train, X_val, y_val, X_test, y_test
                 )
+                test_mask = db_enc.missing_mask(X_test)
                 yield TrainStepContext(
                     outer_fold=spec.outer_fold,
                     inner_fold=spec.inner_fold,
