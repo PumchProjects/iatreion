@@ -436,7 +436,7 @@ uv run iatreion train result-replay \
   -f
 ```
 
-Final result replay writes metrics and its run-local artifact under `logs/final-calibration/<dataset-names>/<group-names>/result-replay/<source-model>/<source-aggregate>/<subset-key>/`, then publishes the subset artifact to `logs/final/<group-names>/<source-model>/fusion/<subset-key>/available_fusion.toml`. Samples missing all selected modalities are excluded from metric calculation.
+Final result replay writes metrics and its run-local artifact under `logs/final-calibration/<dataset-names>/<group-names>/result-replay/<source-model>/<source-aggregate>/<subset-key>/`, then publishes the subset artifact to `logs/final/<group-names>/<source-model>/fusion/<subset-key>/available_fusion.toml`. Internal result replay metrics include non-stratified bootstrap confidence intervals in `train_ci_<result>.log`, and CI lower/upper bounds are stored in the run manifest; final result replay keeps point-estimate logs only because its main role is artifact publication. Samples missing all selected modalities are excluded from metric calculation.
 
 ## External Validation
 
@@ -448,9 +448,10 @@ Use `uv run iatreion eval rrl` to apply final RRL rule files to external data. T
 - `--data-sheets.<raw-data-name>`: optional Excel sheet name or index for a raw data source.
 - `--index-name`: external sample ID column, required for modes that read external data.
 - `--label-name`: external label column, required for `-m eval` and `-m rule-or`; in other modes it is optional and only used to exclude a label column from features.
+- `--bootstrap-samples` and `--ci-level`: non-stratified bootstrap settings for labeled external-evaluation confidence intervals; defaults are 1000 resamples and 0.95.
 - `-o/--output`: exported spreadsheet path for `batch` and `rule-or` modes; supported suffixes are `.xlsx`, `.csv`, and `.tsv`.
 
-For labeled external evaluation, logs and ROC plots are written under `logs/final/<group-names>/rrl/eval/<dataset-names>/`, so different modality lists do not overwrite each other.
+For labeled external evaluation, `eval.log` reports point estimates with bootstrap confidence intervals, and logs and ROC plots are written under `logs/final/<group-names>/rrl/eval/<dataset-names>/`, so different modality lists do not overwrite each other.
 
 Example for symptom plus CSVD:
 
@@ -553,11 +554,11 @@ uv run iatreion train random-forest \
   --tune-config configs/optuna_random_forest.toml
 ```
 
-Baseline internal outputs follow the same `{log-root}/training/<dataset-names>/<group-names>/<model>/<aggregate>/` directory convention as other training commands. Final artifacts used by `iatreion eval` are written under `logs/final/<group-names>/xgboost/` or `logs/final/<group-names>/random-forest/`, with per-modality artifacts in `artifacts/<name>/`; each `transform.toml` records the fitted preprocessing schema and embeds feature-selection or simple-imputer metadata when those steps are enabled, and external-validation logs and ROC plots are written under each final model root's `eval/<dataset-names>/` subdirectory.
+Baseline internal outputs follow the same `{log-root}/training/<dataset-names>/<group-names>/<model>/<aggregate>/` directory convention as other training commands. Final artifacts used by `iatreion eval` are written under `logs/final/<group-names>/xgboost/` or `logs/final/<group-names>/random-forest/`, with per-modality artifacts in `artifacts/<name>/`; each `transform.toml` records the fitted preprocessing schema and embeds feature-selection or simple-imputer metadata when those steps are enabled, and external-validation `eval.log` files report point estimates with bootstrap confidence intervals under each final model root's `eval/<dataset-names>/` subdirectory.
 
 ### Baseline External Validation
 
-Use `uv run iatreion eval xgboost` or `uv run iatreion eval random-forest` to apply final baseline models to external data. Baseline external validation always uses final calibrated-fusion artifacts: each requested modality must have `logs/final/<group-names>/<model>/artifacts/<name>/transform.toml` plus a saved model file, and `logs/final/<group-names>/<model>/fusion/<dataset-names>/available_fusion.toml` must exist for exactly the requested modality list. The transform artifact contains the fitted preprocessing schema and, when enabled, embedded feature-selection and simple-imputer metadata. If the subset artifact is missing, the command fails instead of falling back to uncalibrated averaging. Final baseline fitting with `-f -a calibrated-fusion` writes the full-modality artifact; use final result replay to publish additional modality subsets.
+Use `uv run iatreion eval xgboost` or `uv run iatreion eval random-forest` to apply final baseline models to external data. Baseline external validation always uses final calibrated-fusion artifacts: each requested modality must have `logs/final/<group-names>/<model>/artifacts/<name>/transform.toml` plus a saved model file, and `logs/final/<group-names>/<model>/fusion/<dataset-names>/available_fusion.toml` must exist for exactly the requested modality list. Labeled baseline external validation uses the same non-stratified bootstrap CI controls as RRL eval: `--bootstrap-samples` and `--ci-level`. The transform artifact contains the fitted preprocessing schema and, when enabled, embedded feature-selection and simple-imputer metadata. If the subset artifact is missing, the command fails instead of falling back to uncalibrated averaging. Final baseline fitting with `-f -a calibrated-fusion` writes the full-modality artifact; use final result replay to publish additional modality subsets.
 
 Example for labeled external XGBoost validation:
 
@@ -653,7 +654,7 @@ Training and evaluation report:
 - Training time
 - RRL complexity as `Log#E`, the log number of rule edges
 
-Confidence intervals use bootstrap resampling. Defaults:
+Confidence intervals use non-stratified bootstrap resampling of the evaluated samples. Training, result replay, and labeled external validation all use the same defaults:
 
 ```text
 --bootstrap-samples 1000

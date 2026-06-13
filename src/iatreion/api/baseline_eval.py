@@ -17,7 +17,7 @@ from iatreion.train_utils.fusion import (
     get_published_fusion_artifact_path,
 )
 from iatreion.train_utils.preprocessing import DBEncoderArtifact
-from iatreion.trainers import Recorder, TrainerReturn
+from iatreion.trainers import record_evaluation
 from iatreion.utils import write_spreadsheet
 
 
@@ -190,22 +190,19 @@ def get_baseline_eval_result(
     y_df = y_df.loc[available]
     y_true = y_df.map(train_config.get_group_index_mapping()).to_numpy()
     y_score = X_df.to_numpy()
-    recorder = Recorder(train_config)
-    eval_result = recorder.record(
-        TrainerReturn(
-            0.0,
-            y_true,
-            y_score,
-            threshold=prediction.artifact.default_threshold,
-        )
+    finish = record_evaluation(
+        train_config,
+        y_true,
+        y_score,
+        threshold=prediction.artifact.default_threshold,
     )
-    fig = recorder.roc.fig if train_config.plot_roc else None
+    fig = finish.roc if train_config.plot_roc else None
     artifact_path = get_published_fusion_artifact_path(
         prediction.model_config.train._log_dir,
         list(prediction.model_config.dataset.names),
     )
     summary = f'Final calibrated-fusion baseline evaluation\nArtifact: {artifact_path}'
-    return f'{summary}\n\n{eval_result}', fig, prediction.model_config
+    return f'{summary}\n\n{finish.ci_result}', fig, prediction.model_config
 
 
 def save_baseline_batched_result_table(table: pd.DataFrame, path: str | Path) -> Path:

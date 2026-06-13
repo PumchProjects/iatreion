@@ -74,12 +74,16 @@ class ResultReplayRunner:
                 )
             )
 
-    def _store_finish(self, name: str, recorder: Recorder) -> Finish:
-        finish = recorder.finish(calc_ci=False)
+    def _store_finish(self, name: str, recorder: Recorder, *, calc_ci: bool) -> Finish:
+        finish = recorder.finish(calc_ci=calc_ci)
         finish.log(name)
         for metric, value in finish.final.metrics.items():
             self.objectives[f'{name}/{metric}'] = value
         self.objectives[f'{name}/Time'] = finish.final.time
+        if finish.ci is not None:
+            for metric, (_point, lower, upper) in finish.ci.items():
+                self.objectives[f'{name}/{metric}_lb'] = lower
+                self.objectives[f'{name}/{metric}_ub'] = upper
         return finish
 
     def _write_manifest(self, started_at: str) -> None:
@@ -101,7 +105,7 @@ class ResultReplayRunner:
         )
         self._record_fused(recorders, bundle, artifact)
         for name, recorder in recorders.items():
-            self._store_finish(name, recorder)
+            self._store_finish(name, recorder, calc_ci=False)
 
     def _run_internal(self) -> None:
         store = self.model.store
@@ -125,7 +129,7 @@ class ResultReplayRunner:
         global_artifact = self._fit_artifact(store.bundle(self.names))
         self._save_artifact(global_artifact)
         for name, recorder in fold_recorders.items():
-            self._store_finish(name, recorder)
+            self._store_finish(name, recorder, calc_ci=True)
 
     def run(self) -> None:
         self.train._log_dir = self.model.output_root

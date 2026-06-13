@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from cyclopts import Parameter
+from cyclopts.types import PositiveInt
+from cyclopts.validators import Number
 
 from .dataset import DataName, DatasetConfig
 from .model_rrl_discrete import DiscreteRrlConfig
@@ -62,6 +64,12 @@ class RrlEvalConfig:
     suspected_case: bool = False
     'Whether to include suspected cases in evaluation.'
 
+    bootstrap_samples: PositiveInt = 1000
+    'Number of bootstrap resamples used to estimate confidence intervals.'
+
+    ci_level: Annotated[float, Parameter(validator=Number(gt=0, lt=1))] = 0.95
+    'Confidence level in (0, 1) for bootstrap confidence intervals.'
+
     index_name: str = ''
     'Index column name in the data files. Required for modes that read external data.'
 
@@ -104,6 +112,8 @@ class RrlEvalConfig:
             suspected_case=self.suspected_case,
             label_name=label_name,
             positive_label=self.positive_label,
+            bootstrap_samples=self.bootstrap_samples,
+            ci_level=self.ci_level,
             log_root=Path(self.log_root),
             _shuffle=False,
         )

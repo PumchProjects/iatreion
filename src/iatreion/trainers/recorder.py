@@ -676,3 +676,15 @@ class Recorder:
         else:
             ci_result = self.formatter.format_final_metrics(final=final, width=width)
         return Finish(self.config, result, ci_result, self.result, final, ci, roc)
+
+
+def record_evaluation(
+    config: TrainConfig,
+    y_true: NDArray,
+    y_score: NDArray,
+    *,
+    threshold: float | None,
+) -> Finish:
+    recorder = Recorder(config)
+    recorder.record(TrainerReturn(0.0, y_true, y_score, threshold=threshold))
+    return recorder.finish(calc_ci=True)

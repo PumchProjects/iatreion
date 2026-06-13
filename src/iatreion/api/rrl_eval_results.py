@@ -9,7 +9,7 @@ from matplotlib.figure import Figure
 
 from iatreion.configs import DataName, DiscreteRrlConfig, RrlEvalConfig
 from iatreion.train_utils import make_data_labels
-from iatreion.trainers import Recorder, TrainerReturn
+from iatreion.trainers import record_evaluation
 from iatreion.utils import write_spreadsheet
 
 from .rrl_eval_common import calc_score, get_max_label
@@ -306,10 +306,12 @@ def get_eval_result(
     X_df = X_df.dropna(how='all')
     y_true = y_df.map(train_config.get_group_index_mapping()).to_numpy()
     y_score = X_df.to_numpy()
-    recorder = Recorder(train_config)
-    eval_result = recorder.record(
-        TrainerReturn(0.0, y_true, y_score, threshold=model.artifact.default_threshold)
+    finish = record_evaluation(
+        train_config,
+        y_true,
+        y_score,
+        threshold=model.artifact.default_threshold,
     )
-    fig = recorder.roc.fig if train_config.plot_roc else None
+    fig = finish.roc if train_config.plot_roc else None
     summary = format_enabled_terms(config, model.config.dataset.names)
-    return f'{summary}\n\n{eval_result}', fig, model.config
+    return f'{summary}\n\n{finish.ci_result}', fig, model.config
