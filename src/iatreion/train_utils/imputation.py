@@ -95,6 +95,8 @@ class SimpleImputerArtifact:
 
         rows = frame.index[available]
         for column in self.columns:
+            if column.snap_upper is None and not column.fill_value.is_integer():
+                frame[column.name] = frame[column.name].astype(float)
             frame.loc[rows, column.name] = frame.loc[rows, column.name].fillna(
                 column.fill_value
             )
