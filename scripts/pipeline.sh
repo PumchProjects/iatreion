@@ -12,4 +12,4 @@ for model_name in xgboost random-forest rrl; do
     uv run iatreion --config configs/config.toml eval $model_name -n h-demo h-mmse h-moca h-mri-roi h-history sh-apoe-labdata
 done
 
-uv run iatreion --config configs/config.toml train rrl-parser --n-inner-splits 2 --n-outer-splits 2
+uv run iatreion --config configs/config.toml train rrl-parser

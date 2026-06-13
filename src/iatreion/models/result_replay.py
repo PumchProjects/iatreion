@@ -2,6 +2,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from iatreion.configs import ResultReplayConfig
+from iatreion.log_paths import (
+    RESULT_REPLAY_DIR,
+    final_calibration_model_root,
+    final_calibration_root,
+    final_model_root,
+    training_model_root,
+    training_root,
+)
 from iatreion.train_utils import get_data_names
 from iatreion.train_utils.fusion import get_published_fusion_artifact_path
 from iatreion.train_utils.results import ResultStore
@@ -50,20 +58,32 @@ class ResultReplayModel:
         if train.final:
             target = self.final_source_target
             return (
-                train.log_root
-                / 'final-calibration'
-                / self.config.dataset.name_str
-                / train.group_name_str
-                / self.config.source_model
-                / target.aggregate
+                final_calibration_model_root(
+                    train.log_root,
+                    self.config.dataset.name_str,
+                    train.group_name_str,
+                    self.config.source_model,
+                    target.aggregate,
+                )
                 / target.folder_name
             )
+        return training_model_root(
+            train.log_root,
+            self.config.dataset.name_str,
+            train.group_name_str,
+            self.config.source_model,
+            train.aggregate,
+        )
+
+    @property
+    def result_replay_root(self) -> Path:
         return (
-            train.log_root
-            / self.config.dataset.name_str
-            / train.group_name_str
-            / self.config.source_model
-            / train.aggregate
+            training_root(
+                self.config.train.log_root,
+                self.config.dataset.name_str,
+                self.config.train.group_name_str,
+            )
+            / RESULT_REPLAY_DIR
         )
 
     @property
@@ -72,20 +92,18 @@ class ResultReplayModel:
         if train.final:
             target = self.final_source_target
             return (
-                train.log_root
-                / 'final-calibration'
-                / self.config.dataset.name_str
-                / train.group_name_str
-                / 'result-replay'
+                final_calibration_root(
+                    train.log_root,
+                    self.config.dataset.name_str,
+                    train.group_name_str,
+                )
+                / RESULT_REPLAY_DIR
                 / self.config.source_model
                 / target.aggregate
                 / self.subset_key
             )
         return (
-            train.log_root
-            / self.config.dataset.name_str
-            / train.group_name_str
-            / 'result-replay'
+            self.result_replay_root
             / self.config.source_model
             / train.aggregate
             / self.subset_key
@@ -95,7 +113,11 @@ class ResultReplayModel:
     def published_artifact_path(self) -> Path:
         train = self.config.train
         return get_published_fusion_artifact_path(
-            train.log_root / 'final' / train.group_name_str / self.config.source_model,
+            final_model_root(
+                train.log_root,
+                train.group_name_str,
+                self.config.source_model,
+            ),
             self.names,
         )
 

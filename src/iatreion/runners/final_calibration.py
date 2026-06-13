@@ -4,6 +4,7 @@ from shutil import copyfile
 from typing import Any
 
 from iatreion.configs import ModelConfig
+from iatreion.log_paths import final_calibration_model_root
 from iatreion.models import Model
 from iatreion.train_utils import get_cv_fold_specs, get_data_names, read_data
 from iatreion.train_utils.fusion import (
@@ -36,6 +37,20 @@ def get_final_calibration_target(config: ModelConfig) -> FinalCalibrationTarget:
     )
 
 
+def get_final_calibration_root(
+    config: ModelConfig,
+    model_name: str,
+    target: FinalCalibrationTarget,
+) -> Path:
+    return final_calibration_model_root(
+        config.train.log_root,
+        config.dataset.name_str,
+        config.train.group_name_str,
+        model_name,
+        target.aggregate,
+    )
+
+
 def fit_final_fusion_artifact(
     model_cls: type[Model],
     base_config: ModelConfig,
@@ -56,11 +71,14 @@ def fit_final_fusion_artifact(
             'train.aggregate': target.aggregate,
             'train._eval_names': target.eval_names,
             'train.final': False,
-            'train.log_root': train.log_root / 'final-calibration',
             'train.n_outer_splits': len(fold_specs),
         },
     )
-    config.register_log_dir(model_name, folder_name=target.folder_name)
+    config.register_log_dir(
+        model_name,
+        root=get_final_calibration_root(base_config, model_name, target),
+        folder_name=target.folder_name,
+    )
 
     model: Model | None = None
     try:

@@ -8,6 +8,12 @@ from cyclopts import Parameter
 from cyclopts.types import ExistingTomlPath
 
 from iatreion.exceptions import IatreionException
+from iatreion.log_paths import (
+    EVAL_DIR,
+    FINAL_DIR,
+    final_model_root,
+    training_model_root,
+)
 from iatreion.utils import add_file_handler, remove_file_handler
 
 from .dataset import DatasetConfig
@@ -56,17 +62,29 @@ class ModelConfig:
     def log_folder_name(self) -> str | None:
         return None
 
-    def get_exp_root(self, model_name: str) -> Path:
-        return (
-            self.train.log_root
-            / ('final' if self.train.final else self.dataset.name_str)
-            / self.train.group_name_str
-            / model_name
-            / ('' if self.train.final else self.train.ref_name_str)
+    def get_internal_exp_root(self, model_name: str) -> Path:
+        return training_model_root(
+            self.train.log_root,
+            self.dataset.name_str,
+            self.train.group_name_str,
+            model_name,
+            self.train.ref_name_str,
         )
 
+    def get_final_exp_root(self, model_name: str) -> Path:
+        return final_model_root(
+            self.train.log_root,
+            self.train.group_name_str,
+            model_name,
+        )
+
+    def get_exp_root(self, model_name: str) -> Path:
+        if self.train.final:
+            return self.get_final_exp_root(model_name)
+        return self.get_internal_exp_root(model_name)
+
     def get_eval_root(self, model_name: str) -> Path:
-        return self.get_exp_root(model_name) / 'eval' / self.dataset.name_str
+        return self.get_exp_root(model_name) / EVAL_DIR / self.dataset.name_str
 
     @cached_property
     def rrl_root(self) -> Path:
@@ -74,7 +92,7 @@ class ModelConfig:
         if not exp_root.is_dir():
             raise IatreionException(
                 'No experiment root found for $dataset and groups "$groups".',
-                dataset='final' if self.train.final else self.dataset.name_str,
+                dataset=FINAL_DIR if self.train.final else self.dataset.name_str,
                 groups=self.train.group_name_str,
             )
         return exp_root
@@ -83,12 +101,15 @@ class ModelConfig:
         self,
         model_name: str,
         *,
+        root: Path | None = None,
         folder_name: str | None = None,
         file_name: str = 'train.log',
     ) -> None:
         if self.tune:
             return
-        self.train._log_dir = self.get_exp_root(model_name)
+        self.train._log_dir = (
+            root if root is not None else self.get_exp_root(model_name)
+        )
         if folder_name is not None:
             self.train._log_dir /= folder_name
         self.close_log_handler()

@@ -19,6 +19,7 @@ from optuna.study import Study
 from optuna.trial import FrozenTrial, Trial, TrialState
 
 from iatreion.configs import ModelConfig
+from iatreion.log_paths import FINAL_DIR, NESTED_DIR, optuna_root
 from iatreion.models import Model
 from iatreion.models.naming import model_name_for
 from iatreion.train_utils import (
@@ -130,7 +131,6 @@ class TuningStudyConfig:
 
 @dataclass(frozen=True)
 class TuningExecutionConfig:
-    trial_log_root: Path = Path('logs_optuna')
     fail_value: float = 0.0
     n_jobs: int | None = None
     study_workers: int | None = None
@@ -138,7 +138,6 @@ class TuningExecutionConfig:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> 'TuningExecutionConfig':
         return cls(
-            trial_log_root=Path(data.get('trial-log-root', 'logs_optuna')),
             fail_value=float(data.get('fail-value', 0.0)),
             n_jobs=data.get('n-jobs'),
             study_workers=data.get('study-workers'),
@@ -150,6 +149,7 @@ class TuningSpec:
     study: TuningStudyConfig
     execution: TuningExecutionConfig
     search: dict[str, SearchSpace]
+    root: Path
 
     @classmethod
     def load(cls, config: ModelConfig) -> 'TuningSpec':
@@ -179,11 +179,12 @@ class TuningSpec:
             study=study,
             execution=TuningExecutionConfig.from_dict(data.get('execution', {})),
             search=flatten_search_space(data['search']),
+            root=optuna_root(config.train.log_root),
         )
 
     @property
     def study_root(self) -> Path:
-        return self.execution.trial_log_root / self.study.name
+        return self.root / self.study.name
 
 
 @dataclass(frozen=True)
@@ -289,9 +290,9 @@ def format_objective(value: float | None) -> str:
 
 
 def study_label(root: Path, candidate: str) -> str:
-    if len(root.parts) >= 3 and root.parts[-3] == 'nested':
+    if len(root.parts) >= 3 and root.parts[-3] == NESTED_DIR:
         return f'nested {root.parts[-2]} {candidate}'
-    if len(root.parts) >= 2 and root.parts[-2] == 'final':
+    if len(root.parts) >= 2 and root.parts[-2] == FINAL_DIR:
         return f'final {candidate}'
     return candidate
 
@@ -509,11 +510,11 @@ class OptunaStudyExecutor:
         job: StudyJob,
     ) -> float:
         sampled = self._sample(trial)
-        trial_log_root = job.root / f'trial_{trial.number:04d}'
+        trial_root = job.root / f'trial_{trial.number:04d}'
         config = self._training_config(
             job.target.training_overrides(len(job.fold_specs))
             | sampled
-            | {'train.log_root': trial_log_root},
+            | {'train.log_root': trial_root},
             file_name=f'trial_{trial.number:04d}.log',
         )
 
@@ -529,7 +530,7 @@ class OptunaStudyExecutor:
                 summary = trainer.train()
         except Exception as error:
             dump_trial_info(
-                trial_log_root,
+                trial_root,
                 status='failed',
                 sampled=sampled,
                 error=repr(error),
@@ -546,7 +547,7 @@ class OptunaStudyExecutor:
         objectives = {key: float(value) for key, value in summary.objectives.items()}
         if objective is None:
             dump_trial_info(
-                trial_log_root,
+                trial_root,
                 status=f'missing-objective:{objective_name}',
                 sampled=sampled,
                 objectives=objectives,
@@ -556,7 +557,7 @@ class OptunaStudyExecutor:
         objective_value = float(objective)
         if not isfinite(objective_value):
             dump_trial_info(
-                trial_log_root,
+                trial_root,
                 status=f'nonfinite-objective:{objective_name}',
                 sampled=sampled,
                 objectives=objectives,
@@ -564,7 +565,7 @@ class OptunaStudyExecutor:
             return self.spec.execution.fail_value
 
         dump_trial_info(
-            trial_log_root,
+            trial_root,
             status='completed',
             sampled=sampled,
             objectives=objectives,
@@ -747,7 +748,7 @@ class OptunaRunner(Runner):
                     fold_specs=fold_specs,
                     root=(
                         self.study_root
-                        / 'nested'
+                        / NESTED_DIR
                         / f'outer_{outer_fold}'
                         / sanitize_name(target.name)
                     ),
@@ -758,7 +759,7 @@ class OptunaRunner(Runner):
 
         save_dict(
             {f'outer_{outer}': params for outer, params in selected.items()},
-            self.study_root / 'nested' / 'selected_params.toml',
+            self.study_root / NESTED_DIR / 'selected_params.toml',
         )
         return selected, get_nested_fold_specs(self.base_config.train, ref_y)
 
@@ -782,12 +783,12 @@ class OptunaRunner(Runner):
             StudyJob(
                 target=target,
                 fold_specs=fold_specs,
-                root=self.study_root / 'final' / sanitize_name(target.name),
+                root=self.study_root / FINAL_DIR / sanitize_name(target.name),
             )
             for target in self._targets()
         ]
         selected = self._run_study_jobs(jobs)
-        save_dict(selected, self.study_root / 'final' / 'selected_params.toml')
+        save_dict(selected, self.study_root / FINAL_DIR / 'selected_params.toml')
         return selected
 
     def _fit_final_fusion_artifact(self, selected: dict[str, dict[str, Any]]) -> Path:

@@ -78,7 +78,7 @@ h-demo h-mmse h-moca h-mri h-history sh-apoe-labdata
 h-demo h-mmse h-moca h-mri-roi h-history sh-apoe-labdata
 ```
 
-It also runs `train rrl-parser --n-inner-splits 2 --n-outer-splits 2` as a parser parity/internal re-evaluation check. Figure and table commands are documented in the Figures and Tables section; `show` commands will be appended to `scripts/pipeline.sh` when the manuscript plotting workflow is finalized.
+It also runs `train rrl-parser` as a parser parity/internal re-evaluation check. Figure and table commands are documented in the Figures and Tables section; `show` commands will be appended to `scripts/pipeline.sh` when the manuscript plotting workflow is finalized.
 
 ## Configuration Files
 
@@ -88,7 +88,7 @@ CLI options override TOML values, so `uv run iatreion train rrl --config configs
 
 Before using `configs/config.toml`, replace its placeholder paths with real local paths, including values such as `process.prefix`, `process.group-data`, `process.basic-data`, `process.data.*`, `process.vmri`, `process.vmri-change`, `train.rrl.prefix`, `train.xgboost.prefix`, `train.random-forest.prefix`, and show command `prefix` values. You can also leave the TOML generic and pass real paths from the CLI; command-line values take precedence.
 
-Hyperparameter tuning uses separate TOML search spaces selected with `--tune-config` or the model-specific `train.<model>.tune-config`: RRL usually uses `configs/optuna_rrl.toml`, XGBoost uses `configs/optuna_xgboost.toml`, and Random Forest uses `configs/optuna_random_forest.toml`. Each tuning file's `[execution]` table controls Optuna execution settings such as `trial-log-root`, while `configs/config.toml` or CLI options control the training log root.
+Hyperparameter tuning uses separate TOML search spaces selected with `--tune-config` or the model-specific `train.<model>.tune-config`: RRL usually uses `configs/optuna_rrl.toml`, XGBoost uses `configs/optuna_xgboost.toml`, and Random Forest uses `configs/optuna_random_forest.toml`. Each tuning file's `[execution]` table controls Optuna execution settings such as failure values and worker counts, while `configs/config.toml` or CLI options control the shared log root; tuning studies are always written under `{log-root}/optuna`.
 
 ## Data Model
 
@@ -272,22 +272,22 @@ uv run iatreion train rrl \
   --tune-config configs/optuna_rrl.toml
 ```
 
-The training output root is `logs` in this example; set it with `--log-root` or `train.rrl.log-root` in `configs/config.toml`. The Optuna artifact root shown below defaults to `logs_optuna`, controlled by `execution.trial-log-root` in `configs/optuna_rrl.toml`; artifacts are grouped as `<study-name>/<model>/...` so RRL and baseline studies for the same dataset/group setup share one experiment namespace without sharing SQLite databases.
+The training output root is `logs` in this example; set it with `--log-root` or `train.rrl.log-root` in `configs/config.toml`. Optuna artifacts are written under `{log-root}/optuna/<study-name>/<model>/...`, so RRL and baseline studies for the same dataset/group setup share one experiment namespace without sharing SQLite databases. Internal nested-evaluation outputs are written under `{log-root}/training/<dataset-names>/<group-names>/...`; final model artifacts remain under `{log-root}/final/...`.
 
 Every training run writes a compact `manifest.toml` in its output directory. The manifest records the command line, git commit and dirty files, `uv.lock` version/revision/hash, Python/uv/PyTorch/CUDA/GPU environment, processed data hashes, resolved hyperparameters plus selected Optuna parameters, final objective metrics, and artifact paths with hashes; result NPZ files store prediction scores together with sample IDs and fold metadata, while larger logs, rules, and plots remain in their normal files and are referenced from the manifest.
 
 Optuna artifacts are organized by stage, outer fold, and tuning target:
 
 ```text
-logs_optuna/<study-name>/<model>/nested/outer_<k>/<target>/study.db
-logs_optuna/<study-name>/<model>/nested/outer_<k>/<target>/best_trial.toml
-logs_optuna/<study-name>/<model>/nested/selected_params.toml
+logs/optuna/<study-name>/<model>/nested/outer_<k>/<target>/study.db
+logs/optuna/<study-name>/<model>/nested/outer_<k>/<target>/best_trial.toml
+logs/optuna/<study-name>/<model>/nested/selected_params.toml
 ```
 
 Nested evaluation output is organized under:
 
 ```text
-logs/<dataset-names>/<group-names>/rrl/calibrated-fusion/
+logs/training/<dataset-names>/<group-names>/rrl/calibrated-fusion/
 ```
 
 The important exported files include:
@@ -324,7 +324,7 @@ When `--no-clinical-threshold` is set, the `*_clinical_recall` result is omitted
 
 ## Parser Re-evaluation
 
-Downstream tools use the RRL parser rather than the live PyTorch model. Parser-based internal re-evaluation is an optional parser parity check against the live-model nested CV output; it reuses the live nested fold-level artifacts from `logs/<dataset-names>/<group-names>/rrl/calibrated-fusion/fold_artifacts/outer_<k>/available_fusion.toml` and does not publish artifacts for final external validation:
+Downstream tools use the RRL parser rather than the live PyTorch model. Parser-based internal re-evaluation is an optional parser parity check against the live-model nested CV output; it reuses the live nested fold-level artifacts from `logs/training/<dataset-names>/<group-names>/rrl/calibrated-fusion/fold_artifacts/outer_<k>/available_fusion.toml` and does not publish artifacts for final external validation:
 
 ```bash
 uv run iatreion train rrl-parser \
@@ -346,7 +346,7 @@ Parser re-evaluation does not train a live RRL model and does not use a validati
 This command writes parser-based parity metrics under:
 
 ```text
-logs/<dataset-names>/<group-names>/rrl-parser/calibrated-fusion/
+logs/training/<dataset-names>/<group-names>/rrl-parser/calibrated-fusion/
 ```
 
 ## Final Model Fitting
@@ -374,14 +374,14 @@ uv run iatreion train rrl \
   -f
 ```
 
-Final tuning artifacts use the same `execution.trial-log-root` setting from `configs/optuna_rrl.toml`; final model and rule artifacts use `--log-root` or `train.rrl.log-root`.
+Final tuning artifacts use the same fixed `{log-root}/optuna` root as nested tuning; final model and rule artifacts use `--log-root` or `train.rrl.log-root`.
 
 Final tuning artifacts are written under:
 
 ```text
-logs_optuna/<study-name>/<model>/final/<target>/study.db
-logs_optuna/<study-name>/<model>/final/<target>/best_trial.toml
-logs_optuna/<study-name>/<model>/final/selected_params.toml
+logs/optuna/<study-name>/<model>/final/<target>/study.db
+logs/optuna/<study-name>/<model>/final/<target>/best_trial.toml
+logs/optuna/<study-name>/<model>/final/selected_params.toml
 ```
 
 The final runner fits an internal OOF `available_fusion.toml` with the selected final parameters under `logs/final-calibration/<dataset-names>/<group-names>/rrl/average/<dataset-names>/`, then publishes the full-modality artifact to:
@@ -418,7 +418,7 @@ uv run iatreion train result-replay \
   --log-root logs
 ```
 
-For internal evaluation, result replay fits each outer fold's subset fusion artifact from the corresponding inner-CV result NPZ files and evaluates that artifact on the outer fold; it also fits a global OOF artifact for later inspection. Output is written under `logs/<dataset-names>/<group-names>/result-replay/<source-model>/<aggregate>/<subset-key>/`, with the global artifact at `available_fusion.toml` and fold artifacts under `fold_artifacts/outer_<k>/available_fusion.toml`.
+For internal evaluation, result replay fits each outer fold's subset fusion artifact from the corresponding inner-CV result NPZ files and evaluates that artifact on the outer fold; it also fits a global OOF artifact for later inspection. Output is written under `logs/training/<dataset-names>/<group-names>/result-replay/<source-model>/<aggregate>/<subset-key>/`, with the global artifact at `available_fusion.toml` and fold artifacts under `fold_artifacts/outer_<k>/available_fusion.toml`.
 
 For final subset artifacts, first run final model fitting so `logs/final-calibration/<dataset-names>/<group-names>/<source-model>/average/<dataset-names>/results_<name>.npz` exists, then replay with `-f`:
 
@@ -553,7 +553,7 @@ uv run iatreion train random-forest \
   --tune-config configs/optuna_random_forest.toml
 ```
 
-The baseline outputs follow the same dataset/group/aggregate directory convention as other training commands for internal evaluation. Final artifacts used by `iatreion eval` are written under `logs/final/<group-names>/xgboost/` or `logs/final/<group-names>/random-forest/`, with per-modality artifacts in `artifacts/<name>/`; each `transform.toml` records the fitted preprocessing schema and embeds feature-selection or simple-imputer metadata when those steps are enabled, and external-validation logs and ROC plots are written under each final model root's `eval/<dataset-names>/` subdirectory.
+Baseline internal outputs follow the same `{log-root}/training/<dataset-names>/<group-names>/<model>/<aggregate>/` directory convention as other training commands. Final artifacts used by `iatreion eval` are written under `logs/final/<group-names>/xgboost/` or `logs/final/<group-names>/random-forest/`, with per-modality artifacts in `artifacts/<name>/`; each `transform.toml` records the fitted preprocessing schema and embeds feature-selection or simple-imputer metadata when those steps are enabled, and external-validation logs and ROC plots are written under each final model root's `eval/<dataset-names>/` subdirectory.
 
 ### Baseline External Validation
 

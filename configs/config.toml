@@ -31,8 +31,7 @@ gamma = 3
 use-not = true
 skip = true
 weighted = true
-missing-aware-mode = "improved"
-missing-value-strategy = "none"
+missing-aware-mode = "original"
 tune-config = "configs/optuna_rrl.toml"
 
 [train.rrl-parser]
