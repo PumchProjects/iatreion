@@ -16,6 +16,7 @@ _PROB_EPS = 1e-6
 _FUSION_SCHEMA_VERSION = 2
 _FUSION_POLICY = 'learned_global_weights'
 _WEIGHT_OBJECTIVE = 'log_loss'
+_WEIGHT_FIT_RANDOM_STARTS = 8
 
 
 def get_fusion_subset_key(names: list[str]) -> str:
@@ -241,6 +242,21 @@ class AvailableFusionArtifact:
             ]
         )
 
+    @staticmethod
+    def get_weight_initializers(n_names: int) -> list[NDArray]:
+        starts = [np.full(n_names, 1.0 / n_names)]
+        starts.extend(np.eye(n_names))
+        rng = np.random.default_rng(42)
+        for _ in range(_WEIGHT_FIT_RANDOM_STARTS):
+            weights = rng.random(n_names)
+            starts.append(weights / weights.sum())
+        return starts
+
+    @staticmethod
+    def normalize_weights(weights: NDArray) -> NDArray:
+        weights = np.clip(weights, 0.0, 1.0)
+        return weights / weights.sum()
+
     @classmethod
     def fit_weights(
         cls,
@@ -256,29 +272,44 @@ class AvailableFusionArtifact:
         logits = calibrated_logits[available_any]
         masks = missing[available_any]
         target = y_true[available_any]
-        initial = np.full(len(names), 1.0 / len(names))
 
         def objective(weights: NDArray) -> float:
             fused_logits = cls.fuse_logits(logits, masks, weights)
             return binary_log_loss_from_logits(target, fused_logits)
 
-        result = minimize(
-            objective,
-            initial,
-            method='SLSQP',
-            bounds=[(0.0, 1.0)] * len(names),
-            constraints={'type': 'eq', 'fun': lambda weights: weights.sum() - 1.0},
-            options={'ftol': 1e-9, 'maxiter': 1000},
-        )
-        if not result.success:
+        best_weights: NDArray | None = None
+        best_loss = np.inf
+        failures = []
+        for initial in cls.get_weight_initializers(len(names)):
+            result = minimize(
+                objective,
+                initial,
+                method='SLSQP',
+                bounds=[(0.0, 1.0)] * len(names),
+                constraints={
+                    'type': 'eq',
+                    'fun': lambda weights: weights.sum() - 1.0,
+                },
+                options={'ftol': 1e-9, 'maxiter': 1000},
+            )
+            if not result.success:
+                failures.append(str(result.message))
+                continue
+
+            weights = cls.normalize_weights(result.x)
+            loss = objective(weights)
+            if loss < best_loss:
+                best_loss = loss
+                best_weights = weights
+
+        if best_weights is None:
             raise IatreionException(
                 'Failed to fit calibrated-fusion weights: $message',
-                message=result.message,
+                message='; '.join(dict.fromkeys(failures)),
             )
-        weights = np.clip(result.x, 0.0, 1.0)
-        weights /= weights.sum()
         return {
-            name: weight.item() for name, weight in zip(names, weights, strict=True)
+            name: weight.item()
+            for name, weight in zip(names, best_weights, strict=True)
         }
 
     @staticmethod
