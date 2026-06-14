@@ -65,20 +65,24 @@ uv run iatreion-gui  # GUI
 
 ## Manuscript Reproduction
 
-Fill `configs/config.toml` with the local raw-data paths, preprocessing settings, labels, modality names, tuning files, log roots, and external-validation inputs for the manuscript run. Then execute:
+Fill `configs/config.toml` with the local raw-data paths, preprocessing settings, modality names, tuning files, and external-validation inputs for the manuscript run. Then execute:
 
 ```bash
 bash scripts/pipeline.sh
 ```
 
-The script first runs `process` to generate the processed internal data referenced by the config. It then runs the main modeling and external-validation command sequence for `xgboost`, `random-forest`, and `rrl`. For each model, it runs nested internal evaluation, final fitting, full-modality result replay, two manuscript modality-subset result replays, final subset-artifact publication, and external validation for the two subset definitions:
+The script first runs `process` and then runs three manuscript label tasks: `A` (`A+` versus `A-`), `T` (`T+` versus `T-`), and `MMSE_progression_group` (`fast` versus `slow`).
+
+For each task, the script runs two missing-data workflows. The `logs_imputed` workflow uses the default imputation settings; XGBoost and Random Forest also use native feature importance. The `logs_not_imputed` workflow trains XGBoost and Random Forest with `--missing-value-strategy none`, and trains RRL with `--missing-aware-mode improved`.
+
+For each model/workflow combination, it runs nested internal evaluation, final fitting, full-modality result replay, two manuscript modality-subset result replays, final subset-artifact publication, and external validation for the two subset definitions:
 
 ```text
 h-demo h-mmse h-moca h-mri h-history sh-apoe-labdata
 h-demo h-mmse h-moca h-mri-roi h-history sh-apoe-labdata
 ```
 
-It also runs `train rrl-parser` as a parser parity/internal re-evaluation check. Figure and table commands are documented in the Figures and Tables section; `show` commands will be appended to `scripts/pipeline.sh` when the manuscript plotting workflow is finalized.
+It also runs `train rrl-parser` once per task and missing-data workflow as a parser parity/internal re-evaluation check. Figure and table commands are documented in the Figures and Tables section; `show` commands will be appended to `scripts/pipeline.sh` when the manuscript plotting workflow is finalized.
 
 ## Configuration Files
 
