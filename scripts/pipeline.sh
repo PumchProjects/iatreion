@@ -5,6 +5,37 @@ set -euxo pipefail
 config_path="configs/config.toml"
 run_process=true
 
+prefix="<path-to-the-folder-storing-processed-data>"
+process_harmonized="<path-to-the-internal-harmonized-spreadsheet>"
+eval_harmonized="<path-to-the-external-harmonized-spreadsheet>"
+swap_harmonized=false
+log_root_suffix=""
+
+if [[ "$swap_harmonized" == true ]]; then
+    harmonized_tmp="$process_harmonized"
+    process_harmonized="$eval_harmonized"
+    eval_harmonized="$harmonized_tmp"
+    log_root_suffix="_swapped"
+fi
+
+process_info="${prefix}/process_info.toml"
+imputed_log_root="logs_imputed${log_root_suffix}"
+not_imputed_log_root="logs_not_imputed${log_root_suffix}"
+
+process_path_args=(
+    --prefix "$prefix"
+    --data.harmonized "$process_harmonized"
+)
+
+train_path_args=(
+    --prefix "$prefix"
+)
+
+eval_path_args=(
+    --process "$process_info"
+    --data.harmonized "$eval_harmonized"
+)
+
 eval_subsets=(
     "h-demo h-mmse h-moca h-mri h-history sh-apoe-labdata"
     "h-demo h-mmse h-moca h-mri-roi h-history sh-apoe-labdata"
@@ -24,7 +55,7 @@ iatreion() {
 }
 
 process() {
-    iatreion process
+    iatreion process "${process_path_args[@]}"
 }
 
 build_task_args() {
@@ -52,29 +83,29 @@ train_eval() {
     local -a subset_names=()
 
     for model_name in "${models_ref[@]}"; do
-        iatreion train "$model_name" "${task_args_ref[@]}" "${train_args_ref[@]}"
-        iatreion train "$model_name" "${task_args_ref[@]}" "${train_args_ref[@]}" -f
+        iatreion train "$model_name" "${train_path_args[@]}" "${task_args_ref[@]}" "${train_args_ref[@]}"
+        iatreion train "$model_name" "${train_path_args[@]}" "${task_args_ref[@]}" "${train_args_ref[@]}" -f
 
-        iatreion train result-replay "${task_args_ref[@]}" --source-model "$model_name"
+        iatreion train result-replay "${train_path_args[@]}" "${task_args_ref[@]}" --source-model "$model_name"
 
         for subset in "${eval_subsets[@]}"; do
             read -r -a subset_names <<< "$subset"
-            iatreion train result-replay "${task_args_ref[@]}" --source-model "$model_name" \
+            iatreion train result-replay "${train_path_args[@]}" "${task_args_ref[@]}" --source-model "$model_name" \
                 --eval-names "${subset_names[@]}"
-            iatreion train result-replay "${task_args_ref[@]}" --source-model "$model_name" \
+            iatreion train result-replay "${train_path_args[@]}" "${task_args_ref[@]}" --source-model "$model_name" \
                 --eval-names "${subset_names[@]}" -f
         done
 
         for subset in "${eval_subsets[@]}"; do
             read -r -a subset_names <<< "$subset"
-            iatreion eval "$model_name" "${task_args_ref[@]}" -n "${subset_names[@]}"
+            iatreion eval "$model_name" "${eval_path_args[@]}" "${task_args_ref[@]}" -n "${subset_names[@]}"
         done
     done
 }
 
 parity_check() {
     local -n task_args_ref="${1}"
-    iatreion train rrl-parser "${task_args_ref[@]}"
+    iatreion train rrl-parser "${train_path_args[@]}" "${task_args_ref[@]}"
 }
 
 run_baselines_for_task() {
@@ -84,11 +115,11 @@ run_baselines_for_task() {
     local -a task_args=()
     local -a train_args=()
 
-    build_task_args task_args "$label_name" "$groups" "$positive_label" logs_imputed
+    build_task_args task_args "$label_name" "$groups" "$positive_label" "$imputed_log_root"
     train_args=(--importance-methods native)
     train_eval baseline_models task_args train_args
 
-    build_task_args task_args "$label_name" "$groups" "$positive_label" logs_not_imputed
+    build_task_args task_args "$label_name" "$groups" "$positive_label" "$not_imputed_log_root"
     train_args=(--importance-methods native --missing-value-strategy none)
     train_eval baseline_models task_args train_args
 }
@@ -100,18 +131,18 @@ run_rrl_for_task() {
     local -a task_args=()
     local -a train_args=()
 
-    build_task_args task_args "$label_name" "$groups" "$positive_label" logs_imputed
+    build_task_args task_args "$label_name" "$groups" "$positive_label" "$imputed_log_root"
     train_args=()
     train_eval rrl_models task_args train_args
 
-    build_task_args task_args "$label_name" "$groups" "$positive_label" logs_not_imputed
+    build_task_args task_args "$label_name" "$groups" "$positive_label" "$not_imputed_log_root"
     train_args=(--missing-aware-mode improved)
     train_eval rrl_models task_args train_args
 
-    build_task_args task_args "$label_name" "$groups" "$positive_label" logs_imputed
+    build_task_args task_args "$label_name" "$groups" "$positive_label" "$imputed_log_root"
     parity_check task_args
 
-    build_task_args task_args "$label_name" "$groups" "$positive_label" logs_not_imputed
+    build_task_args task_args "$label_name" "$groups" "$positive_label" "$not_imputed_log_root"
     parity_check task_args
 }
 

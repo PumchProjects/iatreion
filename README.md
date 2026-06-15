@@ -65,13 +65,17 @@ uv run iatreion-gui  # GUI
 
 ## Manuscript Reproduction
 
-Fill `configs/config.toml` with the local raw-data paths, preprocessing settings, modality names, tuning files, and external-validation inputs for the manuscript run. Then execute:
+Set the path variables at the top of `scripts/pipeline.sh` for the processed-data folder, the internal harmonized spreadsheet used by `process`, and the external harmonized spreadsheet used by `eval`. The script derives `process_info.toml` from the processed-data folder and passes these paths on the command line, overriding the placeholder path values in `configs/config.toml`.
+
+`configs/config.toml` still provides the reusable preprocessing settings, modality names, model defaults, tuning files, and external-validation defaults for the manuscript run. Then execute:
 
 ```bash
 bash scripts/pipeline.sh
 ```
 
 The script first runs `process` and then runs three manuscript label tasks: `A` (`A+` versus `A-`), `T` (`T+` versus `T-`), and `MMSE_progression_group` (`fast` versus `slow`).
+
+To run the paired experiment with the internal and external harmonized spreadsheets swapped, set `swap_harmonized=true` at the top of `scripts/pipeline.sh`.
 
 For each task, the script runs two missing-data workflows. The `logs_imputed` workflow uses the default imputation settings; XGBoost and Random Forest also use native feature importance. The `logs_not_imputed` workflow trains XGBoost and Random Forest with `--missing-value-strategy none`, and trains RRL with `--missing-aware-mode improved`.
 
