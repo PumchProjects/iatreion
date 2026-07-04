@@ -12,7 +12,9 @@ from .preprocessor import PreprocessorConfig
 from .train import UNUSED_LABEL_NAME, TrainConfig
 
 type ZeroMeanFallback = Literal['uniform', 'bias']
-type RrlEvalMode = Literal['single', 'batch', 'eval', 'show', 'rule-or']
+type RrlEvalMode = Literal[
+    'single', 'batch', 'eval', 'show', 'ranked-rules', 'rule-or'
+]
 
 
 @Parameter(name='*')
@@ -53,7 +55,7 @@ class RrlEvalConfig:
     'Mode of RRL evaluation.'
 
     output: Annotated[str, Parameter(alias='-o')] = ''
-    'Output path for exported batch results or rule-OR tables.'
+    'Output path for exported batch results, ranked rules, or rule-OR tables.'
 
     keep: Annotated[Literal['first', 'last'], Parameter(alias='-k')] = 'last'
     """Deduplication strategy for duplicated samples.
@@ -96,7 +98,7 @@ class RrlEvalConfig:
 
     def make_configs(self) -> tuple[PreprocessorConfig, DiscreteRrlConfig]:
         # HACK: Empty prefix
-        if self.mode != 'show' and not self.index_name:
+        if self.mode not in {'show', 'ranked-rules'} and not self.index_name:
             raise ValueError(
                 'index_name is required for modes that read external data.'
             )

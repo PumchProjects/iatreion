@@ -98,8 +98,19 @@ train_eval() {
 
         for subset in "${eval_subsets[@]}"; do
             read -r -a subset_names <<< "$subset"
-            iatreion eval "$model_name" "${eval_path_args[@]}" "${task_args_ref[@]}" -n "${subset_names[@]}"
+            iatreion eval "$model_name" "${eval_path_args[@]}" "${task_args_ref[@]}" -n "${subset_names[@]}" -m eval
         done
+    done
+}
+
+eval_rrl_ranked_rules() {
+    local -n task_args_ref="${1}"
+    local subset
+    local -a subset_names=()
+
+    for subset in "${eval_subsets[@]}"; do
+        read -r -a subset_names <<< "$subset"
+        iatreion eval rrl "${eval_path_args[@]}" "${task_args_ref[@]}" -n "${subset_names[@]}" -m ranked-rules
     done
 }
 
@@ -134,15 +145,13 @@ run_rrl_for_task() {
     build_task_args task_args "$label_name" "$groups" "$positive_label" "$imputed_log_root"
     train_args=()
     train_eval rrl_models task_args train_args
+    eval_rrl_ranked_rules task_args
+    parity_check task_args
 
     build_task_args task_args "$label_name" "$groups" "$positive_label" "$not_imputed_log_root"
     train_args=(--missing-aware-mode improved)
     train_eval rrl_models task_args train_args
-
-    build_task_args task_args "$label_name" "$groups" "$positive_label" "$imputed_log_root"
-    parity_check task_args
-
-    build_task_args task_args "$label_name" "$groups" "$positive_label" "$not_imputed_log_root"
+    eval_rrl_ranked_rules task_args
     parity_check task_args
 }
 

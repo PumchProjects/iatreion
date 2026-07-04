@@ -8,10 +8,12 @@ from iatreion.api import (
     RrlTermOption,
     get_batched_result,
     get_eval_result,
+    get_ranked_rule_table,
     get_result,
     get_rule_options,
     get_rule_or_table,
     save_batched_result_table,
+    save_ranked_rule_table,
     save_rule_or_table,
 )
 from iatreion.configs import RrlEvalConfig
@@ -114,6 +116,16 @@ def display_rule_or_result(config: RrlEvalConfig) -> None:
     console.print(f'Saved RRL rule OR table to {output}')
 
 
+def display_ranked_rule_result(config: RrlEvalConfig) -> None:
+    table = get_ranked_rule_table(config)
+    _, model_config = config.make_configs()
+    output = Path(config.output) if config.output else (
+        model_config.get_eval_root('rrl') / 'rrl_ranked_rules.tsv'
+    )
+    output = save_ranked_rule_table(table, output)
+    console.print(f'Saved ranked RRL rules to {output}')
+
+
 def display_models(config: RrlEvalConfig) -> None:
     options_by_name: dict[str, list[RrlTermOption]] = defaultdict(list)
     for option in get_rule_options(config):
@@ -141,5 +153,7 @@ def run_rrl_eval(config: RrlEvalConfig) -> None:
             display_eval_result(config)
         case 'show':
             display_models(config)
+        case 'ranked-rules':
+            display_ranked_rule_result(config)
         case 'rule-or':
             display_rule_or_result(config)

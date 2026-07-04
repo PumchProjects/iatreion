@@ -93,12 +93,12 @@ groups = ["A+", "A-"]
 positive-label = "A+"
 index-name = "ID"
 keep = "first"
-mode = "eval"
+mode = "ranked-rules"
 names = ["h-demo", "h-mmse", "h-moca", "h-mri", "h-mri-roi", "h-history", "sh-apoe-labdata"]
 process = "<path-to-the-process-info-file>"
-sample-id = "XH1069366"
+sample-id = "<sample-id-of-the-patient>"
 suspected-case = false
-log-root = "logs"
+log-root = "<path-to-the-previous-log-root>"
 top-k = 20
 data = { harmonized = "<path-to-the-external-data-spreadsheet>" }
 zero-mean-fallback = "bias"
@@ -112,7 +112,7 @@ index-name = "ID"
 keep = "first"
 mode = "eval"
 process = "<path-to-the-process-info-file>"
-log-root = "logs"
+log-root = "<path-to-the-previous-log-root>"
 data = { harmonized = "<path-to-the-external-data-spreadsheet>" }
 
 [eval.random-forest]
@@ -124,7 +124,7 @@ index-name = "ID"
 keep = "first"
 mode = "eval"
 process = "<path-to-the-process-info-file>"
-log-root = "logs"
+log-root = "<path-to-the-previous-log-root>"
 data = { harmonized = "<path-to-the-external-data-spreadsheet>" }
 
 [show.table-1]

@@ -10,11 +10,12 @@ from .rrl_eval_results import (
     format_enabled_terms,
     get_batched_result,
     get_eval_result,
-    get_models,
+    get_ranked_rule_table,
     get_result,
     get_rule_options,
     get_rule_or_table,
     save_batched_result_table,
+    save_ranked_rule_table,
     save_rule_or_table,
 )
 from .rrl_eval_types import (

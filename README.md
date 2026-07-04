@@ -460,9 +460,9 @@ Use `uv run iatreion eval rrl` to apply final RRL rule files to external data. T
 - `--index-name`: external sample ID column, required for modes that read external data.
 - `--label-name`: external label column, required for `-m eval` and `-m rule-or`; in other modes it is optional and only used to exclude a label column from features.
 - `--bootstrap-samples` and `--ci-level`: non-stratified bootstrap settings for labeled external-evaluation confidence intervals; defaults are 1000 resamples and 0.95.
-- `-o/--output`: exported spreadsheet path for `batch` and `rule-or` modes; supported suffixes are `.xlsx`, `.csv`, and `.tsv`.
+- `-o/--output`: exported spreadsheet path for `batch`, `ranked-rules`, and `rule-or` modes; supported suffixes are `.xlsx`, `.csv`, and `.tsv`.
 
-For labeled external evaluation, `eval.log` reports point estimates with bootstrap confidence intervals, and logs and ROC plots are written under `logs/final/<group-names>/rrl/eval/<dataset-names>/`, so different modality lists do not overwrite each other.
+For labeled external evaluation, `eval.log` reports point estimates with bootstrap confidence intervals, and logs, ROC plots, and default ranked-rule TSV files are written under `logs/final/<group-names>/rrl/eval/<dataset-names>/`, so different modality lists do not overwrite each other.
 
 Example for symptom plus CSVD:
 
@@ -512,10 +512,11 @@ Evaluation modes:
 | `eval` | Compute metrics when external labels are available |
 | `rule-or` | Export per-rule unadjusted odds ratios against each rule's predicted label; set `-o/--output` to an `.xlsx`, `.csv`, or `.tsv` path |
 | `show` | List exported model rules |
+| `ranked-rules` | Export all non-bias rules across modalities, sorted by calibrated fusion score; set `-o/--output` to an `.xlsx`, `.csv`, or `.tsv` path |
 
 For single-sample explanations, pass `--sample-id`.
 
-When `-o/--output` is omitted, `batch` writes `rrl_batch_result.xlsx` and `rule-or` writes `rrl_rule_or.tsv`.
+`show` and `ranked-rules` report transformed rule scores that include the raw rule weights, each modality's calibration slope, and the modality fusion weight; the calibration intercept only affects the Bias term. When `-o/--output` is omitted, `batch` writes `rrl_batch_result.xlsx`, `ranked-rules` writes `rrl_ranked_rules.tsv` under `logs/final/<group-names>/rrl/eval/<dataset-names>/`, and `rule-or` writes `rrl_rule_or.tsv`.
 
 ## XGBoost and Random Forest Baselines
 

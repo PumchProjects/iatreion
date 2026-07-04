@@ -31,23 +31,6 @@ class RrlTermOption:
         return 'Bias' if self.kind == 'bias' else f'#{self.index}'
 
 
-def get_models(config: RrlEvalConfig) -> list[tuple[str, list[list[str]]]]:
-    model = build_model(config)
-    names = model.config.dataset.names
-    models = model.get_models()
-    rule_list: list[tuple[str, list[list[str]]]] = []
-    for name, rrl in zip(names, models, strict=True):
-        bias_label = get_max_label(rrl.biases, rrl.labels)
-        bias_score = calc_score(rrl.biases)
-        rules: list[list[str]] = [[bias_label, f'{bias_score:.2f}']]
-        for line in rrl.lines:
-            label = get_max_label(line.weights, line.labels)
-            score = calc_score(line.weights)
-            rules.append([label, f'{score:.2f}', line.print_rule()])
-        rule_list.append((name, rules))
-    return rule_list
-
-
 def get_rule_options(config: RrlEvalConfig) -> list[RrlTermOption]:
     model = build_model(config)
     names = model.config.dataset.names
@@ -76,6 +59,25 @@ def get_rule_options(config: RrlEvalConfig) -> list[RrlTermOption]:
                 )
             )
     return options
+
+
+def get_ranked_rule_table(config: RrlEvalConfig) -> pd.DataFrame:
+    rows = [
+        {
+            'Modality': option.module,
+            'Label': option.label,
+            'Score': option.score,
+            'Rule': option.rule,
+        }
+        for option in get_rule_options(config)
+        if option.kind == 'rule'
+    ]
+    return pd.DataFrame(rows).sort_values(
+        'Score',
+        ascending=False,
+        kind='stable',
+        ignore_index=True,
+    )
 
 
 def _calc_odds_ratio(
@@ -187,6 +189,10 @@ def save_batched_result_table(table: pd.DataFrame, path: str | Path) -> Path:
 
 
 def save_rule_or_table(table: pd.DataFrame, path: str | Path) -> Path:
+    return write_spreadsheet(path, table, index=False, float_format='%.6g')
+
+
+def save_ranked_rule_table(table: pd.DataFrame, path: str | Path) -> Path:
     return write_spreadsheet(path, table, index=False, float_format='%.6g')
 
 
