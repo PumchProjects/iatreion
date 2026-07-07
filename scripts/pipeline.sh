@@ -5,7 +5,7 @@ set -euxo pipefail
 config_path="configs/config.toml"
 run_process=true
 
-prefix="<path-to-the-folder-storing-processed-data>"
+prefix="<path-to-the-folder-storing-results>"
 process_harmonized="<path-to-the-internal-harmonized-spreadsheet>"
 eval_harmonized="<path-to-the-external-harmonized-spreadsheet>"
 swap_harmonized=false
@@ -18,17 +18,18 @@ if [[ "$swap_harmonized" == true ]]; then
     log_root_suffix="_swapped"
 fi
 
-process_info="${prefix}/process_info.toml"
-imputed_log_root="logs_imputed${log_root_suffix}"
-not_imputed_log_root="logs_not_imputed${log_root_suffix}"
+process_prefix="${prefix}/processed"
+process_info="${process_prefix}/process_info.toml"
+imputed_log_root="${prefix}/logs_imputed${log_root_suffix}"
+not_imputed_log_root="${prefix}/logs_not_imputed${log_root_suffix}"
 
 process_path_args=(
-    --prefix "$prefix"
+    --prefix "$process_prefix"
     --data.harmonized "$process_harmonized"
 )
 
 train_path_args=(
-    --prefix "$prefix"
+    --prefix "$process_prefix"
 )
 
 eval_path_args=(
