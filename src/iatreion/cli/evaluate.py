@@ -10,12 +10,22 @@ from iatreion.api import (
 )
 from iatreion.configs import (
     BaselineEvalConfig,
+    C45Config,
+    CartConfig,
+    LogisticRegressionConfig,
     ModelConfig,
     RandomForestConfig,
     RrlEvalConfig,
     XgboostConfig,
 )
-from iatreion.models import Model, RandomForestModel, XgboostModel
+from iatreion.models import (
+    C45Model,
+    CartModel,
+    LogisticRegressionModel,
+    Model,
+    RandomForestModel,
+    XgboostModel,
+)
 from iatreion.models.naming import model_name_for
 from iatreion.utils import logger
 
@@ -95,3 +105,27 @@ def random_forest(*, config: BaselineEvalConfig | None = None) -> None:
     if config is None:
         config = BaselineEvalConfig()
     evaluate_baseline(config, RandomForestModel, RandomForestConfig)
+
+
+@sub_app.command(sort_key=next(counter))
+def logistic_regression(*, config: BaselineEvalConfig | None = None) -> None:
+    """Evaluate final Logistic Regression models."""
+    if config is None:
+        config = BaselineEvalConfig()
+    evaluate_baseline(config, LogisticRegressionModel, LogisticRegressionConfig)
+
+
+@sub_app.command(sort_key=next(counter))
+def c45(*, config: BaselineEvalConfig | None = None) -> None:
+    """Evaluate final C4.5-style decision tree models."""
+    if config is None:
+        config = BaselineEvalConfig()
+    evaluate_baseline(config, C45Model, C45Config)
+
+
+@sub_app.command(sort_key=next(counter))
+def cart(*, config: BaselineEvalConfig | None = None) -> None:
+    """Evaluate final CART decision tree models."""
+    if config is None:
+        config = BaselineEvalConfig()
+    evaluate_baseline(config, CartModel, CartConfig)

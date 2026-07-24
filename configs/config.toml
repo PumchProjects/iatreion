@@ -86,6 +86,43 @@ aggregate = "calibrated-fusion"
 log-root = "logs"
 tune-config = "configs/optuna_random_forest.toml"
 
+[train.logistic-regression]
+prefix = "<path-to-the-folder-storing-processed-data>"
+names = ["h-demo", "h-mmse", "h-moca", "h-mri", "h-mri-roi", "h-history", "sh-apoe-labdata"]
+label-name = "A"
+groups = ["A+", "A-"]
+positive-label = "A+"
+keep = "first"
+use-clinical-threshold = false
+aggregate = "calibrated-fusion"
+log-root = "logs"
+max-iter = 5000
+tune-config = "configs/optuna_logistic_regression.toml"
+
+[train.c45]
+prefix = "<path-to-the-folder-storing-processed-data>"
+names = ["h-demo", "h-mmse", "h-moca", "h-mri", "h-mri-roi", "h-history", "sh-apoe-labdata"]
+label-name = "A"
+groups = ["A+", "A-"]
+positive-label = "A+"
+keep = "first"
+use-clinical-threshold = false
+aggregate = "calibrated-fusion"
+log-root = "logs"
+tune-config = "configs/optuna_c45.toml"
+
+[train.cart]
+prefix = "<path-to-the-folder-storing-processed-data>"
+names = ["h-demo", "h-mmse", "h-moca", "h-mri", "h-mri-roi", "h-history", "sh-apoe-labdata"]
+label-name = "A"
+groups = ["A+", "A-"]
+positive-label = "A+"
+keep = "first"
+use-clinical-threshold = false
+aggregate = "calibrated-fusion"
+log-root = "logs"
+tune-config = "configs/optuna_cart.toml"
+
 [eval.rrl]
 debug = true
 label-name = "A"
@@ -116,6 +153,42 @@ log-root = "<path-to-the-previous-log-root>"
 data = { harmonized = "<path-to-the-external-data-spreadsheet>" }
 
 [eval.random-forest]
+names = ["h-demo", "h-mmse", "h-moca", "h-mri", "h-mri-roi", "h-history", "sh-apoe-labdata"]
+label-name = "A"
+groups = ["A+", "A-"]
+positive-label = "A+"
+index-name = "ID"
+keep = "first"
+mode = "eval"
+process = "<path-to-the-process-info-file>"
+log-root = "<path-to-the-previous-log-root>"
+data = { harmonized = "<path-to-the-external-data-spreadsheet>" }
+
+[eval.logistic-regression]
+names = ["h-demo", "h-mmse", "h-moca", "h-mri", "h-mri-roi", "h-history", "sh-apoe-labdata"]
+label-name = "A"
+groups = ["A+", "A-"]
+positive-label = "A+"
+index-name = "ID"
+keep = "first"
+mode = "eval"
+process = "<path-to-the-process-info-file>"
+log-root = "<path-to-the-previous-log-root>"
+data = { harmonized = "<path-to-the-external-data-spreadsheet>" }
+
+[eval.c45]
+names = ["h-demo", "h-mmse", "h-moca", "h-mri", "h-mri-roi", "h-history", "sh-apoe-labdata"]
+label-name = "A"
+groups = ["A+", "A-"]
+positive-label = "A+"
+index-name = "ID"
+keep = "first"
+mode = "eval"
+process = "<path-to-the-process-info-file>"
+log-root = "<path-to-the-previous-log-root>"
+data = { harmonized = "<path-to-the-external-data-spreadsheet>" }
+
+[eval.cart]
 names = ["h-demo", "h-mmse", "h-moca", "h-mri", "h-mri-roi", "h-history", "sh-apoe-labdata"]
 label-name = "A"
 groups = ["A+", "A-"]

@@ -6,7 +6,9 @@ from cyclopts import Parameter
 from .dataset import DataName
 from .model_base import ModelConfig
 
-type SourceModelName = Literal['rrl', 'xgboost', 'random-forest']
+type SourceModelName = Literal[
+    'rrl', 'xgboost', 'random-forest', 'logistic-regression', 'c45', 'cart'
+]
 
 
 @Parameter(name='*')

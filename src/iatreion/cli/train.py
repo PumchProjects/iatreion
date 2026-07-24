@@ -3,8 +3,11 @@ from itertools import count
 from cyclopts import App
 
 from iatreion.configs import (
+    C45Config,
+    CartConfig,
     DiscreteRrlConfig,
     LimiXConfig,
+    LogisticRegressionConfig,
     ModelConfig,
     RandomForestConfig,
     ResultReplayConfig,
@@ -13,8 +16,11 @@ from iatreion.configs import (
     XgboostConfig,
 )
 from iatreion.models import (
+    C45Model,
+    CartModel,
     DiscreteRrlModel,
     LimiXModel,
+    LogisticRegressionModel,
     Model,
     RandomForestModel,
     XgboostModel,
@@ -53,6 +59,24 @@ def xgboost(*, config: XgboostConfig) -> None:
 def random_forest(*, config: RandomForestConfig) -> None:
     """Train a Random Forest model."""
     train(RandomForestModel, config)
+
+
+@sub_app.command(sort_key=next(counter))
+def logistic_regression(*, config: LogisticRegressionConfig) -> None:
+    """Train a Logistic Regression model."""
+    train(LogisticRegressionModel, config)
+
+
+@sub_app.command(sort_key=next(counter))
+def c45(*, config: C45Config) -> None:
+    """Train a C4.5-style decision tree model."""
+    train(C45Model, config)
+
+
+@sub_app.command(sort_key=next(counter))
+def cart(*, config: CartConfig) -> None:
+    """Train a CART decision tree model."""
+    train(CartModel, config)
 
 
 @sub_app.command(sort_key=next(counter))

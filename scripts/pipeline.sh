@@ -42,7 +42,8 @@ eval_subsets=(
     "h-demo h-mmse h-moca h-mri-roi h-history sh-apoe-labdata"
 )
 
-baseline_models=(xgboost random-forest)
+baseline_models=(xgboost random-forest logistic-regression c45 cart)
+nan_baseline_models=(xgboost random-forest)
 rrl_models=(rrl)
 
 tasks=(
@@ -133,7 +134,7 @@ run_baselines_for_task() {
 
     build_task_args task_args "$label_name" "$groups" "$positive_label" "$not_imputed_log_root"
     train_args=(--importance-methods native --missing-value-strategy none)
-    train_eval baseline_models task_args train_args
+    train_eval nan_baseline_models task_args train_args
 }
 
 run_rrl_for_task() {

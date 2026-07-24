@@ -7,7 +7,13 @@ from iatreion.trainers import ModelTrainer
 from .base import Runner
 from .final_calibration import fit_final_fusion_artifact, publish_fusion_artifact
 
-BASELINE_FINAL_MODEL_NAMES = {'random-forest', 'xgboost'}
+BASELINE_FINAL_MODEL_NAMES = {
+    'c45',
+    'cart',
+    'logistic-regression',
+    'random-forest',
+    'xgboost',
+}
 
 
 class BasicRunner(Runner):

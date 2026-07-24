@@ -1,6 +1,9 @@
 MODEL_LOG_NAMES = {
+    'C45Model': 'c45',
+    'CartModel': 'cart',
     'DiscreteRrlModel': 'rrl-parser',
     'LimiXModel': 'limix',
+    'LogisticRegressionModel': 'logistic-regression',
     'RandomForestModel': 'random-forest',
     'RrlModel': 'rrl',
     'TabPFNModel': 'tabpfn',

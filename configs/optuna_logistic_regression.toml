@@ -1,0 +1,36 @@
+[study]
+name = ""
+objective = "AUROC"
+direction = "maximize"
+n-trials = 60
+sampler = "tpe"
+seed = 42
+n-startup-trials = 20
+multivariate = true
+pruner = "none"
+load-if-exists = true
+
+[execution]
+fail-value = 0.0
+n-jobs = 1
+study-workers = 4
+
+[search.penalty]
+type = "categorical"
+choices = ["none", "l2"]
+
+[search.C]
+type = "float"
+low = 0.001
+high = 100.0
+log = true
+
+[search.tol]
+type = "float"
+low = 1e-5
+high = 1e-3
+log = true
+
+[search.class-weight]
+type = "categorical"
+choices = ["none", "balanced"]
