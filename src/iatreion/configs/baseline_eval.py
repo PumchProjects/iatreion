@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from cyclopts import Parameter
 from cyclopts.types import PositiveInt
@@ -75,8 +75,10 @@ class BaselineEvalConfig:
     debug: Annotated[bool, Parameter(alias='-D')] = False
     'Whether to enable debug mode.'
 
-    def make_configs(
-        self, model_config_cls: type[ModelConfig]
+    def _make_configs(
+        self,
+        model_config_cls: type[ModelConfig],
+        **model_config_kwargs: Any,
     ) -> tuple[PreprocessorConfig, ModelConfig]:
         if not self.index_name:
             raise ValueError('index_name is required.')
@@ -110,4 +112,13 @@ class BaselineEvalConfig:
             _final=True,
             _keep=self.keep,
         )
-        return process_config, model_config_cls(dataset=dataset, train=train)
+        return process_config, model_config_cls(
+            dataset=dataset,
+            train=train,
+            **model_config_kwargs,
+        )
+
+    def make_configs(
+        self, model_config_cls: type[ModelConfig]
+    ) -> tuple[PreprocessorConfig, ModelConfig]:
+        return self._make_configs(model_config_cls)

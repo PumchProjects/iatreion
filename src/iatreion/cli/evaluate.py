@@ -16,6 +16,8 @@ from iatreion.configs import (
     ModelConfig,
     RandomForestConfig,
     RrlEvalConfig,
+    TabPFNConfig,
+    TabPFNEvalConfig,
     XgboostConfig,
 )
 from iatreion.models import (
@@ -129,3 +131,11 @@ def cart(*, config: BaselineEvalConfig | None = None) -> None:
     if config is None:
         config = BaselineEvalConfig()
     evaluate_baseline(config, CartModel, CartConfig)
+
+
+@sub_app.command(sort_key=next(counter))
+def tabpfn(*, config: TabPFNEvalConfig) -> None:
+    """Evaluate final TabPFN models."""
+    from iatreion.models.tabpfn import TabPFNModel
+
+    evaluate_baseline(config, TabPFNModel, TabPFNConfig)

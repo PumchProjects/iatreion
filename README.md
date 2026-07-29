@@ -83,7 +83,7 @@ The script first runs `process` and then runs three manuscript label tasks: `A` 
 
 To run the paired experiment with the internal and external harmonized spreadsheets swapped, set `swap_harmonized=true` at the top of `scripts/pipeline.sh`.
 
-For each task, the script runs two missing-data workflows. The `logs_imputed` workflow uses the default imputation settings; XGBoost, Random Forest, Logistic Regression, C4.5-style, and CART baselines also use native feature importance. The `logs_not_imputed` workflow trains these baselines with `--missing-value-strategy none`, and trains RRL with `--missing-aware-mode improved`.
+For each task, the script runs two missing-data workflows. The `logs_imputed` workflow uses the default imputation settings; XGBoost, Random Forest, Logistic Regression, C4.5-style, and CART baselines also use native feature importance. TabPFN-3 is run without feature-importance calculation or Optuna tuning. The `logs_not_imputed` workflow trains XGBoost, Random Forest, and TabPFN with `--missing-value-strategy none`, and trains RRL with `--missing-aware-mode improved`.
 
 For each model/workflow combination, it runs nested internal evaluation, final fitting, full-modality result replay, two manuscript modality-subset result replays, final subset-artifact publication, and external validation for the two subset definitions:
 
@@ -94,15 +94,17 @@ h-demo h-mmse h-moca h-mri-roi h-history sh-apoe-labdata
 
 It also runs `train rrl-parser` once per task and missing-data workflow as a parser parity/internal re-evaluation check. Figure and table commands are documented in the Figures and Tables section; `show` commands will be appended to `scripts/pipeline.sh` when the manuscript plotting workflow is finalized.
 
+TabPFN uses a local checkpoint rather than the model cache. Set `tabpfn_model_path` at the top of the pipeline wrapper. The wrapper sets `TABPFN_NO_BROWSER=1` and passes the checkpoint explicitly with `--model-path`.
+
 ## Configuration Files
 
-Most commands can read defaults from `configs/config.toml` with the global `--config` option. The file is organized by command: `[process]` and `[process.data]` for raw-to-processed conversion, `[train.rrl]`, `[train.rrl-parser]`, `[train.result-replay]`, `[train.xgboost]`, `[train.random-forest]`, `[train.logistic-regression]`, `[train.c45]`, and `[train.cart]` for model runs, `[eval.rrl]`, `[eval.xgboost]`, `[eval.random-forest]`, `[eval.logistic-regression]`, `[eval.c45]`, and `[eval.cart]` for final-model external validation, and `[show.*]` tables for figure/table helpers.
+Most commands can read defaults from `configs/config.toml` with the global `--config` option. The file is organized by command: `[process]` and `[process.data]` for raw-to-processed conversion, `[train.rrl]`, `[train.rrl-parser]`, `[train.result-replay]`, `[train.xgboost]`, `[train.random-forest]`, `[train.logistic-regression]`, `[train.c45]`, `[train.cart]`, and `[train.tabpfn]` for model runs, `[eval.rrl]`, `[eval.xgboost]`, `[eval.random-forest]`, `[eval.logistic-regression]`, `[eval.c45]`, `[eval.cart]`, and `[eval.tabpfn]` for final-model external validation, and `[show.*]` tables for figure/table helpers.
 
 CLI options override TOML values, so `uv run iatreion train rrl --config configs/config.toml -i 6-7` uses the config but overrides `train.rrl.device-id`. Other commands that accept `--config` behave the same way, for example `uv run iatreion process --config configs/config.toml` or `uv run iatreion show table-1 --config configs/config.toml -o table_1_retry`.
 
 Before using `configs/config.toml`, replace its placeholder paths with real local paths, including values such as `process.prefix`, `process.group-data`, `process.basic-data`, `process.data.*`, `process.vmri`, `process.vmri-change`, `train.rrl.prefix`, baseline `train.<model>.prefix` values, and show command `prefix` values. You can also leave the TOML generic and pass real paths from the CLI; command-line values take precedence.
 
-Hyperparameter tuning uses separate TOML search spaces selected with `--tune-config` or the model-specific `train.<model>.tune-config`: RRL usually uses `configs/optuna_rrl.toml`, XGBoost uses `configs/optuna_xgboost.toml`, Random Forest uses `configs/optuna_random_forest.toml`, Logistic Regression uses `configs/optuna_logistic_regression.toml`, C4.5-style trees use `configs/optuna_c45.toml`, and CART uses `configs/optuna_cart.toml`. Each tuning file's `[execution]` table controls Optuna execution settings such as failure values and worker counts, while `configs/config.toml` or CLI options control the shared log root; tuning studies are always written under `{log-root}/optuna`.
+Hyperparameter tuning uses separate TOML search spaces selected with `--tune-config` or the model-specific `train.<model>.tune-config`: RRL usually uses `configs/optuna_rrl.toml`, XGBoost uses `configs/optuna_xgboost.toml`, Random Forest uses `configs/optuna_random_forest.toml`, Logistic Regression uses `configs/optuna_logistic_regression.toml`, C4.5-style trees use `configs/optuna_c45.toml`, and CART uses `configs/optuna_cart.toml`. TabPFN has no tuning file; its `calibrated-fusion` inner folds are used only to learn leakage-free modality calibration and fusion. Each tuning file's `[execution]` table controls Optuna execution settings such as failure values and worker counts, while `configs/config.toml` or CLI options control the shared log root; tuning studies are always written under `{log-root}/optuna`.
 
 ## Data Model
 
@@ -703,7 +705,8 @@ configs/
   optuna_c45.toml                  # C4.5-style tree Optuna search-space defaults
   optuna_cart.toml                 # CART Optuna search-space defaults
 scripts/
-  pipeline.sh                      # Manuscript modeling/evaluation command sequence
+  pipeline.sh                      # Manuscript pipeline settings
+  pipeline_common.sh               # Shared modeling/evaluation command sequence
 src/iatreion/
   cli/                             # CLI commands
   configs/                         # CLI dataclasses and config semantics

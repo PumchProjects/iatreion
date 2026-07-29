@@ -12,6 +12,7 @@ BASELINE_FINAL_MODEL_NAMES = {
     'cart',
     'logistic-regression',
     'random-forest',
+    'tabpfn',
     'xgboost',
 }
 
