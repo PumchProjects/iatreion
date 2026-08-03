@@ -82,4 +82,5 @@ class ModelTrainer(Trainer):
         # HACK: Validation set is not used for other models
         self._update_config(ctx)
         self.model.fit(ctx)
+        self.model.export_importance(ctx, methods={'native'})
         self.model.save_final(ctx)

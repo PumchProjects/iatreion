@@ -12,7 +12,7 @@ from iatreion.train_utils.artifacts import (
     get_transform_artifact_path,
 )
 from iatreion.train_utils.preprocessing import DBEncoderArtifact
-from iatreion.utils import decode_string, encode_string, logger
+from iatreion.utils import logger
 
 from .base import Model
 from .importance import ImportanceScore, calc_shap_importance
@@ -118,18 +118,11 @@ class XgboostModel(Model):
 
     @override
     def _calc_native_importance(self, ctx: TrainStepContext) -> ImportanceScore:
-        fmap_file = (
-            self.config.train._log_dir
-            / f'fmap_{ctx.name}_{ctx.outer_fold}_{ctx.inner_fold}.tsv'
-        )
-        with fmap_file.open('w', encoding='utf-8') as f:
-            for i, (name, ftype) in enumerate(
-                zip(ctx.db_enc.X_fname, self.feature_types, strict=True)
-            ):
-                f.write(f'{i}\t{encode_string(name, " ")}\t{ftype}\n')
-        raw_score = self.bst.get_score(str(fmap_file), importance_type='gain')
-        score = {decode_string(name): float(value) for name, value in raw_score.items()}
-        return {name: score.get(name, 0.0) for name in ctx.db_enc.X_fname}
+        score = self.bst.get_score(importance_type='gain')
+        return {
+            name: float(score.get(f'f{index}', 0.0))
+            for index, name in enumerate(ctx.db_enc.X_fname)
+        }
 
     @override
     def _calc_shap_importance(self, ctx: TrainStepContext) -> ImportanceScore:

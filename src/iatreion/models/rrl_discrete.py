@@ -629,7 +629,7 @@ class DiscreteRrlModel(Model):
     @override
     def predict(self, ctx: TrainStepContext) -> ModelPrediction:
         y_score, y_mask = self._predict_with_mask(ctx)
-        self._calc_importance(ctx)
+        self.export_importance(ctx)
         return ModelPrediction(y_score, y_mask=y_mask)
 
     def _validate_enabled_terms(

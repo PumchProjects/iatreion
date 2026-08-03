@@ -38,7 +38,9 @@ class ModelConfig:
     importance_methods: Annotated[
         list[ImportanceMethod], Parameter(consume_multiple=True)
     ] = field(default_factory=list)
-    'Feature-importance methods to export. Available: native, permutation, shap.'
+    """Feature-importance methods to export. Available: native, permutation, shap.
+Final fitting exports native importance only.
+"""
 
     importance_repeats: int = 5
     'Number of repeats for permutation importance.'
