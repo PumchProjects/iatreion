@@ -87,6 +87,14 @@ class RrlConfig(ModelConfig):
     structure: Annotated[str, Parameter(alias='-s')] = '5@64'
     'Set the number of nodes in the binarization layer and logical layers. E.g., 10@64, 10@64@32@16.'
 
+    trainable_cutpoints: bool = False
+    'Fine-tune cutpoints within their neighboring gaps.'
+
+    cutpoint_tuning_eta: Annotated[
+        float, Parameter(validator=Number(gt=0, lt=1))
+    ] = 0.5
+    'Fraction controlling the maximum cutpoint movement within neighboring gaps.'
+
     debug: Annotated[bool, Parameter(alias='-D')] = False
     'Whether to enable debug mode.'
 
@@ -124,6 +132,7 @@ class RrlConfig(ModelConfig):
                 f'_si{self.save_interval}_useNOT{self.use_not}_valSize{self.train.val_size}_useSkip{self.skip}'
                 f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}'
                 f'_conjOnly{self.conjunction_only}_L{self.structure}'
+                f'_trainCut{self.trainable_cutpoints}_cutEta{self.cutpoint_tuning_eta}'
                 f'_missingMode{self.missing_aware_mode}_tau{self.coverage_tau}_kappa{self.coverage_kappa}'
                 f'_vm{self.validation_metric}_esp{self.early_stop_patience}_esd{self.early_stop_min_delta}'
                 f'_ls{self.label_smoothing}_mgn{self.max_grad_norm}'

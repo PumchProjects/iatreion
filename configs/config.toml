@@ -25,13 +25,15 @@ early-stop-min-delta = 0.001
 label-smoothing = 0.05
 max-grad-norm = 3.0
 nlaf = true
-alpha = 0.9
-beta = 3
-gamma = 3
+alpha = 0.999
+beta = 8
+gamma = 1
 use-not = true
 skip = true
 weighted = true
 missing-aware-mode = "original"
+trainable-cutpoints = false
+cutpoint-tuning-eta = 0.5
 tune-config = "configs/optuna_rrl.toml"
 
 [train.rrl-parser]

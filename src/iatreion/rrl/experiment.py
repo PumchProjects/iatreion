@@ -91,6 +91,8 @@ def train_model(
         use_missing_aware=args.missing_aware_mode == 'improved',
         coverage_tau=args.coverage_tau,
         coverage_kappa=args.coverage_kappa,
+        trainable_cutpoints=args.trainable_cutpoints,
+        cutpoint_tuning_eta=args.cutpoint_tuning_eta,
     )
 
     y_true = ctx.train_data[1]

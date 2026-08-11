@@ -97,8 +97,19 @@ class _LogicLayerMixin:
 class BinarizeLayer(nn.Module):
     """Implement the feature discretization and binarization."""
 
-    def __init__(self, n, input_dim, use_not=False, left=None, right=None):
+    def __init__(
+        self,
+        n,
+        input_dim,
+        use_not=False,
+        left=None,
+        right=None,
+        trainable_cutpoints=False,
+        cutpoint_tuning_eta=0.5,
+    ):
         super().__init__()
+        if not 0 < cutpoint_tuning_eta < 1:
+            raise ValueError('cutpoint_tuning_eta must be between 0 and 1.')
         self.n = n
         self.input_dim = input_dim
         self.disc_num = input_dim[0]
@@ -115,12 +126,46 @@ class BinarizeLayer(nn.Module):
 
         if self.input_dim[1] > 0:
             if self.left is not None and self.right is not None:
-                cl = self.left + torch.rand(self.n, self.input_dim[1]) * (
+                base_cutpoints = self.left + torch.rand(
+                    self.n, self.input_dim[1]
+                ) * (
                     self.right - self.left
                 )
             else:
-                cl = torch.randn(self.n, self.input_dim[1])
-            self.register_buffer('cl', cl)
+                base_cutpoints = torch.randn(self.n, self.input_dim[1])
+            base_cutpoints = torch.sort(base_cutpoints, dim=0).values
+        else:
+            base_cutpoints = torch.empty(self.n, 0)
+
+        if self.n < 2:
+            cutpoint_radii = torch.zeros_like(base_cutpoints)
+        else:
+            gaps = base_cutpoints[1:] - base_cutpoints[:-1]
+            cutpoint_radii = cutpoint_tuning_eta / 2 * torch.cat(
+                (gaps[:1], torch.minimum(gaps[:-1], gaps[1:]), gaps[-1:]),
+                dim=0,
+            )
+        if self.left is not None and self.right is not None:
+            boundary_radii = torch.minimum(
+                base_cutpoints - self.left,
+                self.right - base_cutpoints,
+            )
+            cutpoint_radii = torch.minimum(cutpoint_radii, boundary_radii)
+
+        self.register_buffer('base_cutpoints', base_cutpoints)
+        self.register_buffer('cutpoint_radii', cutpoint_radii)
+        if trainable_cutpoints and base_cutpoints.numel() > 0:
+            self.cutpoint_deltas = nn.Parameter(torch.zeros_like(base_cutpoints))
+        else:
+            self.register_parameter('cutpoint_deltas', None)
+
+    @property
+    def cl(self):
+        if self.cutpoint_deltas is None:
+            return self.base_cutpoints
+        return self.base_cutpoints + self.cutpoint_radii * torch.tanh(
+            self.cutpoint_deltas
+        )
 
     def forward(self, x, m):
         if self.input_dim[1] > 0:
@@ -144,15 +189,6 @@ class BinarizeLayer(nn.Module):
     @torch.no_grad()
     def binarized_forward(self, x, m):
         return self.forward(x, m)
-
-    def clip(self):
-        if self.input_dim[1] > 0 and self.left is not None and self.right is not None:
-            self.cl.data = torch.where(
-                self.cl.data > self.right, self.right, self.cl.data
-            )
-            self.cl.data = torch.where(
-                self.cl.data < self.left, self.left, self.cl.data
-            )
 
     def get_bound_name(self, feature_name, compl_feature_name, mean=None, std=None):
         bound_name = []

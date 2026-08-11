@@ -29,6 +29,8 @@ class Net(nn.Module):
         use_missing_aware=False,
         coverage_tau=0.5,
         coverage_kappa=0.1,
+        trainable_cutpoints=False,
+        cutpoint_tuning_eta=0.5,
     ):
         super().__init__()
 
@@ -53,7 +55,13 @@ class Net(nn.Module):
 
             if i == 1:
                 layer = BinarizeLayer(
-                    dim_list[i], num, self.use_not, self.left, self.right
+                    dim_list[i],
+                    num,
+                    self.use_not,
+                    self.left,
+                    self.right,
+                    trainable_cutpoints=trainable_cutpoints,
+                    cutpoint_tuning_eta=cutpoint_tuning_eta,
                 )
                 layer_name = f'binary{i}'
             elif i == len(dim_list) - 1:
@@ -148,6 +156,8 @@ class RRL:
         use_missing_aware=False,
         coverage_tau=0.5,
         coverage_kappa=0.1,
+        trainable_cutpoints=False,
+        cutpoint_tuning_eta=0.5,
     ):
         super().__init__()
         self.dim_list = dim_list
@@ -184,12 +194,14 @@ class RRL:
             use_missing_aware=use_missing_aware,
             coverage_tau=coverage_tau,
             coverage_kappa=coverage_kappa,
+            trainable_cutpoints=trainable_cutpoints,
+            cutpoint_tuning_eta=cutpoint_tuning_eta,
         )
         self.net.to(self.device)
 
     def clip(self):
         """Clip the weights into the range [0, 1]."""
-        for layer in self.net.layer_list[:-1]:
+        for layer in self.net.layer_list[1:-1]:
             layer.clip()
 
     def edge_penalty(self):

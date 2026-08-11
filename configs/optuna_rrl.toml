@@ -43,7 +43,7 @@ log = true
 
 [search.structure]
 type = "categorical"
-choices = ["20@256", "20@512", "20@768", "20@1024"]
+choices = ["50@256", "50@512", "50@768", "50@1024"]
 
 [search.coverage-tau]
 type = "float"
