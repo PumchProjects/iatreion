@@ -251,10 +251,10 @@ RRL learns a non-fuzzy rule representation and exports readable rules as TSV fil
 | `--early-stop-patience/--early-stop-min-delta` | Early stopping patience and minimum validation F1 improvement |
 | `--label-smoothing` | Label smoothing |
 | `--max-grad-norm` | Gradient clipping norm |
-| `--trainable-cutpoints/--cutpoint-tuning-eta` | Enable constrained cutpoint fine-tuning and control its movement range |
+| `--cutpoint-tuning-eta` | Control constrained cutpoint fine-tuning; zero disables it |
 | `-v improved --tau --kappa` | Missing-aware RRL with coverage-gated logic |
 
-Cutpoint fine-tuning is disabled by default. When enabled, each cutpoint is restricted to a fraction of its neighboring gaps, controlled by `--cutpoint-tuning-eta` (default `0.5`), so cutpoints cannot cross during training.
+Cutpoint fine-tuning defaults to `--cutpoint-tuning-eta 0.5`. Each cutpoint is restricted to that fraction of its neighboring gaps so cutpoints cannot cross during training; set the value to `0` to keep cutpoints fixed.
 
 For missing-aware RRL (`-v improved`), missing values are intentionally kept during RRL training and the model receives both values and observation masks.
 

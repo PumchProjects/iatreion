@@ -32,7 +32,6 @@ use-not = true
 skip = true
 weighted = true
 missing-aware-mode = "original"
-trainable-cutpoints = false
 cutpoint-tuning-eta = 0.5
 tune-config = "configs/optuna_rrl.toml"
 

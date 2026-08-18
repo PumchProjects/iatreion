@@ -39,7 +39,7 @@ tasks=(
 )
 
 iatreion() {
-    uv run iatreion --config "$config_path" "$@"
+    uv run --no-sync iatreion --config "$config_path" "$@"
 }
 
 process() {

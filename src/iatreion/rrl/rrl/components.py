@@ -104,12 +104,11 @@ class BinarizeLayer(nn.Module):
         use_not=False,
         left=None,
         right=None,
-        trainable_cutpoints=False,
         cutpoint_tuning_eta=0.5,
     ):
         super().__init__()
-        if not 0 < cutpoint_tuning_eta < 1:
-            raise ValueError('cutpoint_tuning_eta must be between 0 and 1.')
+        if not 0 <= cutpoint_tuning_eta < 1:
+            raise ValueError('cutpoint_tuning_eta must be in [0, 1).')
         self.n = n
         self.input_dim = input_dim
         self.disc_num = input_dim[0]
@@ -154,7 +153,7 @@ class BinarizeLayer(nn.Module):
 
         self.register_buffer('base_cutpoints', base_cutpoints)
         self.register_buffer('cutpoint_radii', cutpoint_radii)
-        if trainable_cutpoints and base_cutpoints.numel() > 0:
+        if cutpoint_tuning_eta > 0 and self.n > 1 and base_cutpoints.numel() > 0:
             self.cutpoint_deltas = nn.Parameter(torch.zeros_like(base_cutpoints))
         else:
             self.register_parameter('cutpoint_deltas', None)

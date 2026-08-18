@@ -29,7 +29,6 @@ class Net(nn.Module):
         use_missing_aware=False,
         coverage_tau=0.5,
         coverage_kappa=0.1,
-        trainable_cutpoints=False,
         cutpoint_tuning_eta=0.5,
     ):
         super().__init__()
@@ -60,7 +59,6 @@ class Net(nn.Module):
                     self.use_not,
                     self.left,
                     self.right,
-                    trainable_cutpoints=trainable_cutpoints,
                     cutpoint_tuning_eta=cutpoint_tuning_eta,
                 )
                 layer_name = f'binary{i}'
@@ -156,7 +154,6 @@ class RRL:
         use_missing_aware=False,
         coverage_tau=0.5,
         coverage_kappa=0.1,
-        trainable_cutpoints=False,
         cutpoint_tuning_eta=0.5,
     ):
         super().__init__()
@@ -194,7 +191,6 @@ class RRL:
             use_missing_aware=use_missing_aware,
             coverage_tau=coverage_tau,
             coverage_kappa=coverage_kappa,
-            trainable_cutpoints=trainable_cutpoints,
             cutpoint_tuning_eta=cutpoint_tuning_eta,
         )
         self.net.to(self.device)

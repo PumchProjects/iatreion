@@ -1,31 +1,48 @@
+import tomllib
+from pathlib import Path
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
 import numpy as np
 import torch
+from optuna.trial import FixedTrial
 
 from iatreion.configs.model_rrl import RrlConfig
 from iatreion.rrl.rrl.components import BinarizeLayer
 from iatreion.rrl.rrl.models import Net
+from iatreion.runners.optuna import flatten_search_space
 
 
 class RrlCutpointConfigTest(TestCase):
-    def test_defaults_to_fixed_cutpoints(self) -> None:
+    def test_eta_is_the_only_cutpoint_tuning_control(self) -> None:
         config = RrlConfig(dataset=Mock(), train=Mock())
 
-        self.assertFalse(config.trainable_cutpoints)
         self.assertEqual(config.cutpoint_tuning_eta, 0.5)
+        self.assertFalse(hasattr(config, 'trainable_cutpoints'))
 
     def test_debug_name_includes_cutpoint_tuning(self) -> None:
         config = RrlConfig(
             dataset=Mock(),
             train=Mock(),
             debug=True,
-            trainable_cutpoints=True,
             cutpoint_tuning_eta=0.25,
         )
 
-        self.assertIn('_trainCutTrue_cutEta0.25', config.log_folder_name)
+        self.assertIn('_cutEta0.25', config.log_folder_name)
+
+
+class RrlCutpointOptunaTest(TestCase):
+    def test_search_space_includes_the_fixed_cutpoint_baseline(self) -> None:
+        path = Path(__file__).parents[1] / 'configs' / 'optuna_rrl.toml'
+        with path.open('rb') as file:
+            data = tomllib.load(file)
+        name = 'cutpoint_tuning_eta'
+        space = flatten_search_space(data['search'])[name]
+
+        self.assertEqual(space.low, 0.0)
+        self.assertEqual(space.high, 0.9)
+        self.assertEqual(space.step, 0.1)
+        self.assertEqual(space.sample(FixedTrial({name: 0.0}), name), 0.0)
 
 
 class BinarizeLayerCutpointTest(TestCase):
@@ -33,18 +50,16 @@ class BinarizeLayerCutpointTest(TestCase):
     def make_layer(
         cutpoints: torch.Tensor,
         *,
-        trainable_cutpoints: bool = False,
         cutpoint_tuning_eta: float = 0.5,
     ) -> BinarizeLayer:
         with patch('torch.randn', return_value=cutpoints.clone()):
             return BinarizeLayer(
                 cutpoints.shape[0],
                 (0, cutpoints.shape[1]),
-                trainable_cutpoints=trainable_cutpoints,
                 cutpoint_tuning_eta=cutpoint_tuning_eta,
             )
 
-    def test_fixed_mode_sorts_cutpoints_without_a_parameter(self) -> None:
+    def test_zero_eta_sorts_cutpoints_without_a_parameter(self) -> None:
         layer = self.make_layer(
             torch.tensor(
                 [
@@ -52,7 +67,8 @@ class BinarizeLayerCutpointTest(TestCase):
                     [0.0, 16.0],
                     [2.0, 12.0],
                 ]
-            )
+            ),
+            cutpoint_tuning_eta=0.0,
         )
 
         torch.testing.assert_close(
@@ -78,7 +94,6 @@ class BinarizeLayerCutpointTest(TestCase):
                     [6.0, 16.0],
                 ]
             ),
-            trainable_cutpoints=True,
         )
 
         torch.testing.assert_close(
@@ -109,7 +124,6 @@ class BinarizeLayerCutpointTest(TestCase):
     def test_optimizer_updates_cutpoints_within_their_radii(self) -> None:
         layer = self.make_layer(
             torch.tensor([[0.0], [2.0], [5.0]]),
-            trainable_cutpoints=True,
         )
         optimizer = torch.optim.Adam(layer.parameters(), lr=1.0)
         values = torch.tensor([[1.0]])
@@ -145,7 +159,6 @@ class BinarizeLayerCutpointTest(TestCase):
                 (0, 1),
                 left=left,
                 right=right,
-                trainable_cutpoints=True,
             )
 
         torch.testing.assert_close(
@@ -161,13 +174,11 @@ class BinarizeLayerCutpointTest(TestCase):
     def test_a_single_cutpoint_remains_fixed(self) -> None:
         layer = self.make_layer(
             torch.tensor([[1.0, 2.0]]),
-            trainable_cutpoints=True,
         )
-        with torch.no_grad():
-            layer.cutpoint_deltas.fill_(100.0)
 
         torch.testing.assert_close(layer.cutpoint_radii, torch.zeros(1, 2))
         torch.testing.assert_close(layer.cl, layer.base_cutpoints)
+        self.assertNotIn('cutpoint_deltas', dict(layer.named_parameters()))
 
     def test_net_state_dict_restores_tuned_cutpoints(self) -> None:
         initial = torch.tensor([[0.0], [2.0], [5.0]])
@@ -175,7 +186,6 @@ class BinarizeLayerCutpointTest(TestCase):
             net = Net(
                 [(0, 1), 3, 2],
                 use_skip=False,
-                trainable_cutpoints=True,
             )
         with torch.no_grad():
             net.layer_list[0].cutpoint_deltas.copy_(
@@ -187,7 +197,6 @@ class BinarizeLayerCutpointTest(TestCase):
             restored = Net(
                 [(0, 1), 3, 2],
                 use_skip=False,
-                trainable_cutpoints=True,
             )
 
         restored.load_state_dict(state_dict)
@@ -200,7 +209,6 @@ class BinarizeLayerCutpointTest(TestCase):
     def test_bound_names_use_tuned_cutpoints(self) -> None:
         layer = self.make_layer(
             torch.tensor([[0.0], [2.0]]),
-            trainable_cutpoints=True,
         )
         with torch.no_grad():
             layer.cutpoint_deltas.copy_(torch.tensor([[1.0], [-1.0]]))
@@ -216,5 +224,8 @@ class BinarizeLayerCutpointTest(TestCase):
         )
 
     def test_rejects_an_invalid_eta(self) -> None:
-        with self.assertRaisesRegex(ValueError, 'cutpoint_tuning_eta'):
-            BinarizeLayer(3, (0, 1), cutpoint_tuning_eta=1.0)
+        for eta in (-0.1, 1.0):
+            with self.subTest(eta=eta), self.assertRaisesRegex(
+                ValueError, 'cutpoint_tuning_eta'
+            ):
+                BinarizeLayer(3, (0, 1), cutpoint_tuning_eta=eta)
