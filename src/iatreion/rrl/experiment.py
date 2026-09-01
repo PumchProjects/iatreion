@@ -14,6 +14,7 @@ from iatreion.configs import RrlConfig
 from iatreion.train_utils import TrainStepContext
 from iatreion.utils import logger, task
 
+from .binarization import tabpfn_shap_cutpoints
 from .rrl.models import RRL
 
 
@@ -51,6 +52,42 @@ def get_data_loader(
     )
 
 
+def _get_cutpoints(
+    args: RrlConfig,
+    ctx: TrainStepContext,
+    n_thresholds: int,
+) -> list[NDArray[np.float64]] | None:
+    db_enc = ctx.db_enc
+    continuous_count = db_enc.categorical_flen + db_enc.numeric_flen
+    if args.binarization == 'random' or continuous_count == 0:
+        return None
+
+    assert args.tabpfn_model_path is not None
+    cutpoints = tabpfn_shap_cutpoints(
+        *ctx.train_data,
+        continuous_start=db_enc.binary_flen,
+        n_thresholds=n_thresholds,
+        model_path=args.tabpfn_model_path,
+        random_state=args.train.seed,
+    )
+    threshold_counts = dict(
+        zip(
+            db_enc.X_fname[db_enc.binary_flen :],
+            map(len, cutpoints),
+            strict=True,
+        )
+    )
+    total_literals = (
+        db_enc.binary_flen * (2 if args.use_not else 1)
+        + sum(threshold_counts.values()) * 2
+    )
+    logger.info(
+        f'TabPFN-SHAP cutpoint limit: {n_thresholds}; '
+        f'per feature: {threshold_counts}; total literals: {total_literals}'
+    )
+    return cutpoints
+
+
 def train_model(
     args: RrlConfig,
     save_model_callback: Callable[..., None],
@@ -70,11 +107,13 @@ def train_model(
     binary_flen = db_enc.binary_flen
     categorical_flen = db_enc.categorical_flen
     numeric_flen = db_enc.numeric_flen
+    structure = list(map(int, args.structure.split('@')))
+    cutpoints = _get_cutpoints(args, ctx, structure[0])
 
     rrl = RRL(
         dim_list=[
             (binary_flen, categorical_flen + numeric_flen),
-            *list(map(int, args.structure.split('@'))),
+            *structure,
             len(y_fname),
         ],
         use_not=args.use_not,
@@ -91,6 +130,7 @@ def train_model(
         use_missing_aware=args.missing_aware_mode == 'improved',
         coverage_tau=args.coverage_tau,
         coverage_kappa=args.coverage_kappa,
+        cutpoints=cutpoints,
         cutpoint_tuning_eta=args.cutpoint_tuning_eta,
     )
 

@@ -102,8 +102,7 @@ class BinarizeLayer(nn.Module):
         n,
         input_dim,
         use_not=False,
-        left=None,
-        right=None,
+        cutpoints=None,
         cutpoint_tuning_eta=0.5,
     ):
         super().__init__()
@@ -115,45 +114,43 @@ class BinarizeLayer(nn.Module):
         self.use_not = use_not
         if self.use_not:
             self.disc_num *= 2
-        self.output_dim = self.disc_num + self.n * self.input_dim[1] * 2
+
+        if cutpoints is None:
+            values = [torch.randn(n) for _ in range(self.input_dim[1])]
+        else:
+            if len(cutpoints) != self.input_dim[1]:
+                raise ValueError('cutpoints must contain one array per feature.')
+            values = [
+                torch.as_tensor(value, dtype=torch.get_default_dtype()).flatten()
+                for value in cutpoints
+            ]
+        values = [torch.sort(value).values for value in values]
+        counts = torch.tensor([len(value) for value in values], dtype=torch.long)
+        base_cutpoints = torch.cat(values) if values else torch.empty(0)
+        radii = []
+        for value in values:
+            if len(value) < 2:
+                radii.append(torch.zeros_like(value))
+                continue
+            gaps = value[1:] - value[:-1]
+            radii.append(
+                cutpoint_tuning_eta
+                / 2
+                * torch.cat((gaps[:1], torch.minimum(gaps[:-1], gaps[1:]), gaps[-1:]))
+            )
+        cutpoint_radii = torch.cat(radii) if radii else torch.empty(0)
+        cutpoint_features = torch.repeat_interleave(
+            torch.arange(self.input_dim[1]), counts
+        )
+
+        self.output_dim = self.disc_num + len(base_cutpoints) * 2
         self.layer_type = 'binarization'
         self.dim2id = {i: i for i in range(self.output_dim)}
         self.rule_name = None
-
-        self.register_buffer('left', left)
-        self.register_buffer('right', right)
-
-        if self.input_dim[1] > 0:
-            if self.left is not None and self.right is not None:
-                base_cutpoints = self.left + torch.rand(
-                    self.n, self.input_dim[1]
-                ) * (
-                    self.right - self.left
-                )
-            else:
-                base_cutpoints = torch.randn(self.n, self.input_dim[1])
-            base_cutpoints = torch.sort(base_cutpoints, dim=0).values
-        else:
-            base_cutpoints = torch.empty(self.n, 0)
-
-        if self.n < 2:
-            cutpoint_radii = torch.zeros_like(base_cutpoints)
-        else:
-            gaps = base_cutpoints[1:] - base_cutpoints[:-1]
-            cutpoint_radii = cutpoint_tuning_eta / 2 * torch.cat(
-                (gaps[:1], torch.minimum(gaps[:-1], gaps[1:]), gaps[-1:]),
-                dim=0,
-            )
-        if self.left is not None and self.right is not None:
-            boundary_radii = torch.minimum(
-                base_cutpoints - self.left,
-                self.right - base_cutpoints,
-            )
-            cutpoint_radii = torch.minimum(cutpoint_radii, boundary_radii)
-
         self.register_buffer('base_cutpoints', base_cutpoints)
         self.register_buffer('cutpoint_radii', cutpoint_radii)
-        if cutpoint_tuning_eta > 0 and self.n > 1 and base_cutpoints.numel() > 0:
+        self.register_buffer('cutpoint_features', cutpoint_features)
+        if cutpoint_tuning_eta > 0 and torch.any(cutpoint_radii > 0):
             self.cutpoint_deltas = nn.Parameter(torch.zeros_like(base_cutpoints))
         else:
             self.register_parameter('cutpoint_deltas', None)
@@ -170,12 +167,11 @@ class BinarizeLayer(nn.Module):
         if self.input_dim[1] > 0:
             x_disc, x_cont = x[:, 0 : self.input_dim[0]], x[:, self.input_dim[0] :]
             m_disc, m_cont = m[:, 0 : self.input_dim[0]], m[:, self.input_dim[0] :]
-            x_cont = x_cont.unsqueeze(-1)
             if self.use_not:
                 x_disc = torch.cat((x_disc, 1 - x_disc), dim=1)
                 m_disc = torch.cat((m_disc, m_disc), dim=1)
-            binarize_res = Binarize.apply(x_cont - self.cl.t()).reshape(x.shape[0], -1)
-            m_cont = m_cont.repeat_interleave(self.n, dim=1)
+            binarize_res = Binarize.apply(x_cont[:, self.cutpoint_features] - self.cl)
+            m_cont = m_cont[:, self.cutpoint_features]
             return (
                 torch.cat((x_disc, binarize_res, 1.0 - binarize_res), dim=1),
                 torch.cat((m_disc, m_cont, m_cont), dim=1),
@@ -197,14 +193,14 @@ class BinarizeLayer(nn.Module):
             for i in range(self.input_dim[0]):
                 bound_name.append(compl_feature_name.get(i) or '~' + feature_name[i])
         if self.input_dim[1] > 0:
-            for c, op in [(self.cl, '>'), (self.cl, '<=')]:
-                c = c.detach().cpu().numpy()
-                for i, ci in enumerate(c.T):
-                    fi_name = feature_name[self.input_dim[0] + i]
-                    for j in ci:
-                        if mean is not None and std is not None:
-                            j = j * std[fi_name] + mean[fi_name]
-                        bound_name.append(f'{fi_name} {op} {j}')
+            cutpoints = self.cl.detach().cpu().numpy()
+            features = self.cutpoint_features.detach().cpu().numpy()
+            for op in ('>', '<='):
+                for feature, cutpoint in zip(features, cutpoints, strict=True):
+                    fi_name = feature_name[self.input_dim[0] + feature]
+                    if mean is not None and std is not None:
+                        cutpoint = cutpoint * std[fi_name] + mean[fi_name]
+                    bound_name.append(f'{fi_name} {op} {cutpoint}')
         self.rule_name = bound_name
 
 
@@ -657,13 +653,11 @@ def extract_rules(prev_layer, skip_connect_layer, layer, pos_shift=0):
         #     k ==  2: connects to a rule in skip_connect_layer (NOT).
         bound = {}
         if prev_layer.layer_type == 'binarization' and prev_layer.input_dim[1] > 0:
-            c = (
-                torch.cat(
-                    (prev_layer.cl.t().reshape(-1), prev_layer.cl.t().reshape(-1))
-                )
-                .detach()
-                .cpu()
-                .numpy()
+            cutpoint_count = len(prev_layer.cl)
+            c = prev_layer.cl.repeat(2).detach().cpu().numpy()
+            features = prev_layer.cutpoint_features
+            bound_groups = (
+                torch.cat((features, features + prev_layer.input_dim[1])).cpu().numpy()
             )
         for i, w in enumerate(row):
             # deal with "use NOT", use_not_mul = -1 if it used NOT in that input dimension
@@ -676,15 +670,15 @@ def extract_rules(prev_layer, skip_connect_layer, layer, pos_shift=0):
             if w > 0 and merged_dim2id[i][1] != -1:
                 if prev_layer.layer_type == 'binarization' and i >= prev_layer.disc_num:
                     ci = i - prev_layer.disc_num
-                    bi = ci // prev_layer.n
+                    bi = bound_groups[ci]
                     if bi not in bound:
                         bound[bi] = [i, c[ci]]
                         rule[(-1, i)] = 1  # since dim2id[i] == i in the BinarizeLayer
                     else:  # merge the bounds for one feature
                         if (
-                            ci < c.shape[0] // 2 and layer.layer_type == 'conjunction'
+                            ci < cutpoint_count and layer.layer_type == 'conjunction'
                         ) or (
-                            ci >= c.shape[0] // 2 and layer.layer_type == 'disjunction'
+                            ci >= cutpoint_count and layer.layer_type == 'disjunction'
                         ):
                             func = max
                         else:

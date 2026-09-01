@@ -3,13 +3,14 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from cyclopts import Parameter
-from cyclopts.types import PositiveFloat
+from cyclopts.types import ExistingFile, PositiveFloat
 from cyclopts.validators import Number
 
 from .model_base import ModelConfig
 
 type MissingAwareMode = Literal['original', 'improved']
 type RrlValidationMetric = Literal['f1', 'auroc', 'auprc']
+type RrlBinarization = Literal['random', 'tabpfn-shap']
 
 
 @Parameter(name='*')
@@ -85,11 +86,17 @@ class RrlConfig(ModelConfig):
     'Use only conjunction logical layers. When false, each logical layer includes both conjunction and disjunction branches.'
 
     structure: Annotated[str, Parameter(alias='-s')] = '5@64'
-    'Set the number of nodes in the binarization layer and logical layers. E.g., 10@64, 10@64@32@16.'
+    'Set the maximum cutpoints per feature and logical layer widths. E.g., 10@64, 10@64@32@16.'
 
-    cutpoint_tuning_eta: Annotated[
-        float, Parameter(validator=Number(gte=0, lt=1))
-    ] = 0.5
+    binarization: RrlBinarization = 'random'
+    'Use random or TabPFN-SHAP-guided cutpoints.'
+
+    tabpfn_model_path: ExistingFile | None = None
+    'Path to the TabPFN-3 classifier checkpoint used for SHAP binarization.'
+
+    cutpoint_tuning_eta: Annotated[float, Parameter(validator=Number(gte=0, lt=1))] = (
+        0.5
+    )
     'Fraction controlling cutpoint movement; zero disables fine-tuning.'
 
     debug: Annotated[bool, Parameter(alias='-D')] = False
@@ -118,6 +125,10 @@ class RrlConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         self.dataset._encode = True
+        if self.binarization == 'tabpfn-shap' and self.tabpfn_model_path is None:
+            raise ValueError(
+                'tabpfn_model_path is required when binarization is "tabpfn-shap".'
+            )
         if self.missing_aware_mode == 'improved':
             self.train.missing_value_strategy = 'none'
             self.train.validate_preprocessing()
@@ -128,7 +139,8 @@ class RrlConfig(ModelConfig):
                 f'_lr{self.learning_rate}_lrdr{self.lr_decay_rate}_lrde{self.lr_decay_epoch}_wd{self.weight_decay}'
                 f'_si{self.save_interval}_useNOT{self.use_not}_valSize{self.train.val_size}_useSkip{self.skip}'
                 f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}'
-                f'_conjOnly{self.conjunction_only}_L{self.structure}_cutEta{self.cutpoint_tuning_eta}'
+                f'_conjOnly{self.conjunction_only}_L{self.structure}'
+                f'_bin{self.binarization}_cutEta{self.cutpoint_tuning_eta}'
                 f'_missingMode{self.missing_aware_mode}_tau{self.coverage_tau}_kappa{self.coverage_kappa}'
                 f'_vm{self.validation_metric}_esp{self.early_stop_patience}_esd{self.early_stop_min_delta}'
                 f'_ls{self.label_smoothing}_mgn{self.max_grad_norm}'

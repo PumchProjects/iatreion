@@ -16,8 +16,6 @@ class Net(nn.Module):
         self,
         dim_list,
         use_not=False,
-        left=None,
-        right=None,
         use_nlaf=False,
         estimated_grad=False,
         use_skip=True,
@@ -29,14 +27,13 @@ class Net(nn.Module):
         use_missing_aware=False,
         coverage_tau=0.5,
         coverage_kappa=0.1,
+        cutpoints=None,
         cutpoint_tuning_eta=0.5,
     ):
         super().__init__()
 
         self.dim_list = dim_list
         self.use_not = use_not
-        self.left = left
-        self.right = right
         self.layer_list = nn.ModuleList([])
         self.use_skip = use_skip
         self.use_disjunction = use_disjunction
@@ -57,8 +54,7 @@ class Net(nn.Module):
                     dim_list[i],
                     num,
                     self.use_not,
-                    self.left,
-                    self.right,
+                    cutpoints=cutpoints,
                     cutpoint_tuning_eta=cutpoint_tuning_eta,
                 )
                 layer_name = f'binary{i}'
@@ -140,8 +136,6 @@ class RRL:
         dim_list,
         use_not=False,
         writer=None,
-        left=None,
-        right=None,
         estimated_grad=False,
         save_model_callback=None,
         use_skip=False,
@@ -154,6 +148,7 @@ class RRL:
         use_missing_aware=False,
         coverage_tau=0.5,
         coverage_kappa=0.1,
+        cutpoints=None,
         cutpoint_tuning_eta=0.5,
     ):
         super().__init__()
@@ -178,8 +173,6 @@ class RRL:
         self.net = Net(
             dim_list,
             use_not=use_not,
-            left=left,
-            right=right,
             use_nlaf=use_nlaf,
             estimated_grad=estimated_grad,
             use_skip=use_skip,
@@ -191,6 +184,7 @@ class RRL:
             use_missing_aware=use_missing_aware,
             coverage_tau=coverage_tau,
             coverage_kappa=coverage_kappa,
+            cutpoints=cutpoints,
             cutpoint_tuning_eta=cutpoint_tuning_eta,
         )
         self.net.to(self.device)

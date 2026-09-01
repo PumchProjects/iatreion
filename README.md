@@ -241,7 +241,9 @@ RRL learns a non-fuzzy rule representation and exports readable rules as TSV fil
 
 | Option | Meaning |
 | --- | --- |
-| `-s/--structure` | Binarization and logical layer sizes, for example `5@256` |
+| `-s/--structure` | Maximum cutpoints per feature and logical layer sizes, for example `5@256` |
+| `--binarization` | Select `random` (default) or `tabpfn-shap` cutpoints |
+| `--tabpfn-model-path` | TabPFN-3 checkpoint required by `tabpfn-shap` |
 | `--use-not` | Enable NOT terms in rules |
 | `--skip` | Enable skip connections between logical layers |
 | `--nlaf --alpha --beta --gamma` | Use novel logical activation functions and their parameters |
@@ -255,6 +257,8 @@ RRL learns a non-fuzzy rule representation and exports readable rules as TSV fil
 | `-v improved --tau --kappa` | Missing-aware RRL with coverage-gated logic |
 
 Cutpoint fine-tuning defaults to `--cutpoint-tuning-eta 0.5`. Each cutpoint is restricted to that fraction of its neighboring gaps so cutpoints cannot cross during training; set the value to `0` to keep cutpoints fixed.
+
+`tabpfn-shap` fits TabPFN on the current training fold and ranks adjacent feature-value boundaries by their SHAP-vector jump. The first `--structure` value is an upper bound: constant, flat, or low-cardinality features may produce fewer cutpoints, and no quantile cutpoints are added to fill the limit. Enable it with `--binarization tabpfn-shap --tabpfn-model-path <path-to-the-tabpfn-v3-classifier-checkpoint>`.
 
 For missing-aware RRL (`-v improved`), missing values are intentionally kept during RRL training and the model receives both values and observation masks.
 
