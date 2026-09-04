@@ -1,4 +1,3 @@
-import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase
@@ -6,12 +5,16 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 import torch
-from optuna.trial import FixedTrial
 
 from iatreion.configs.model_rrl import RrlConfig
 from iatreion.rrl.binarization import (
-    MAX_SHAP_SAMPLES,
+    MAX_SAMPLE_SIZE,
+    _allocate_thresholds,
+    _degroup_attention,
+    attention_quantile_cutpoints,
     shap_jump_cutpoints,
+    tabpfn_attention_cutpoints,
+    tabpfn_feature_attention,
     tabpfn_shap_cutpoints,
 )
 from iatreion.rrl.experiment import _get_cutpoints
@@ -22,7 +25,6 @@ from iatreion.rrl.rrl.components import (
     extract_rules,
 )
 from iatreion.rrl.rrl.models import Net
-from iatreion.runners.optuna import flatten_search_space
 
 
 class RrlCutpointConfigTest(TestCase):
@@ -34,13 +36,17 @@ class RrlCutpointConfigTest(TestCase):
         self.assertEqual(config.cutpoint_tuning_eta, 0.5)
         self.assertFalse(hasattr(config, 'trainable_cutpoints'))
 
-    def test_tabpfn_shap_requires_a_checkpoint(self) -> None:
-        with self.assertRaisesRegex(ValueError, 'tabpfn_model_path'):
-            RrlConfig(
-                dataset=Mock(),
-                train=Mock(),
-                binarization='tabpfn-shap',
-            )
+    def test_tabpfn_modes_require_a_checkpoint(self) -> None:
+        for mode in ('tabpfn-shap', 'tabpfn-attention'):
+            with (
+                self.subTest(mode=mode),
+                self.assertRaisesRegex(ValueError, 'tabpfn_model_path'),
+            ):
+                RrlConfig(
+                    dataset=Mock(),
+                    train=Mock(),
+                    binarization=mode,
+                )
 
     def test_debug_name_includes_binarization_and_cutpoint_tuning(self) -> None:
         config = RrlConfig(
@@ -53,21 +59,6 @@ class RrlCutpointConfigTest(TestCase):
         )
 
         self.assertIn('_bintabpfn-shap_cutEta0.25', config.log_folder_name)
-
-
-class RrlCutpointOptunaTest(TestCase):
-    def test_search_space_includes_the_fixed_cutpoint_baseline(self) -> None:
-        path = Path(__file__).parents[1] / 'configs' / 'optuna_rrl.toml'
-        with path.open('rb') as file:
-            data = tomllib.load(file)
-        name = 'cutpoint_tuning_eta'
-        space = flatten_search_space(data['search'])[name]
-
-        self.assertEqual(space.low, 0.0)
-        self.assertEqual(space.high, 0.9)
-        self.assertEqual(space.step, 0.1)
-        self.assertEqual(space.sample(FixedTrial({name: 0.0}), name), 0.0)
-
 
 class ShapJumpCutpointTest(TestCase):
     def test_selects_the_largest_multiclass_jump_after_averaging_duplicates(
@@ -116,6 +107,164 @@ class ShapJumpCutpointTest(TestCase):
         self.assertEqual([len(feature) for feature in cutpoints], [0, 0])
 
 
+class AttentionAllocationTest(TestCase):
+    def test_allocates_proportionally_with_deterministic_ties(self) -> None:
+        np.testing.assert_array_equal(
+            _allocate_thresholds(
+                np.array([3.0, 1.0]),
+                np.array([10, 10]),
+                4,
+            ),
+            [3, 1],
+        )
+        np.testing.assert_array_equal(
+            _allocate_thresholds(
+                np.ones(2),
+                np.array([10, 10]),
+                1,
+            ),
+            [1, 0],
+        )
+
+    def test_redistributes_capacity_and_stops_at_total_capacity(self) -> None:
+        np.testing.assert_array_equal(
+            _allocate_thresholds(
+                np.array([3.0, 1.0]),
+                np.array([1, 10]),
+                4,
+            ),
+            [1, 3],
+        )
+        np.testing.assert_array_equal(
+            _allocate_thresholds(
+                np.array([3.0, 1.0]),
+                np.array([1, 1]),
+                10,
+            ),
+            [1, 1],
+        )
+
+    def test_degroups_each_token_to_its_three_source_features(self) -> None:
+        np.testing.assert_allclose(
+            _degroup_attention(np.array([3.0, 0.0, 0.0, 0.0, 0.0])),
+            [0.0, 1.0, 1.0, 0.0, 1.0],
+        )
+
+    def test_uses_empirical_quantiles_with_duplicates_and_missing_values(
+        self,
+    ) -> None:
+        X = np.column_stack(
+            [
+                [0.0, 0.0, 0.0, 10.0, 20.0, 30.0, np.nan],
+                np.ones(7),
+                [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, np.inf],
+            ]
+        )
+
+        cutpoints = attention_quantile_cutpoints(
+            X,
+            np.array([0.45, 0.1, 0.45]),
+            n_thresholds=1,
+        )
+
+        np.testing.assert_allclose(cutpoints[0], [5.0, 15.0])
+        self.assertEqual(len(cutpoints[1]), 0)
+        np.testing.assert_allclose(cutpoints[2], [2.5])
+        self.assertTrue(np.all(np.diff(cutpoints[0]) > 0))
+
+    def test_quantile_capacity_reallocates_the_global_budget(self) -> None:
+        X = np.column_stack(
+            [
+                [0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
+                np.arange(6, dtype=float),
+            ]
+        )
+
+        cutpoints = attention_quantile_cutpoints(
+            X,
+            np.array([0.9, 0.1]),
+            n_thresholds=2,
+        )
+
+        self.assertEqual([len(values) for values in cutpoints], [1, 3])
+        self.assertTrue(np.all(np.diff(cutpoints[1]) > 0))
+
+
+class TabpfnFeatureAttentionTest(TestCase):
+    class IdentityRope:
+        @staticmethod
+        def rotate_queries_or_keys(values: torch.Tensor) -> torch.Tensor:
+            return values
+
+    def test_aggregates_test_rows_and_excludes_cls_keys(self) -> None:
+        attention = SimpleNamespace(
+            q_projection=torch.nn.Identity(),
+            k_projection=torch.nn.Identity(),
+            num_heads=2,
+            head_dim=1,
+        )
+        aggregator = SimpleNamespace(
+            blocks=[SimpleNamespace(attention=attention)],
+            num_cls_tokens=2,
+            rope=self.IdentityRope(),
+        )
+
+        class Classifier:
+            models_ = [SimpleNamespace(column_aggregator=aggregator)]
+            n_features_in_ = 4
+            executor_ = SimpleNamespace(
+                ensemble_members=[
+                    SimpleNamespace(
+                        feature_schema=SimpleNamespace(
+                            features=[
+                                SimpleNamespace(ancestor='f1'),
+                                SimpleNamespace(ancestor='f3'),
+                            ]
+                        )
+                    )
+                ]
+            )
+
+            @staticmethod
+            def predict_proba(_X: np.ndarray) -> np.ndarray:
+                queries = torch.ones(3, 2, 2)
+                keys = torch.tensor(
+                    [
+                        [
+                            [0.0, 0.0],
+                            [0.0, 0.0],
+                            [20.0, 20.0],
+                            [0.0, 0.0],
+                        ],
+                        [
+                            [1000.0, 1000.0],
+                            [1000.0, 1000.0],
+                            [0.0, 0.0],
+                            [0.0, 0.0],
+                        ],
+                        [
+                            [0.0, 0.0],
+                            [0.0, 0.0],
+                            [0.0, 0.0],
+                            [np.log(3), np.log(3)],
+                        ],
+                    ]
+                )
+                attention.q_projection(queries)
+                attention.k_projection(keys)
+                return np.zeros((len(_X), 2))
+
+        scores = tabpfn_feature_attention(Classifier(), np.zeros((2, 4)))
+
+        np.testing.assert_allclose(
+            scores,
+            [0.0, 11 / 24, 0.0, 13 / 24],
+            rtol=1e-6,
+        )
+        self.assertFalse(attention.q_projection._forward_hooks)
+        self.assertFalse(attention.k_projection._forward_hooks)
+
+
 class TabpfnShapTest(TestCase):
     @patch('iatreion.rrl.binarization.shap.Explainer')
     @patch('iatreion.rrl.binarization._make_classifier')
@@ -134,7 +283,7 @@ class TabpfnShapTest(TestCase):
         y = np.repeat([0, 1], 150)
         classifier = make_classifier.return_value
         explanation = SimpleNamespace(
-            values=np.zeros((MAX_SHAP_SAMPLES, X.shape[1], 2))
+            values=np.zeros((MAX_SAMPLE_SIZE, X.shape[1], 2))
         )
         explainer = explainer_factory.return_value
         explainer.return_value = explanation
@@ -153,7 +302,7 @@ class TabpfnShapTest(TestCase):
         np.testing.assert_array_equal(classifier.fit.call_args.args[0], X)
         np.testing.assert_array_equal(classifier.fit.call_args.args[1], y)
         X_sample = explainer_factory.call_args.args[1]
-        self.assertEqual(X_sample.shape, (MAX_SHAP_SAMPLES, X.shape[1]))
+        self.assertEqual(X_sample.shape, (MAX_SAMPLE_SIZE, X.shape[1]))
         sampled_y = y[X_sample[:, 0].astype(int)]
         np.testing.assert_array_equal(np.bincount(sampled_y), [128, 128])
         self.assertEqual(explainer_factory.call_args.kwargs['algorithm'], 'permutation')
@@ -162,6 +311,92 @@ class TabpfnShapTest(TestCase):
         self.assertEqual(explainer.call_args.kwargs['max_evals'], 7)
         self.assertTrue(explainer.call_args.kwargs['silent'])
         self.assertEqual([len(feature) for feature in cutpoints], [0, 0])
+
+
+class TabpfnAttentionTest(TestCase):
+    @patch('iatreion.rrl.binarization.tabpfn_feature_attention')
+    @patch('iatreion.rrl.binarization._make_attention_classifier')
+    def test_constant_columns_keep_attention_aligned(
+        self,
+        make_classifier: Mock,
+        feature_attention: Mock,
+    ) -> None:
+        X = np.column_stack(
+            [
+                np.zeros(6),
+                np.arange(6, dtype=float),
+                np.ones(6),
+                np.repeat(np.arange(3, dtype=float), 2),
+            ]
+        )
+        y = np.arange(6) % 2
+        feature_attention.return_value = np.array([0.0, 0.6, 0.0, 0.4])
+
+        cutpoints = tabpfn_attention_cutpoints(
+            X,
+            y,
+            continuous_start=1,
+            n_thresholds=1,
+            model_path=Path('/models/tabpfn-v3.ckpt'),
+            random_state=7,
+        )
+
+        np.testing.assert_allclose(cutpoints[0], [1.5, 3.5])
+        self.assertEqual(len(cutpoints[1]), 0)
+        np.testing.assert_allclose(cutpoints[2], [1.5])
+        np.testing.assert_array_equal(
+            feature_attention.call_args.args[1],
+            X,
+        )
+
+    @patch('iatreion.rrl.binarization._explain_sample')
+    @patch('iatreion.rrl.binarization.attention_quantile_cutpoints')
+    @patch('iatreion.rrl.binarization.tabpfn_feature_attention')
+    @patch('iatreion.rrl.binarization._sample_indices')
+    @patch('iatreion.rrl.binarization._make_attention_classifier')
+    def test_uses_sampled_attention_and_full_fold_quantiles_without_shap(
+        self,
+        make_classifier: Mock,
+        sample_indices: Mock,
+        feature_attention: Mock,
+        select_cutpoints: Mock,
+        explain_sample: Mock,
+    ) -> None:
+        X = np.arange(30, dtype=float).reshape(10, 3)
+        y = np.arange(10) % 2
+        indices = np.array([1, 3, 5])
+        X_sample = X[indices]
+        sample_indices.return_value = indices
+        feature_attention.return_value = np.array([0.1, 0.6, 0.3])
+        selected = [np.array([1.0]), np.array([2.0])]
+        select_cutpoints.return_value = selected
+        path = Path('/models/tabpfn-v3.ckpt')
+
+        result = tabpfn_attention_cutpoints(
+            X,
+            y,
+            continuous_start=1,
+            n_thresholds=4,
+            model_path=path,
+            random_state=7,
+        )
+
+        self.assertIs(result, selected)
+        make_classifier.assert_called_once_with(path, 7)
+        classifier = make_classifier.return_value
+        np.testing.assert_array_equal(classifier.fit.call_args.args[0], X)
+        np.testing.assert_array_equal(classifier.fit.call_args.args[1], y)
+        sample_indices.assert_called_once_with(y, 7)
+        self.assertIs(feature_attention.call_args.args[0], classifier)
+        np.testing.assert_array_equal(feature_attention.call_args.args[1], X_sample)
+        np.testing.assert_array_equal(
+            select_cutpoints.call_args.args[0], X[:, 1:]
+        )
+        np.testing.assert_array_equal(
+            select_cutpoints.call_args.args[1], np.array([0.6, 0.3])
+        )
+        self.assertEqual(select_cutpoints.call_args.kwargs, {'n_thresholds': 4})
+        explain_sample.assert_not_called()
 
 
 class ExperimentCutpointTest(TestCase):
@@ -205,15 +440,52 @@ class ExperimentCutpointTest(TestCase):
             },
         )
 
+    @patch('iatreion.rrl.experiment.tabpfn_attention_cutpoints')
+    def test_attention_mode_passes_only_training_data(self, generate: Mock) -> None:
+        X = np.arange(30, dtype=float).reshape(10, 3)
+        y = np.arange(10) % 2
+        generated = [np.array([1.0]), np.array([2.0, 3.0])]
+        generate.return_value = generated
+        path = Path('/models/tabpfn-v3.ckpt')
+        args = SimpleNamespace(
+            binarization='tabpfn-attention',
+            tabpfn_model_path=path,
+            train=SimpleNamespace(seed=11),
+            use_not=True,
+        )
+        ctx = SimpleNamespace(
+            train_data=(X, y),
+            val_data=(np.full((2, 3), -1.0), np.zeros(2)),
+            test_data=(np.full((2, 3), -2.0), np.zeros(2)),
+            db_enc=SimpleNamespace(
+                binary_flen=1,
+                categorical_flen=0,
+                numeric_flen=2,
+                X_fname=['binary', 'a', 'b'],
+            ),
+        )
+
+        result = _get_cutpoints(args, ctx, 5)
+
+        self.assertIs(result, generated)
+        np.testing.assert_array_equal(generate.call_args.args[0], X)
+        np.testing.assert_array_equal(generate.call_args.args[1], y)
+
+    @patch('iatreion.rrl.experiment.tabpfn_attention_cutpoints')
     @patch('iatreion.rrl.experiment.tabpfn_shap_cutpoints')
-    def test_random_mode_does_not_build_a_teacher(self, generate: Mock) -> None:
+    def test_random_mode_does_not_build_a_teacher(
+        self,
+        generate_shap: Mock,
+        generate_attention: Mock,
+    ) -> None:
         args = SimpleNamespace(binarization='random')
         ctx = SimpleNamespace(
             db_enc=SimpleNamespace(categorical_flen=0, numeric_flen=2)
         )
 
         self.assertIsNone(_get_cutpoints(args, ctx, 5))
-        generate.assert_not_called()
+        generate_shap.assert_not_called()
+        generate_attention.assert_not_called()
 
 
 class BinarizeLayerCutpointTest(TestCase):

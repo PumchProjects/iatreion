@@ -10,7 +10,7 @@ from .model_base import ModelConfig
 
 type MissingAwareMode = Literal['original', 'improved']
 type RrlValidationMetric = Literal['f1', 'auroc', 'auprc']
-type RrlBinarization = Literal['random', 'tabpfn-shap']
+type RrlBinarization = Literal['random', 'tabpfn-shap', 'tabpfn-attention']
 
 
 @Parameter(name='*')
@@ -86,13 +86,13 @@ class RrlConfig(ModelConfig):
     'Use only conjunction logical layers. When false, each logical layer includes both conjunction and disjunction branches.'
 
     structure: Annotated[str, Parameter(alias='-s')] = '5@64'
-    'Set the maximum cutpoints per feature and logical layer widths. E.g., 10@64, 10@64@32@16.'
+    'Set the per-feature cutpoint limit or average budget and logical layer widths. E.g., 10@64, 10@64@32@16.'
 
     binarization: RrlBinarization = 'random'
-    'Use random or TabPFN-SHAP-guided cutpoints.'
+    'Use random, TabPFN-SHAP, or TabPFN-attention-allocated cutpoints.'
 
     tabpfn_model_path: ExistingFile | None = None
-    'Path to the TabPFN-3 classifier checkpoint used for SHAP binarization.'
+    'Path to the TabPFN-3 classifier checkpoint used for TabPFN binarization.'
 
     cutpoint_tuning_eta: Annotated[float, Parameter(validator=Number(gte=0, lt=1))] = (
         0.5
@@ -125,9 +125,9 @@ class RrlConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         self.dataset._encode = True
-        if self.binarization == 'tabpfn-shap' and self.tabpfn_model_path is None:
+        if self.binarization != 'random' and self.tabpfn_model_path is None:
             raise ValueError(
-                'tabpfn_model_path is required when binarization is "tabpfn-shap".'
+                'tabpfn_model_path is required for TabPFN binarization.'
             )
         if self.missing_aware_mode == 'improved':
             self.train.missing_value_strategy = 'none'
