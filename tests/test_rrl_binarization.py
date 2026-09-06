@@ -12,8 +12,10 @@ from iatreion.rrl.binarization import (
     _allocate_thresholds,
     _degroup_attention,
     attention_quantile_cutpoints,
+    prediction_consistency_cutpoints,
     shap_jump_cutpoints,
     tabpfn_attention_cutpoints,
+    tabpfn_consistency_cutpoints,
     tabpfn_feature_attention,
     tabpfn_shap_cutpoints,
 )
@@ -24,7 +26,7 @@ from iatreion.rrl.rrl.components import (
     DisjunctionLayer,
     extract_rules,
 )
-from iatreion.rrl.rrl.models import Net
+from iatreion.rrl.rrl.models import RRL, Net
 
 
 class RrlCutpointConfigTest(TestCase):
@@ -33,11 +35,16 @@ class RrlCutpointConfigTest(TestCase):
 
         self.assertEqual(config.binarization, 'random')
         self.assertIsNone(config.tabpfn_model_path)
+        self.assertEqual(config.tabpfn_consistency_threshold, 0.1)
         self.assertEqual(config.cutpoint_tuning_eta, 0.5)
         self.assertFalse(hasattr(config, 'trainable_cutpoints'))
 
     def test_tabpfn_modes_require_a_checkpoint(self) -> None:
-        for mode in ('tabpfn-shap', 'tabpfn-attention'):
+        for mode in (
+            'tabpfn-shap',
+            'tabpfn-attention',
+            'tabpfn-consistency',
+        ):
             with (
                 self.subTest(mode=mode),
                 self.assertRaisesRegex(ValueError, 'tabpfn_model_path'),
@@ -53,12 +60,28 @@ class RrlCutpointConfigTest(TestCase):
             dataset=Mock(),
             train=Mock(),
             debug=True,
-            binarization='tabpfn-shap',
+            binarization='tabpfn-consistency',
             tabpfn_model_path=Path('/models/tabpfn-v3.ckpt'),
+            tabpfn_consistency_threshold=0.25,
             cutpoint_tuning_eta=0.25,
         )
 
-        self.assertIn('_bintabpfn-shap_cutEta0.25', config.log_folder_name)
+        self.assertIn(
+            '_bintabpfn-consistency_consistencyTau0.25_cutEta0.25',
+            config.log_folder_name,
+        )
+
+    def test_consistency_threshold_must_be_a_probability_l1_distance(self) -> None:
+        for threshold in (-0.1, 2.1):
+            with (
+                self.subTest(threshold=threshold),
+                self.assertRaisesRegex(ValueError, 'consistency_threshold'),
+            ):
+                RrlConfig(
+                    dataset=Mock(),
+                    train=Mock(),
+                    tabpfn_consistency_threshold=threshold,
+                )
 
 class ShapJumpCutpointTest(TestCase):
     def test_selects_the_largest_multiclass_jump_after_averaging_duplicates(
@@ -188,6 +211,92 @@ class AttentionAllocationTest(TestCase):
 
         self.assertEqual([len(values) for values in cutpoints], [1, 3])
         self.assertTrue(np.all(np.diff(cutpoints[1]) > 0))
+
+
+class PredictionConsistencyTest(TestCase):
+    def test_uses_median_context_adjacent_values_and_strict_multiclass_l1(
+        self,
+    ) -> None:
+        X = np.array(
+            [
+                [0.0, 0.0, 10.0],
+                [np.nan, 1.0, 20.0],
+                [1.0, 2.0, 30.0],
+                [1.0, 3.0, 40.0],
+            ]
+        )
+        candidates = [np.array([0.5, 2.5]), np.array([25.0])]
+        classifier = Mock()
+        classifier.predict_proba.return_value = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.5, 0.5, 0.0],
+                [0.5, 0.25, 0.25],
+                [0.5, 0.25, 0.25],
+                [0.25, 0.5, 0.25],
+                [0.5, 0.25, 0.25],
+            ]
+        )
+
+        cutpoints = prediction_consistency_cutpoints(
+            classifier,
+            X,
+            candidates,
+            continuous_start=1,
+            threshold=0.5,
+        )
+
+        np.testing.assert_allclose(cutpoints[0], [0.5])
+        self.assertEqual(len(cutpoints[1]), 0)
+        np.testing.assert_allclose(
+            classifier.predict_proba.call_args.args[0],
+            [
+                [1.0, 0.0, 25.0],
+                [1.0, 2.0, 25.0],
+                [1.0, 1.5, 20.0],
+                [1.0, 1.0, 25.0],
+                [1.0, 3.0, 25.0],
+                [1.0, 1.5, 30.0],
+            ],
+        )
+
+    def test_batches_probes_and_does_not_fill_zero_score_boundaries(self) -> None:
+        observed = np.arange(MAX_SAMPLE_SIZE + 2, dtype=float)
+        candidates = [(observed[:-1] + observed[1:]) / 2]
+        classifier = Mock()
+        classifier.predict_proba.side_effect = lambda values: np.tile(
+            [0.5, 0.5], (len(values), 1)
+        )
+
+        cutpoints = prediction_consistency_cutpoints(
+            classifier,
+            observed[:, None],
+            candidates,
+            continuous_start=0,
+            threshold=0.0,
+        )
+
+        self.assertEqual(len(cutpoints[0]), 0)
+        self.assertEqual(classifier.predict_proba.call_count, 2)
+        self.assertEqual(
+            [call.args[0].shape for call in classifier.predict_proba.call_args_list],
+            [(MAX_SAMPLE_SIZE * 2, 1), (2, 1)],
+        )
+
+    def test_empty_candidates_skip_prediction(self) -> None:
+        classifier = Mock()
+        candidates = [np.empty(0), np.empty(0)]
+
+        result = prediction_consistency_cutpoints(
+            classifier,
+            np.ones((3, 2)),
+            candidates,
+            continuous_start=0,
+            threshold=0.1,
+        )
+
+        self.assertIs(result, candidates)
+        classifier.predict_proba.assert_not_called()
 
 
 class TabpfnFeatureAttentionTest(TestCase):
@@ -399,6 +508,66 @@ class TabpfnAttentionTest(TestCase):
         explain_sample.assert_not_called()
 
 
+class TabpfnConsistencyTest(TestCase):
+    @patch('iatreion.rrl.binarization._explain_sample')
+    @patch('iatreion.rrl.binarization.prediction_consistency_cutpoints')
+    @patch('iatreion.rrl.binarization.attention_quantile_cutpoints')
+    @patch('iatreion.rrl.binarization.tabpfn_feature_attention')
+    @patch('iatreion.rrl.binarization._sample_indices')
+    @patch('iatreion.rrl.binarization._make_attention_classifier')
+    def test_reuses_one_attention_teacher_and_never_computes_shap(
+        self,
+        make_classifier: Mock,
+        sample_indices: Mock,
+        feature_attention: Mock,
+        select_candidates: Mock,
+        confirm: Mock,
+        explain_sample: Mock,
+    ) -> None:
+        X = np.arange(30, dtype=float).reshape(10, 3)
+        y = np.arange(10) % 2
+        sample_indices.return_value = np.array([1, 3, 5])
+        feature_attention.return_value = np.array([0.1, 0.6, 0.3])
+        candidates = [np.array([1.0]), np.array([2.0])]
+        selected = [np.array([1.0]), np.empty(0)]
+        select_candidates.return_value = candidates
+        confirm.return_value = selected
+        path = Path('/models/tabpfn-v3.ckpt')
+
+        result = tabpfn_consistency_cutpoints(
+            X,
+            y,
+            continuous_start=1,
+            n_thresholds=4,
+            model_path=path,
+            random_state=7,
+            threshold=0.1,
+        )
+
+        self.assertIs(result, selected)
+        make_classifier.assert_called_once_with(path, 7)
+        classifier = make_classifier.return_value
+        classifier.fit.assert_called_once()
+        np.testing.assert_array_equal(classifier.fit.call_args.args[0], X)
+        np.testing.assert_array_equal(classifier.fit.call_args.args[1], y)
+        np.testing.assert_array_equal(
+            feature_attention.call_args.args[1], X[[1, 3, 5]]
+        )
+        np.testing.assert_array_equal(
+            select_candidates.call_args.args[0], X[:, 1:]
+        )
+        self.assertEqual(select_candidates.call_args.kwargs, {'n_thresholds': 4})
+        self.assertEqual(
+            confirm.call_args.args,
+            (classifier, X, candidates),
+        )
+        self.assertEqual(
+            confirm.call_args.kwargs,
+            {'continuous_start': 1, 'threshold': 0.1},
+        )
+        explain_sample.assert_not_called()
+
+
 class ExperimentCutpointTest(TestCase):
     @patch('iatreion.rrl.experiment.tabpfn_shap_cutpoints')
     def test_passes_only_training_data_to_tabpfn_shap(self, generate: Mock) -> None:
@@ -471,12 +640,58 @@ class ExperimentCutpointTest(TestCase):
         np.testing.assert_array_equal(generate.call_args.args[0], X)
         np.testing.assert_array_equal(generate.call_args.args[1], y)
 
+    @patch('iatreion.rrl.experiment.tabpfn_consistency_cutpoints')
+    def test_consistency_mode_passes_training_data_and_threshold(
+        self, generate: Mock
+    ) -> None:
+        X = np.arange(30, dtype=float).reshape(10, 3)
+        y = np.arange(10) % 2
+        generated = [np.array([1.0]), np.array([])]
+        generate.return_value = generated
+        path = Path('/models/tabpfn-v3.ckpt')
+        args = SimpleNamespace(
+            binarization='tabpfn-consistency',
+            tabpfn_model_path=path,
+            tabpfn_consistency_threshold=0.25,
+            train=SimpleNamespace(seed=11),
+            use_not=True,
+        )
+        ctx = SimpleNamespace(
+            train_data=(X, y),
+            val_data=(np.full((2, 3), -1.0), np.zeros(2)),
+            test_data=(np.full((2, 3), -2.0), np.zeros(2)),
+            db_enc=SimpleNamespace(
+                binary_flen=1,
+                categorical_flen=0,
+                numeric_flen=2,
+                X_fname=['binary', 'a', 'b'],
+            ),
+        )
+
+        result = _get_cutpoints(args, ctx, 5)
+
+        self.assertIs(result, generated)
+        np.testing.assert_array_equal(generate.call_args.args[0], X)
+        np.testing.assert_array_equal(generate.call_args.args[1], y)
+        self.assertEqual(
+            generate.call_args.kwargs,
+            {
+                'continuous_start': 1,
+                'n_thresholds': 5,
+                'model_path': path,
+                'random_state': 11,
+                'threshold': 0.25,
+            },
+        )
+
+    @patch('iatreion.rrl.experiment.tabpfn_consistency_cutpoints')
     @patch('iatreion.rrl.experiment.tabpfn_attention_cutpoints')
     @patch('iatreion.rrl.experiment.tabpfn_shap_cutpoints')
     def test_random_mode_does_not_build_a_teacher(
         self,
         generate_shap: Mock,
         generate_attention: Mock,
+        generate_consistency: Mock,
     ) -> None:
         args = SimpleNamespace(binarization='random')
         ctx = SimpleNamespace(
@@ -486,6 +701,33 @@ class ExperimentCutpointTest(TestCase):
         self.assertIsNone(_get_cutpoints(args, ctx, 5))
         generate_shap.assert_not_called()
         generate_attention.assert_not_called()
+        generate_consistency.assert_not_called()
+
+
+class ZeroCutpointTrainingTest(TestCase):
+    def test_trains_when_all_continuous_cutpoints_are_filtered_out(self) -> None:
+        save_model = Mock()
+        epoch_advance = Mock()
+        rrl = RRL(
+            [(0, 1), 4, 2],
+            use_skip=False,
+            cutpoints=[np.empty(0)],
+            save_model_callback=save_model,
+        )
+        X = torch.arange(4, dtype=torch.float32).reshape(-1, 1)
+        mask = torch.ones_like(X)
+        y = torch.tensor([0, 1, 0, 1])
+        data = [(X, mask, y)]
+
+        rrl.train_model(
+            epoch_advance=epoch_advance,
+            data_loader=data,
+            valid_loader=data,
+            epoch=1,
+        )
+
+        epoch_advance.assert_called_once_with()
+        save_model.assert_called_once()
 
 
 class BinarizeLayerCutpointTest(TestCase):

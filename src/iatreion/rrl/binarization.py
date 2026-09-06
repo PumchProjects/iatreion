@@ -295,6 +295,65 @@ def attention_quantile_cutpoints(
     return _select_quantile_cutpoints(candidates, quotas)
 
 
+def prediction_consistency_cutpoints(
+    classifier,
+    X: NDArray,
+    candidates: list[NDArray[np.float64]],
+    *,
+    continuous_start: int,
+    threshold: float,
+) -> list[NDArray[np.float64]]:
+    X = np.asarray(X, dtype=np.float64)
+    counts = np.asarray([len(values) for values in candidates])
+    if counts.sum() == 0:
+        return candidates
+
+    baseline = np.asarray(
+        [np.median(column[np.isfinite(column)]) for column in X.T]
+    )
+    columns: list[NDArray[np.int64]] = []
+    left_values: list[NDArray[np.float64]] = []
+    right_values: list[NDArray[np.float64]] = []
+    for offset, cutpoints in enumerate(candidates):
+        if len(cutpoints) == 0:
+            continue
+        column = continuous_start + offset
+        observed = np.unique(X[np.isfinite(X[:, column]), column])
+        right = np.searchsorted(observed, cutpoints)
+        columns.append(np.full(len(cutpoints), column, dtype=np.int64))
+        left_values.append(observed[right - 1])
+        right_values.append(observed[right])
+
+    columns_array = np.concatenate(columns)
+    left_array = np.concatenate(left_values)
+    right_array = np.concatenate(right_values)
+    scores = np.empty(len(columns_array), dtype=np.float64)
+    for start in range(0, len(scores), MAX_SAMPLE_SIZE):
+        end = min(start + MAX_SAMPLE_SIZE, len(scores))
+        size = end - start
+        left = np.tile(baseline, (size, 1))
+        right = left.copy()
+        rows = np.arange(size)
+        batch_columns = columns_array[start:end]
+        left[rows, batch_columns] = left_array[start:end]
+        right[rows, batch_columns] = right_array[start:end]
+        probabilities = np.asarray(
+            classifier.predict_proba(np.vstack((left, right))),
+            dtype=np.float64,
+        )
+        scores[start:end] = np.abs(
+            probabilities[size:] - probabilities[:size]
+        ).sum(axis=1)
+
+    result: list[NDArray[np.float64]] = []
+    start = 0
+    for cutpoints, count in zip(candidates, counts, strict=True):
+        end = start + int(count)
+        result.append(cutpoints[scores[start:end] > threshold])
+        start = end
+    return result
+
+
 def tabpfn_shap_cutpoints(
     X: NDArray,
     y: NDArray,
@@ -316,6 +375,31 @@ def tabpfn_shap_cutpoints(
     )
 
 
+def _tabpfn_attention_candidates(
+    X: NDArray,
+    y: NDArray,
+    *,
+    continuous_start: int,
+    n_thresholds: int,
+    model_path: Path,
+    random_state: int,
+) -> tuple[object, list[NDArray[np.float64]]]:
+    X = np.asarray(X)
+    y = np.asarray(y)
+    classifier = _make_attention_classifier(model_path, random_state)
+    classifier.fit(X, y)
+    X_sample = X[_sample_indices(y, random_state)]
+    attention = tabpfn_feature_attention(classifier, X_sample)
+    return (
+        classifier,
+        attention_quantile_cutpoints(
+            X[:, continuous_start:],
+            attention[continuous_start:],
+            n_thresholds=n_thresholds,
+        ),
+    )
+
+
 def tabpfn_attention_cutpoints(
     X: NDArray,
     y: NDArray,
@@ -325,14 +409,39 @@ def tabpfn_attention_cutpoints(
     model_path: Path,
     random_state: int,
 ) -> list[NDArray[np.float64]]:
-    X = np.asarray(X)
-    y = np.asarray(y)
-    classifier = _make_attention_classifier(model_path, random_state)
-    classifier.fit(X, y)
-    X_sample = X[_sample_indices(y, random_state)]
-    attention = tabpfn_feature_attention(classifier, X_sample)
-    return attention_quantile_cutpoints(
-        X[:, continuous_start:],
-        attention[continuous_start:],
+    _classifier, candidates = _tabpfn_attention_candidates(
+        X,
+        y,
+        continuous_start=continuous_start,
         n_thresholds=n_thresholds,
+        model_path=model_path,
+        random_state=random_state,
+    )
+    return candidates
+
+
+def tabpfn_consistency_cutpoints(
+    X: NDArray,
+    y: NDArray,
+    *,
+    continuous_start: int,
+    n_thresholds: int,
+    model_path: Path,
+    random_state: int,
+    threshold: float,
+) -> list[NDArray[np.float64]]:
+    classifier, candidates = _tabpfn_attention_candidates(
+        X,
+        y,
+        continuous_start=continuous_start,
+        n_thresholds=n_thresholds,
+        model_path=model_path,
+        random_state=random_state,
+    )
+    return prediction_consistency_cutpoints(
+        classifier,
+        X,
+        candidates,
+        continuous_start=continuous_start,
+        threshold=threshold,
     )

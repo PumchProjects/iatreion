@@ -14,7 +14,11 @@ from iatreion.configs import RrlConfig
 from iatreion.train_utils import TrainStepContext
 from iatreion.utils import logger, task
 
-from .binarization import tabpfn_attention_cutpoints, tabpfn_shap_cutpoints
+from .binarization import (
+    tabpfn_attention_cutpoints,
+    tabpfn_consistency_cutpoints,
+    tabpfn_shap_cutpoints,
+)
 from .rrl.models import RRL
 
 
@@ -63,17 +67,21 @@ def _get_cutpoints(
         return None
 
     assert args.tabpfn_model_path is not None
-    generator = (
-        tabpfn_shap_cutpoints
-        if args.binarization == 'tabpfn-shap'
-        else tabpfn_attention_cutpoints
-    )
-    cutpoints = generator(
+    generators = {
+        'tabpfn-shap': tabpfn_shap_cutpoints,
+        'tabpfn-attention': tabpfn_attention_cutpoints,
+        'tabpfn-consistency': tabpfn_consistency_cutpoints,
+    }
+    options = {}
+    if args.binarization == 'tabpfn-consistency':
+        options['threshold'] = args.tabpfn_consistency_threshold
+    cutpoints = generators[args.binarization](
         *ctx.train_data,
         continuous_start=db_enc.binary_flen,
         n_thresholds=n_thresholds,
         model_path=args.tabpfn_model_path,
         random_state=args.train.seed,
+        **options,
     )
     budget = n_thresholds * continuous_count
     threshold_counts = dict(
@@ -87,9 +95,15 @@ def _get_cutpoints(
         db_enc.binary_flen * (2 if args.use_not else 1)
         + sum(threshold_counts.values()) * 2
     )
+    consistency_log = (
+        f'consistency threshold: {args.tabpfn_consistency_threshold}; '
+        if args.binarization == 'tabpfn-consistency'
+        else ''
+    )
     logger.info(
-        f'{args.binarization} cutpoint budget: {budget}; '
-        f'per feature: {threshold_counts}; total literals: {total_literals}'
+        f'{args.binarization} cutpoint candidate budget: {budget}; '
+        f'{consistency_log}per feature: {threshold_counts}; '
+        f'total literals: {total_literals}'
     )
     return cutpoints
 

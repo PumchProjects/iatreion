@@ -10,7 +10,12 @@ from .model_base import ModelConfig
 
 type MissingAwareMode = Literal['original', 'improved']
 type RrlValidationMetric = Literal['f1', 'auroc', 'auprc']
-type RrlBinarization = Literal['random', 'tabpfn-shap', 'tabpfn-attention']
+type RrlBinarization = Literal[
+    'random',
+    'tabpfn-shap',
+    'tabpfn-attention',
+    'tabpfn-consistency',
+]
 
 
 @Parameter(name='*')
@@ -89,10 +94,15 @@ class RrlConfig(ModelConfig):
     'Set the per-feature cutpoint limit or average budget and logical layer widths. E.g., 10@64, 10@64@32@16.'
 
     binarization: RrlBinarization = 'random'
-    'Use random, TabPFN-SHAP, or TabPFN-attention-allocated cutpoints.'
+    'Use random, TabPFN-SHAP, attention-allocated, or consistency-filtered cutpoints.'
 
     tabpfn_model_path: ExistingFile | None = None
     'Path to the TabPFN-3 classifier checkpoint used for TabPFN binarization.'
+
+    tabpfn_consistency_threshold: Annotated[
+        float, Parameter(validator=Number(gte=0, lte=2))
+    ] = 0.1
+    'Minimum TabPFN probability L1 difference required to keep a cutpoint.'
 
     cutpoint_tuning_eta: Annotated[float, Parameter(validator=Number(gte=0, lt=1))] = (
         0.5
@@ -129,18 +139,26 @@ class RrlConfig(ModelConfig):
             raise ValueError(
                 'tabpfn_model_path is required for TabPFN binarization.'
             )
+        if not 0 <= self.tabpfn_consistency_threshold <= 2:
+            raise ValueError('tabpfn_consistency_threshold must be in [0, 2].')
         if self.missing_aware_mode == 'improved':
             self.train.missing_value_strategy = 'none'
             self.train.validate_preprocessing()
         if self.debug:
             under_sampler = str(self.train.under_sampler).upper()
+            consistency_suffix = (
+                f'_consistencyTau{self.tabpfn_consistency_threshold}'
+                if self.binarization == 'tabpfn-consistency'
+                else ''
+            )
             self._folder_name = (
                 f'e{self.epoch}_us{under_sampler}_tns{self.train.target_n_samples}_bs{self.batch_size}'
                 f'_lr{self.learning_rate}_lrdr{self.lr_decay_rate}_lrde{self.lr_decay_epoch}_wd{self.weight_decay}'
                 f'_si{self.save_interval}_useNOT{self.use_not}_valSize{self.train.val_size}_useSkip{self.skip}'
                 f'_alpha{self.alpha}_beta{self.beta}_gamma{self.gamma}_temp{self.temp}'
                 f'_conjOnly{self.conjunction_only}_L{self.structure}'
-                f'_bin{self.binarization}_cutEta{self.cutpoint_tuning_eta}'
+                f'_bin{self.binarization}{consistency_suffix}'
+                f'_cutEta{self.cutpoint_tuning_eta}'
                 f'_missingMode{self.missing_aware_mode}_tau{self.coverage_tau}_kappa{self.coverage_kappa}'
                 f'_vm{self.validation_metric}_esp{self.early_stop_patience}_esd{self.early_stop_min_delta}'
                 f'_ls{self.label_smoothing}_mgn{self.max_grad_norm}'

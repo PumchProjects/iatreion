@@ -282,8 +282,6 @@ class RRL:
             )
 
             epoch_loss_rrl = 0.0
-            abs_gradient_max = 0.0
-            abs_gradient_avg = 0.0
 
             ba_cnt = 0
             for X, M, y in data_loader:
@@ -320,12 +318,6 @@ class RRL:
                         avg_batch_loss_rrl = 0.0
 
                 optimizer.step()
-
-                for param in self.net.parameters():
-                    abs_gradient_max = max(abs_gradient_max, abs(torch.max(param.grad)))
-                    abs_gradient_avg += torch.sum(torch.abs(param.grad)) / (
-                        param.grad.numel()
-                    )
                 self.clip()
 
                 if valid_loader is not None and cnt > 0 and cnt % save_interval == 0:
@@ -413,10 +405,6 @@ class RRL:
 
             if self.writer is not None:
                 self.writer.add_scalar('Training_Loss_RRL', epoch_loss_rrl, epo)
-                self.writer.add_scalar('Abs_Gradient_Max', abs_gradient_max, epo)
-                self.writer.add_scalar(
-                    'Abs_Gradient_Avg', abs_gradient_avg / ba_cnt, epo
-                )
 
             epoch_advance()
             if early_stopped:
