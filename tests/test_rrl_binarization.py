@@ -44,6 +44,7 @@ class RrlCutpointConfigTest(TestCase):
             'tabpfn-shap',
             'tabpfn-attention',
             'tabpfn-consistency',
+            'tabpfn-interaction',
         ):
             with (
                 self.subTest(mode=mode),
@@ -82,6 +83,7 @@ class RrlCutpointConfigTest(TestCase):
                     train=Mock(),
                     tabpfn_consistency_threshold=threshold,
                 )
+
 
 class ShapJumpCutpointTest(TestCase):
     def test_selects_the_largest_multiclass_jump_after_averaging_duplicates(
@@ -305,7 +307,7 @@ class TabpfnFeatureAttentionTest(TestCase):
         def rotate_queries_or_keys(values: torch.Tensor) -> torch.Tensor:
             return values
 
-    def test_aggregates_test_rows_and_excludes_cls_keys(self) -> None:
+    def test_preserves_test_rows_across_chunks_and_excludes_cls_keys(self) -> None:
         attention = SimpleNamespace(
             q_projection=torch.nn.Identity(),
             k_projection=torch.nn.Identity(),
@@ -359,17 +361,33 @@ class TabpfnFeatureAttentionTest(TestCase):
                         ],
                     ]
                 )
-                attention.q_projection(queries)
-                attention.k_projection(keys)
+                for start, end in ((0, 2), (2, 3)):
+                    attention.q_projection(queries[start:end])
+                    attention.k_projection(keys[start:end])
                 return np.zeros((len(_X), 2))
 
         scores = tabpfn_feature_attention(Classifier(), np.zeros((2, 4)))
 
         np.testing.assert_allclose(
             scores,
+            [[0.0, 0.5, 0.0, 0.5], [0.0, 5 / 12, 0.0, 7 / 12]],
+            rtol=1e-6,
+        )
+        np.testing.assert_allclose(
+            scores.mean(axis=0),
             [0.0, 11 / 24, 0.0, 13 / 24],
             rtol=1e-6,
         )
+        self.assertFalse(attention.q_projection._forward_hooks)
+        self.assertFalse(attention.k_projection._forward_hooks)
+
+        with (
+            patch.object(
+                Classifier, 'predict_proba', side_effect=RuntimeError('probe')
+            ),
+            self.assertRaisesRegex(RuntimeError, 'probe'),
+        ):
+            tabpfn_feature_attention(Classifier(), np.zeros((2, 4)))
         self.assertFalse(attention.q_projection._forward_hooks)
         self.assertFalse(attention.k_projection._forward_hooks)
 
@@ -391,9 +409,7 @@ class TabpfnShapTest(TestCase):
         )
         y = np.repeat([0, 1], 150)
         classifier = make_classifier.return_value
-        explanation = SimpleNamespace(
-            values=np.zeros((MAX_SAMPLE_SIZE, X.shape[1], 2))
-        )
+        explanation = SimpleNamespace(values=np.zeros((MAX_SAMPLE_SIZE, X.shape[1], 2)))
         explainer = explainer_factory.return_value
         explainer.return_value = explanation
         path = Path('/models/tabpfn-v3.ckpt')
@@ -439,7 +455,7 @@ class TabpfnAttentionTest(TestCase):
             ]
         )
         y = np.arange(6) % 2
-        feature_attention.return_value = np.array([0.0, 0.6, 0.0, 0.4])
+        feature_attention.return_value = np.tile([0.0, 0.6, 0.0, 0.4], (6, 1))
 
         cutpoints = tabpfn_attention_cutpoints(
             X,
@@ -476,7 +492,9 @@ class TabpfnAttentionTest(TestCase):
         indices = np.array([1, 3, 5])
         X_sample = X[indices]
         sample_indices.return_value = indices
-        feature_attention.return_value = np.array([0.1, 0.6, 0.3])
+        feature_attention.return_value = np.array(
+            [[0.1, 0.3, 0.6], [0.1, 0.6, 0.3], [0.1, 0.9, 0.0]]
+        )
         selected = [np.array([1.0]), np.array([2.0])]
         select_cutpoints.return_value = selected
         path = Path('/models/tabpfn-v3.ckpt')
@@ -498,10 +516,8 @@ class TabpfnAttentionTest(TestCase):
         sample_indices.assert_called_once_with(y, 7)
         self.assertIs(feature_attention.call_args.args[0], classifier)
         np.testing.assert_array_equal(feature_attention.call_args.args[1], X_sample)
-        np.testing.assert_array_equal(
-            select_cutpoints.call_args.args[0], X[:, 1:]
-        )
-        np.testing.assert_array_equal(
+        np.testing.assert_array_equal(select_cutpoints.call_args.args[0], X[:, 1:])
+        np.testing.assert_allclose(
             select_cutpoints.call_args.args[1], np.array([0.6, 0.3])
         )
         self.assertEqual(select_cutpoints.call_args.kwargs, {'n_thresholds': 4})
@@ -527,7 +543,9 @@ class TabpfnConsistencyTest(TestCase):
         X = np.arange(30, dtype=float).reshape(10, 3)
         y = np.arange(10) % 2
         sample_indices.return_value = np.array([1, 3, 5])
-        feature_attention.return_value = np.array([0.1, 0.6, 0.3])
+        feature_attention.return_value = np.array(
+            [[0.1, 0.3, 0.6], [0.1, 0.6, 0.3], [0.1, 0.9, 0.0]]
+        )
         candidates = [np.array([1.0]), np.array([2.0])]
         selected = [np.array([1.0]), np.empty(0)]
         select_candidates.return_value = candidates
@@ -550,12 +568,9 @@ class TabpfnConsistencyTest(TestCase):
         classifier.fit.assert_called_once()
         np.testing.assert_array_equal(classifier.fit.call_args.args[0], X)
         np.testing.assert_array_equal(classifier.fit.call_args.args[1], y)
-        np.testing.assert_array_equal(
-            feature_attention.call_args.args[1], X[[1, 3, 5]]
-        )
-        np.testing.assert_array_equal(
-            select_candidates.call_args.args[0], X[:, 1:]
-        )
+        np.testing.assert_array_equal(feature_attention.call_args.args[1], X[[1, 3, 5]])
+        np.testing.assert_array_equal(select_candidates.call_args.args[0], X[:, 1:])
+        np.testing.assert_allclose(select_candidates.call_args.args[1], [0.6, 0.3])
         self.assertEqual(select_candidates.call_args.kwargs, {'n_thresholds': 4})
         self.assertEqual(
             confirm.call_args.args,

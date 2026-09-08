@@ -15,6 +15,7 @@ type RrlBinarization = Literal[
     'tabpfn-shap',
     'tabpfn-attention',
     'tabpfn-consistency',
+    'tabpfn-interaction',
 ]
 
 
@@ -94,7 +95,7 @@ class RrlConfig(ModelConfig):
     'Set the per-feature cutpoint limit or average budget and logical layer widths. E.g., 10@64, 10@64@32@16.'
 
     binarization: RrlBinarization = 'random'
-    'Use random, TabPFN-SHAP, attention-allocated, or consistency-filtered cutpoints.'
+    'Use random, TabPFN-SHAP, attention-allocated, consistency-filtered, or interaction-guided cutpoints.'
 
     tabpfn_model_path: ExistingFile | None = None
     'Path to the TabPFN-3 classifier checkpoint used for TabPFN binarization.'
@@ -136,9 +137,7 @@ class RrlConfig(ModelConfig):
     def __post_init__(self) -> None:
         self.dataset._encode = True
         if self.binarization != 'random' and self.tabpfn_model_path is None:
-            raise ValueError(
-                'tabpfn_model_path is required for TabPFN binarization.'
-            )
+            raise ValueError('tabpfn_model_path is required for TabPFN binarization.')
         if not 0 <= self.tabpfn_consistency_threshold <= 2:
             raise ValueError('tabpfn_consistency_threshold must be in [0, 2].')
         if self.missing_aware_mode == 'improved':

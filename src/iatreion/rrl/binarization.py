@@ -1,4 +1,5 @@
-from heapq import heappop, heappush
+from heapq import heappop, heappush, nsmallest
+from itertools import combinations
 from pathlib import Path
 
 import numpy as np
@@ -9,9 +10,15 @@ from sklearn.utils import resample
 
 MAX_SAMPLE_SIZE = 256
 FEATURE_GROUP_SHIFTS = (1, 2, 4)
+MAX_INTERACTION_PAIRS = 16
+INTERACTION_GRID_SIZE = 16
+INTERACTION_BACKGROUNDS = 8
+MIN_INTERACTION_SCORE = 1e-6
 
 type JumpCandidates = tuple[NDArray[np.float64], NDArray[np.float64]]
 type QuantileCandidates = tuple[NDArray[np.float64], NDArray[np.float64]]
+# Score, two feature indices, then two grid cell indices.
+type JointCandidate = tuple[float, int, int, int, int]
 
 
 def _make_classifier(model_path: Path, random_state: int):
@@ -54,15 +61,20 @@ def _make_attention_classifier(model_path: Path, random_state: int):
     )
 
 
-def _sample_indices(y: NDArray, random_state: int) -> NDArray[np.integer]:
+def _sample_indices(
+    y: NDArray,
+    random_state: int,
+    *,
+    max_samples: int = MAX_SAMPLE_SIZE,
+) -> NDArray[np.integer]:
     indices = np.arange(len(y))
-    if len(indices) <= MAX_SAMPLE_SIZE:
+    if len(indices) <= max_samples:
         return indices
     return np.sort(
         resample(
             indices,
             replace=False,
-            n_samples=MAX_SAMPLE_SIZE,
+            n_samples=max_samples,
             stratify=y,
             random_state=random_state,
         )
@@ -173,18 +185,14 @@ def _allocate_thresholds(
 
 def _degroup_attention(token_attention: NDArray) -> NDArray[np.float64]:
     token_attention = np.asarray(token_attention, dtype=np.float64)
-    feature_attention = np.zeros_like(token_attention)
-    token_indices = np.arange(len(token_attention))
-    for shift in FEATURE_GROUP_SHIFTS:
-        np.add.at(
-            feature_attention,
-            (token_indices + shift) % len(token_attention),
-            token_attention / len(FEATURE_GROUP_SHIFTS),
-        )
-    return feature_attention
+    return np.mean(
+        [np.roll(token_attention, shift, axis=-1) for shift in FEATURE_GROUP_SHIFTS],
+        axis=0,
+    )
 
 
 def tabpfn_feature_attention(classifier, X: NDArray) -> NDArray[np.float64]:
+    """Return query-row attention aligned to the original input columns."""
     aggregator = classifier.models_[0].column_aggregator
     attention = aggregator.blocks[-1].attention
     pending_queries: list[torch.Tensor] = []
@@ -227,13 +235,111 @@ def tabpfn_feature_attention(classifier, X: NDArray) -> NDArray[np.float64]:
         query_handle.remove()
         key_handle.remove()
 
-    token_attention = torch.cat(row_scores)[-len(X) :].mean(dim=0).numpy()
+    token_attention = torch.cat(row_scores)[-len(X) :].numpy()
     feature_attention = _degroup_attention(token_attention)
     features = classifier.executor_.ensemble_members[0].feature_schema.features
-    original_attention = np.zeros(classifier.n_features_in_, dtype=np.float64)
-    for feature, score in zip(features, feature_attention, strict=True):
-        original_attention[int(feature.ancestor[1:])] = score
+    original_attention = np.zeros((len(X), classifier.n_features_in_), dtype=np.float64)
+    for feature, scores in zip(features, feature_attention.T, strict=True):
+        original_attention[:, int(feature.ancestor[1:])] = scores
     return original_attention
+
+
+def _interaction_grids(X: NDArray) -> list[NDArray[np.float64]]:
+    grids = []
+    for column in np.asarray(X, dtype=np.float64).T:
+        observed = column[np.isfinite(column)]
+        unique = np.unique(observed)
+        if len(unique) > INTERACTION_GRID_SIZE:
+            unique = np.unique(
+                np.quantile(
+                    observed,
+                    np.linspace(0, 1, INTERACTION_GRID_SIZE),
+                    method='nearest',
+                )
+            )
+        grids.append(unique)
+    return grids
+
+
+def _attention_pairs(
+    attention: NDArray,
+    grids: list[NDArray[np.float64]],
+) -> list[tuple[int, int]]:
+    columns = np.flatnonzero(
+        (np.ptp(attention, axis=0) > 0) & np.array([len(grid) >= 2 for grid in grids])
+    )
+    centered = attention[:, columns] - attention[:, columns].mean(axis=0)
+    normalized = centered / np.linalg.norm(centered, axis=0)
+    correlations = np.abs(normalized.T @ normalized)
+    ranked = nsmallest(
+        MAX_INTERACTION_PAIRS,
+        (
+            (-float(correlations[j, k]), int(columns[j]), int(columns[k]))
+            for j, k in combinations(range(len(columns)), 2)
+            if correlations[j, k] > 0
+        ),
+    )
+    return [(j, k) for _score, j, k in ranked]
+
+
+def _joint_boundary_candidates(
+    classifier,
+    backgrounds: NDArray,
+    grids: list[NDArray[np.float64]],
+    pairs: list[tuple[int, int]],
+    *,
+    continuous_start: int,
+) -> list[JointCandidate]:
+    candidates: list[JointCandidate] = []
+    for first, second in pairs:
+        first_grid, second_grid = grids[first], grids[second]
+        first_values = np.repeat(first_grid, len(second_grid))
+        second_values = np.tile(second_grid, len(first_grid))
+        grid_size = len(first_values)
+        probe_count = len(backgrounds) * grid_size
+        batches = []
+        for start in range(0, probe_count, MAX_SAMPLE_SIZE):
+            rows = np.arange(start, min(start + MAX_SAMPLE_SIZE, probe_count))
+            probes = backgrounds[rows // grid_size].copy()
+            probes[:, continuous_start + first] = first_values[rows % grid_size]
+            probes[:, continuous_start + second] = second_values[rows % grid_size]
+            batches.append(
+                np.asarray(classifier.predict_proba(probes), dtype=np.float64)
+            )
+
+        probabilities = np.concatenate(batches).reshape(
+            len(backgrounds), len(first_grid), len(second_grid), -1
+        )
+        interaction = np.diff(np.diff(probabilities, axis=1), axis=2)
+        # Take magnitudes before averaging: backgrounds can reverse an interaction.
+        scores = np.abs(interaction).sum(axis=-1).mean(axis=0)
+        candidates.extend(
+            (float(scores[j, k]), first, second, int(j), int(k))
+            for j, k in np.argwhere(scores > MIN_INTERACTION_SCORE)
+        )
+    return candidates
+
+
+def _select_joint_cutpoints(
+    candidates: list[JointCandidate],
+    grids: list[NDArray[np.float64]],
+    budget: int,
+) -> list[NDArray[np.float64]]:
+    midpoints = [grid[:-1] + np.diff(grid) / 2 for grid in grids]
+    selected: list[set[float]] = [set() for _grid in grids]
+    for _score, first, second, j, k in sorted(
+        candidates, key=lambda candidate: (-candidate[0], *candidate[1:])
+    ):
+        first_cutpoint = float(midpoints[first][j])
+        second_cutpoint = float(midpoints[second][k])
+        cost = int(first_cutpoint not in selected[first]) + int(
+            second_cutpoint not in selected[second]
+        )
+        if cost <= budget:
+            selected[first].add(first_cutpoint)
+            selected[second].add(second_cutpoint)
+            budget -= cost
+    return [np.array(sorted(values), dtype=np.float64) for values in selected]
 
 
 def _quantile_candidates(X: NDArray) -> list[QuantileCandidates]:
@@ -308,9 +414,7 @@ def prediction_consistency_cutpoints(
     if counts.sum() == 0:
         return candidates
 
-    baseline = np.asarray(
-        [np.median(column[np.isfinite(column)]) for column in X.T]
-    )
+    baseline = np.asarray([np.median(column[np.isfinite(column)]) for column in X.T])
     columns: list[NDArray[np.int64]] = []
     left_values: list[NDArray[np.float64]] = []
     right_values: list[NDArray[np.float64]] = []
@@ -341,9 +445,9 @@ def prediction_consistency_cutpoints(
             classifier.predict_proba(np.vstack((left, right))),
             dtype=np.float64,
         )
-        scores[start:end] = np.abs(
-            probabilities[size:] - probabilities[:size]
-        ).sum(axis=1)
+        scores[start:end] = np.abs(probabilities[size:] - probabilities[:size]).sum(
+            axis=1
+        )
 
     result: list[NDArray[np.float64]] = []
     start = 0
@@ -389,7 +493,7 @@ def _tabpfn_attention_candidates(
     classifier = _make_attention_classifier(model_path, random_state)
     classifier.fit(X, y)
     X_sample = X[_sample_indices(y, random_state)]
-    attention = tabpfn_feature_attention(classifier, X_sample)
+    attention = tabpfn_feature_attention(classifier, X_sample).mean(axis=0)
     return (
         classifier,
         attention_quantile_cutpoints(
@@ -445,3 +549,34 @@ def tabpfn_consistency_cutpoints(
         continuous_start=continuous_start,
         threshold=threshold,
     )
+
+
+def tabpfn_interaction_cutpoints(
+    X: NDArray,
+    y: NDArray,
+    *,
+    continuous_start: int,
+    n_thresholds: int,
+    model_path: Path,
+    random_state: int,
+) -> list[NDArray[np.float64]]:
+    X = np.asarray(X, dtype=np.float64)
+    y = np.asarray(y)
+    grids = _interaction_grids(X[:, continuous_start:])
+    budget = n_thresholds * len(grids)
+    if budget == 0 or sum(len(grid) >= 2 for grid in grids) < 2:
+        return [np.empty(0, dtype=np.float64) for _grid in grids]
+
+    classifier = _make_attention_classifier(model_path, random_state)
+    classifier.fit(X, y)
+    attention = tabpfn_feature_attention(
+        classifier, X[_sample_indices(y, random_state)]
+    )
+    pairs = _attention_pairs(attention[:, continuous_start:], grids)
+    backgrounds = X[
+        _sample_indices(y, random_state, max_samples=INTERACTION_BACKGROUNDS)
+    ]
+    candidates = _joint_boundary_candidates(
+        classifier, backgrounds, grids, pairs, continuous_start=continuous_start
+    )
+    return _select_joint_cutpoints(candidates, grids, budget)

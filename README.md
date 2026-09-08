@@ -242,8 +242,8 @@ RRL learns a non-fuzzy rule representation and exports readable rules as TSV fil
 | Option | Meaning |
 | --- | --- |
 | `-s/--structure` | Cutpoint budget and logical layer sizes, for example `5@256` |
-| `--binarization` | Select `random` (default), `tabpfn-shap`, or `tabpfn-attention` cutpoints |
-| `--tabpfn-model-path` | TabPFN-3 checkpoint required by either TabPFN mode |
+| `--binarization` | Select `random` (default), `tabpfn-shap`, `tabpfn-attention`, `tabpfn-consistency`, or `tabpfn-interaction` cutpoints |
+| `--tabpfn-model-path` | TabPFN-3 checkpoint required by all TabPFN modes |
 | `--use-not` | Enable NOT terms in rules |
 | `--skip` | Enable skip connections between logical layers |
 | `--nlaf --alpha --beta --gamma` | Use novel logical activation functions and their parameters |
@@ -261,6 +261,18 @@ Cutpoint fine-tuning defaults to `--cutpoint-tuning-eta 0.5`. Each cutpoint is r
 `tabpfn-shap` fits TabPFN on the current training fold and ranks adjacent feature-value boundaries by their SHAP-vector jump. The first `--structure` value is an upper bound: constant, flat, or low-cardinality features may produce fewer cutpoints, and no quantile cutpoints are added to fill the limit. Enable it with `--binarization tabpfn-shap --tabpfn-model-path <path-to-the-tabpfn-v3-classifier-checkpoint>`.
 
 `tabpfn-attention` treats the first `--structure` value as the average cutpoint budget per continuous feature. It distributes the global budget across features using TabPFN-3's final feature-aggregation attention, then places each feature's cutpoints at empirical quantiles of the training fold. Capacity that a low-cardinality feature cannot use is reallocated, so individual features may receive fewer or more cutpoints than the configured average. Enable it with `--binarization tabpfn-attention --tabpfn-model-path <path-to-the-tabpfn-v3-classifier-checkpoint>`.
+
+`tabpfn-interaction` discovers joint cutpoints independently of the other modes. It ranks feature pairs by the absolute correlation of their per-row TabPFN attention and searches at most 16 pairs. Each pair uses up to 16 empirical quantile values per axis and 8 stratified training rows as backgrounds, preserving all other values, including missing values. Predictions run in batches of at most 256 rows.
+
+For each grid cell, its score is the mean across backgrounds of `||P11 - P10 - P01 + P00||₁`, using all class probabilities. Scores above `1e-6` produce paired cutpoints at the two axis midpoints. Taking the norm before averaging preserves interactions that reverse across backgrounds. Attention correlation screens pairs; the score measures interaction on the probability scale.
+
+Pairs of cutpoints are accepted together in descending score order. Repeated cutpoints consume no additional budget. The first `--structure` value times the number of columns requiring cutpoints limits the total; unused budget is not filled, and features without accepted boundaries receive no cutpoints. Search sizes are fixed constants. To try this mode with fixed cutpoints, add these options to your RRL training command:
+
+```bash
+--binarization tabpfn-interaction \
+--tabpfn-model-path <path-to-the-tabpfn-v3-classifier-checkpoint> \
+--cutpoint-tuning-eta 0
+```
 
 For missing-aware RRL (`-v improved`), missing values are intentionally kept during RRL training and the model receives both values and observation masks.
 

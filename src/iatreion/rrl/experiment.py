@@ -17,6 +17,7 @@ from iatreion.utils import logger, task
 from .binarization import (
     tabpfn_attention_cutpoints,
     tabpfn_consistency_cutpoints,
+    tabpfn_interaction_cutpoints,
     tabpfn_shap_cutpoints,
 )
 from .rrl.models import RRL
@@ -71,6 +72,7 @@ def _get_cutpoints(
         'tabpfn-shap': tabpfn_shap_cutpoints,
         'tabpfn-attention': tabpfn_attention_cutpoints,
         'tabpfn-consistency': tabpfn_consistency_cutpoints,
+        'tabpfn-interaction': tabpfn_interaction_cutpoints,
     }
     options = {}
     if args.binarization == 'tabpfn-consistency':

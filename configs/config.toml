@@ -32,7 +32,10 @@ use-not = true
 skip = true
 weighted = true
 missing-aware-mode = "original"
-cutpoint-tuning-eta = 0.5
+binarization = "random"
+tabpfn-model-path = "<path-to-the-tabpfn-v3-classifier-checkpoint>"
+tabpfn-consistency-threshold = 0.1
+cutpoint-tuning-eta = 0
 tune-config = "configs/optuna_rrl.toml"
 
 [train.rrl-parser]
