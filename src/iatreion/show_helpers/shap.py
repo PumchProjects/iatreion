@@ -27,6 +27,19 @@ class ShapResult:
     inner_folds: NDArray[np.integer]
     sample_indices: NDArray[np.integer]
     y_true: NDArray[np.integer]
+    explainer: str
+    output_space: str
+    data_scope: str
+
+
+@dataclass(frozen=True)
+class LoadedShap:
+    explanation: shap.Explanation
+    sample_indices: NDArray[np.integer]
+    y_true: NDArray[np.integer]
+    explainer: str
+    output_space: str
+    data_scope: str
 
 
 def _parse_shap_file(path: Path) -> tuple[str, int, int] | None:
@@ -41,7 +54,7 @@ def _parse_shap_file(path: Path) -> tuple[str, int, int] | None:
 
 def _load_shap_explanation(
     path: Path,
-) -> tuple[shap.Explanation, NDArray[np.integer], NDArray[np.integer]]:
+) -> LoadedShap:
     try:
         with np.load(path) as arrays:
             required = {
@@ -70,6 +83,9 @@ def _load_shap_explanation(
                 if 'output_names' in arrays.files
                 else None
             )
+            explainer = _load_scalar_metadata(arrays, 'explainer')
+            output_space = _load_scalar_metadata(arrays, 'output_space')
+            data_scope = _load_scalar_metadata(arrays, 'data_scope')
     except OSError as error:
         raise IatreionException(
             'Failed to read SHAP file "$path": $error',
@@ -84,7 +100,26 @@ def _load_shap_explanation(
         feature_names=feature_names,
         output_names=output_names,
     )
-    return explanation, sample_indices, y_true
+    return LoadedShap(
+        explanation=explanation,
+        sample_indices=sample_indices,
+        y_true=y_true,
+        explainer=explainer,
+        output_space=output_space,
+        data_scope=data_scope,
+    )
+
+
+def _load_scalar_metadata(arrays: np.lib.npyio.NpzFile, key: str) -> str:
+    if key not in arrays.files:
+        return 'unknown'
+    value = np.asarray(arrays[key])
+    return str(value.item()) if value.size == 1 else 'unknown'
+
+
+def _summarize_metadata(values: list[str]) -> str:
+    unique = sorted(set(values))
+    return unique[0] if len(unique) == 1 else f'mixed[{", ".join(unique)}]'
 
 
 def _concat_shap_explanations(explanations: list[shap.Explanation]) -> shap.Explanation:
@@ -145,14 +180,24 @@ def _load_shap_result(
     inner_folds: list[NDArray[np.integer]] = []
     sample_indices: list[NDArray[np.integer]] = []
     y_true: list[NDArray[np.integer]] = []
+    explainers: list[str] = []
+    output_spaces: list[str] = []
+    data_scopes: list[str] = []
     folds = sorted(paths.keys())
     for outer, inner in folds:
-        explanation, indices, y_fold = _load_shap_explanation(paths[(outer, inner)])
-        explanations.append(explanation)
-        outer_folds.append(np.full(indices.shape[0], outer, dtype=np.int64))
-        inner_folds.append(np.full(indices.shape[0], inner, dtype=np.int64))
-        sample_indices.append(indices)
-        y_true.append(y_fold)
+        loaded = _load_shap_explanation(paths[(outer, inner)])
+        explanations.append(loaded.explanation)
+        outer_folds.append(
+            np.full(loaded.sample_indices.shape[0], outer, dtype=np.int64)
+        )
+        inner_folds.append(
+            np.full(loaded.sample_indices.shape[0], inner, dtype=np.int64)
+        )
+        sample_indices.append(loaded.sample_indices)
+        y_true.append(loaded.y_true)
+        explainers.append(loaded.explainer)
+        output_spaces.append(loaded.output_space)
+        data_scopes.append(loaded.data_scope)
 
     return ShapResult(
         label=label,
@@ -163,6 +208,9 @@ def _load_shap_result(
         inner_folds=np.concatenate(inner_folds, axis=0),
         sample_indices=np.concatenate(sample_indices, axis=0),
         y_true=np.concatenate(y_true, axis=0),
+        explainer=_summarize_metadata(explainers),
+        output_space=_summarize_metadata(output_spaces),
+        data_scope=_summarize_metadata(data_scopes),
     )
 
 
@@ -274,6 +322,9 @@ def _summarize_shap(
             'Model': result.label,
             'Result': result.name,
             'Output': output_label,
+            'Explainer': result.explainer,
+            'Output Space': result.output_space,
+            'Data Scope': result.data_scope,
             'Feature': list(explanation.feature_names),
             'Mean |SHAP|': mean,
             'Std |SHAP|': std,
@@ -342,6 +393,7 @@ def shap_summary_plot(config: ShowShapConfig) -> tuple[pd.DataFrame, Figure]:
         )
         ax.set_title(
             f'{result.label} ({result.name})\n{output_label}, '
+            f'{result.output_space}, {result.data_scope}, '
             f'{explanation.shape[0]} samples',
             fontsize=10,
         )
@@ -382,6 +434,7 @@ def shap_waterfall_plot(config: ShowShapConfig) -> tuple[pd.DataFrame, Figure]:
     ax = plt.gca()
     ax.set_title(
         f'{config.title or result.label} ({output_label})\n'
+        f'{result.explainer}, {result.output_space}, {result.data_scope}\n'
         f'outer={result.outer_folds[config.shap_sample_index]}, '
         f'inner={result.inner_folds[config.shap_sample_index]}, '
         f'sample={result.sample_indices[config.shap_sample_index]}'
@@ -395,6 +448,9 @@ def shap_waterfall_plot(config: ShowShapConfig) -> tuple[pd.DataFrame, Figure]:
             'Model': result.label,
             'Result': result.name,
             'Output': output_label,
+            'Explainer': result.explainer,
+            'Output Space': result.output_space,
+            'Data Scope': result.data_scope,
             'Outer Fold': result.outer_folds[config.shap_sample_index],
             'Inner Fold': result.inner_folds[config.shap_sample_index],
             'Fold Sample Index': result.sample_indices[config.shap_sample_index],
@@ -445,7 +501,11 @@ def shap_dependence_plot(config: ShowShapConfig) -> tuple[pd.DataFrame, Figure]:
         title=config.title or None,
     )
     ax.set_title(
-        config.title or f'{result.label} ({output_label}) on {config.shap_feature}'
+        config.title
+        or (
+            f'{result.label} ({output_label}, {result.output_space}, '
+            f'{result.data_scope}) on {config.shap_feature}'
+        )
     )
 
     values = np.asarray(explanation.values, dtype=float)
@@ -454,6 +514,9 @@ def shap_dependence_plot(config: ShowShapConfig) -> tuple[pd.DataFrame, Figure]:
         'Model': result.label,
         'Result': result.name,
         'Output': output_label,
+        'Explainer': result.explainer,
+        'Output Space': result.output_space,
+        'Data Scope': result.data_scope,
         'Outer Fold': result.outer_folds,
         'Inner Fold': result.inner_folds,
         'Fold Sample Index': result.sample_indices,

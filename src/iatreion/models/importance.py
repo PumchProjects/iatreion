@@ -1,7 +1,11 @@
 import json
+import multiprocessing as mp
+import signal
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import numpy as np
 import shap
@@ -25,6 +29,21 @@ class ShapBundle:
     sample_indices: NDArray[np.integer]
     feature_names: list[str]
     output_names: list[str]
+    explainer: str
+    output_space: str
+    data_scope: str
+
+
+@dataclass(frozen=True)
+class ImportanceSample:
+    X: NDArray
+    y: NDArray
+    indices: NDArray[np.integer]
+    data_scope: str
+
+
+class TreeShapWorkerError(RuntimeError):
+    pass
 
 
 def save_importance_score(
@@ -56,6 +75,9 @@ def save_shap_bundle(
         sample_indices=bundle.sample_indices,
         feature_names=np.asarray(bundle.feature_names, dtype=str),
         output_names=np.asarray(bundle.output_names, dtype=str),
+        explainer=np.asarray(bundle.explainer, dtype=str),
+        output_space=np.asarray(bundle.output_space, dtype=str),
+        data_scope=np.asarray(bundle.data_scope, dtype=str),
     )
 
 
@@ -71,19 +93,25 @@ def _sample_importance_indices(
     return np.sort(rng.choice(n_samples, size=max_samples, replace=False))
 
 
-def sample_importance_data(
-    X: NDArray,
-    y: NDArray,
-    *,
-    max_samples: int | None,
-    seed: int,
-) -> tuple[NDArray, NDArray]:
-    index = _sample_importance_indices(
+def get_importance_sample(
+    config: ModelConfig,
+    ctx: TrainStepContext,
+) -> ImportanceSample:
+    data_scope = 'training' if config.train.final else 'held-out'
+    X, y = ctx.train_data if config.train.final else ctx.test_data
+    if X.shape[0] == 0:
+        raise ValueError(f'No {data_scope} samples available for importance.')
+    indices = _sample_importance_indices(
         X.shape[0],
-        max_samples=max_samples,
-        seed=seed,
+        max_samples=config.importance_max_samples,
+        seed=config.train.seed,
     )
-    return X[index], y[index]
+    return ImportanceSample(
+        X=X[indices],
+        y=y[indices],
+        indices=indices,
+        data_scope=data_scope,
+    )
 
 
 def _calc_auroc_score(num_class: int, y_true: NDArray, y_score: NDArray) -> float:
@@ -108,11 +136,8 @@ def calc_permutation_importance(
     ctx: TrainStepContext,
     predict_proba: PredictProba,
 ) -> ImportanceScore:
-    X_sample, y_sample = sample_importance_data(
-        *ctx.test_data,
-        max_samples=config.importance_max_samples,
-        seed=config.train.seed,
-    )
+    sample = get_importance_sample(config, ctx)
+    X_sample, y_sample = sample.X, sample.y
     baseline = _calc_auroc_score(
         config.train.num_class, y_sample, predict_proba(X_sample)
     )
@@ -177,74 +202,171 @@ def _get_output_names(train: TrainConfig, values: NDArray) -> list[str]:
     return [f'output_{index}' for index in range(n_outputs)]
 
 
-def _build_shap_bundle(
+def make_shap_bundle(
     config: ModelConfig,
     ctx: TrainStepContext,
-    explanation: shap.Explanation,
+    *,
+    values: NDArray,
+    base_values: NDArray,
+    data: NDArray,
+    y_true: NDArray,
     sample_indices: NDArray[np.integer],
-    y_true: NDArray[np.integer],
+    explainer: str,
+    output_space: str,
+    data_scope: str,
 ) -> ShapBundle:
     feature_names = _get_feature_names(config, list(ctx.db_enc.X_fname))
-    values = np.asarray(explanation.values, dtype=float)
-    base_values = np.asarray(explanation.base_values, dtype=float)
-    data = np.asarray(explanation.data, dtype=float)
+    values = np.asarray(values, dtype=float)
     return ShapBundle(
         values=values,
-        base_values=base_values,
-        data=data,
+        base_values=np.asarray(base_values, dtype=float),
+        data=np.asarray(data, dtype=float),
         y_true=np.asarray(y_true, dtype=int).reshape(-1),
         sample_indices=np.asarray(sample_indices, dtype=int).reshape(-1),
         feature_names=feature_names,
         output_names=_get_output_names(config.train, values),
+        explainer=explainer,
+        output_space=output_space,
+        data_scope=data_scope,
     )
 
 
-def calc_shap_importance(
+def save_shap_importance(
     config: ModelConfig,
     ctx: TrainStepContext,
-    predict_proba: PredictProba | None = None,
-    model: Any | None = None,
+    bundle: ShapBundle,
 ) -> ImportanceScore:
-    X_test, y_test = ctx.test_data
-    sample_indices = _sample_importance_indices(
-        X_test.shape[0],
-        max_samples=config.importance_max_samples,
-        seed=config.train.seed,
-    )
-    X_sample = X_test[sample_indices]
-    y_sample = y_test[sample_indices]
-    feature_names = _get_feature_names(config, list(ctx.db_enc.X_fname))
-    if predict_proba is not None:
-        explainer = shap.Explainer(
-            predict_proba,
-            X_sample,
-            algorithm='permutation',
-            feature_names=feature_names,
-            output_names=config.train.group_labels,
-            seed=config.train.seed,
-        )
-    elif model is not None:
-        explainer = shap.TreeExplainer(
-            model,
-            data=X_sample,
-            model_output='probability',
-            feature_names=feature_names,
-        )
-    else:
-        raise ValueError('Either predict_proba or model must be provided.')
-
-    explanation = explainer(X_sample)
-    bundle = _build_shap_bundle(
-        config,
-        ctx,
-        explanation,
-        sample_indices,
-        y_sample,
-    )
     save_shap_bundle(config.train, ctx, bundle)
-
     importances = _reduce_shap_values(bundle.values, bundle.data.shape[1])
     return {
         name: float(importances[index])
         for index, name in enumerate(bundle.feature_names)
     }
+
+
+def calc_shap_importance(
+    config: ModelConfig,
+    ctx: TrainStepContext,
+    predict_proba: PredictProba,
+    *,
+    explainer_name: str = 'permutation',
+) -> ImportanceScore:
+    sample = get_importance_sample(config, ctx)
+    feature_names = _get_feature_names(config, list(ctx.db_enc.X_fname))
+    explainer = shap.Explainer(
+        predict_proba,
+        sample.X,
+        algorithm='permutation',
+        feature_names=feature_names,
+        output_names=config.train.group_labels,
+        seed=config.train.seed,
+    )
+    explanation = explainer(sample.X)
+    bundle = make_shap_bundle(
+        config,
+        ctx,
+        values=explanation.values,
+        base_values=explanation.base_values,
+        data=sample.X,
+        y_true=sample.y,
+        sample_indices=sample.indices,
+        explainer=explainer_name,
+        output_space='probability',
+        data_scope=sample.data_scope,
+    )
+    return save_shap_importance(config, ctx, bundle)
+
+
+def _random_forest_tree_shap_worker(
+    model: object,
+    X: NDArray,
+    feature_names: list[str],
+    result_path: str,
+    error_path: str,
+) -> None:
+    try:
+        explainer = shap.TreeExplainer(
+            model,
+            feature_perturbation='tree_path_dependent',
+            model_output='raw',
+            feature_names=feature_names,
+        )
+        explanation = explainer(X)
+        np.savez_compressed(
+            result_path,
+            values=np.asarray(explanation.values, dtype=float),
+            base_values=np.asarray(explanation.base_values, dtype=float),
+        )
+    except BaseException:
+        Path(error_path).write_text(traceback.format_exc(), encoding='utf-8')
+        raise
+
+
+def _run_random_forest_tree_shap(
+    model: object,
+    X: NDArray,
+    feature_names: list[str],
+) -> tuple[NDArray, NDArray]:
+    with TemporaryDirectory(prefix='iatreion-rf-shap-') as tmp:
+        root = Path(tmp)
+        result_path = root / 'result.npz'
+        error_path = root / 'error.txt'
+        process = mp.get_context('spawn').Process(
+            target=_random_forest_tree_shap_worker,
+            args=(model, X, feature_names, str(result_path), str(error_path)),
+        )
+        process.start()
+        process.join()
+        exitcode = process.exitcode
+        process.close()
+        if exitcode != 0:
+            if exitcode is not None and exitcode < 0:
+                try:
+                    reason = signal.Signals(-exitcode).name
+                except ValueError:
+                    reason = f'signal {-exitcode}'
+            else:
+                reason = f'exit code {exitcode}'
+            detail = (
+                error_path.read_text(encoding='utf-8').strip()
+                if error_path.exists()
+                else 'no Python traceback (the worker may have crashed in native code)'
+            )
+            raise TreeShapWorkerError(
+                f'Random Forest TreeSHAP worker failed with {reason}: {detail}'
+            )
+        if not result_path.exists():
+            raise TreeShapWorkerError(
+                'Random Forest TreeSHAP worker exited without a result.'
+            )
+        with np.load(result_path) as arrays:
+            values = np.asarray(arrays['values'], dtype=float)
+            base_values = np.asarray(arrays['base_values'], dtype=float)
+    return values, base_values
+
+
+def calc_random_forest_shap_importance(
+    config: ModelConfig,
+    ctx: TrainStepContext,
+    model: object,
+) -> ImportanceScore:
+    sample = get_importance_sample(config, ctx)
+    feature_names = _get_feature_names(config, list(ctx.db_enc.X_fname))
+    values, base_values = _run_random_forest_tree_shap(
+        model,
+        sample.X,
+        feature_names,
+    )
+    bundle = make_shap_bundle(
+        config,
+        ctx,
+        values=values,
+        base_values=base_values,
+        data=sample.X,
+        y_true=sample.y,
+        sample_indices=sample.indices,
+        explainer='tree-path-dependent',
+        output_space='probability',
+        data_scope=sample.data_scope,
+    )
+    return save_shap_importance(config, ctx, bundle)

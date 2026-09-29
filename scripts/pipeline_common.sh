@@ -1,5 +1,33 @@
 #!/usr/bin/env bash
 
+set -E
+
+export PYTHONFAULTHANDLER=1
+export PYTHONUNBUFFERED=1
+
+_pipeline_error_reported=false
+
+_pipeline_report_error() {
+    local status="${1}"
+    local command="${2}"
+    local source_file="${3}"
+    local source_line="${4}"
+    local signal_name=""
+
+    if [[ "$_pipeline_error_reported" == true ]]; then
+        return 0
+    fi
+    _pipeline_error_reported=true
+
+    if ((status > 128)); then
+        signal_name=" (signal $(kill -l "$((status - 128))" 2>/dev/null || echo unknown))"
+    fi
+    printf 'Pipeline failed: status=%s%s at %s:%s\nCommand: %s\n' \
+        "$status" "$signal_name" "$source_file" "$source_line" "$command" >&2
+}
+
+trap '_pipeline_report_error "$?" "$BASH_COMMAND" "${BASH_SOURCE[0]}" "$LINENO"' ERR
+
 process_prefix="${prefix}/processed"
 process_info="${process_prefix}/process_info.toml"
 
@@ -123,7 +151,7 @@ run_baselines_for_task() {
 
     build_task_args task_args "$label_name" "$groups" "$positive_label" "$imputed_log_root"
     if ((${#baseline_models[@]})); then
-        train_args=(--importance-methods native)
+        train_args=(--importance-methods native shap)
         train_eval baseline_models task_args train_args
     fi
     if ((${#tabpfn_models[@]})); then
@@ -133,7 +161,7 @@ run_baselines_for_task() {
 
     build_task_args task_args "$label_name" "$groups" "$positive_label" "$not_imputed_log_root"
     if ((${#nan_baseline_models[@]})); then
-        train_args=(--importance-methods native --missing-value-strategy none)
+        train_args=(--importance-methods native shap --missing-value-strategy none)
         train_eval nan_baseline_models task_args train_args
     fi
     if ((${#tabpfn_models[@]})); then
@@ -150,13 +178,13 @@ run_rrl_for_task() {
     local -a train_args=()
 
     build_task_args task_args "$label_name" "$groups" "$positive_label" "$imputed_log_root"
-    train_args=()
+    train_args=(--importance-methods shap)
     train_eval rrl_models task_args train_args
     eval_rrl_ranked_rules task_args
     parity_check task_args
 
     build_task_args task_args "$label_name" "$groups" "$positive_label" "$not_imputed_log_root"
-    train_args=(--missing-aware-mode improved)
+    train_args=(--importance-methods shap --missing-aware-mode improved)
     train_eval rrl_models task_args train_args
     eval_rrl_ranked_rules task_args
     parity_check task_args

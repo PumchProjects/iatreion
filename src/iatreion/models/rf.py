@@ -12,9 +12,15 @@ from iatreion.train_utils.artifacts import (
     get_transform_artifact_path,
 )
 from iatreion.train_utils.preprocessing import DBEncoderArtifact
+from iatreion.utils import logger
 
 from .base import Model
-from .importance import ImportanceScore, calc_shap_importance
+from .importance import (
+    ImportanceScore,
+    TreeShapWorkerError,
+    calc_random_forest_shap_importance,
+    calc_shap_importance,
+)
 
 RANDOM_FOREST_MODEL_FILE = 'model.joblib'
 
@@ -82,4 +88,21 @@ class RandomForestModel(Model):
 
     @override
     def _calc_shap_importance(self, ctx: TrainStepContext) -> ImportanceScore:
-        return calc_shap_importance(self.config, ctx, model=self.forest)
+        try:
+            return calc_random_forest_shap_importance(
+                self.config,
+                ctx,
+                self.forest,
+            )
+        except TreeShapWorkerError as error:
+            logger.warning(
+                'Random Forest path-dependent TreeSHAP failed; '
+                'falling back to permutation SHAP: %s',
+                error,
+            )
+            return calc_shap_importance(
+                self.config,
+                ctx,
+                self._predict_proba,
+                explainer_name='permutation-fallback',
+            )

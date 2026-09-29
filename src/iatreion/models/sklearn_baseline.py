@@ -73,4 +73,4 @@ class SklearnBaselineModel(Model):
 
     @override
     def _calc_shap_importance(self, ctx: TrainStepContext) -> ImportanceScore:
-        return calc_shap_importance(self.config, ctx, model=self.estimator)
+        return calc_shap_importance(self.config, ctx, self._predict_proba)
